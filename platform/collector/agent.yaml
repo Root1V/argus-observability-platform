@@ -1,0 +1,215 @@
+# =============================================================================
+# Collector AGENTE — se despliega en CADA maquina que corra aplicaciones.
+#
+# Dos responsabilidades, y solo dos:
+#
+#   1. Aceptar telemetria local en localhost:4317/4318. Las aplicaciones
+#      exportan SIEMPRE aqui y nunca conocen la direccion del plano central.
+#      Eso permite mover el plano central de una maquina a otra sin tocar ni
+#      una aplicacion.
+#
+#   2. No perder nada cuando el central no esta. El plano central vive en un
+#      portatil que se suspende y cambia de red. Sin cola persistente en disco,
+#      cada vez que cierras la tapa pierdes telemetria, y lo que es peor, dejas
+#      huecos que el agente de RCA leera como silencio en vez de como ausencia
+#      de datos.
+#
+# Lo que este agente NO hace: tail sampling. Esa decision necesita ver la traza
+# completa y vive solo en el gateway. Aqui se rompe el muestreo si se intenta.
+# =============================================================================
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # La cola persistente. Escribe a un WAL en disco ANTES de intentar exportar,
+  # asi que absorbe cortes de red y reinicios sin perder datos. Si el agente
+  # muere con elementos en cola, al arrancar los recoge y continua.
+  file_storage/queue:
+    directory: /var/lib/argus/queue
+    create_directory: true
+    timeout: 10s
+    compaction:
+      on_start: true
+      directory: /var/lib/argus/queue/compact
+      max_transaction_size: 65536
+
+  # Token en el endpoint del gateway. La red privada protege el transporte;
+  # el token evita que cualquier proceso de una maquina autorizada inyecte
+  # telemetria falsa. Con agentes de IA leyendo esto y sacando conclusiones,
+  # la integridad de lo que entra importa.
+  bearertokenauth/gateway:
+    scheme: Bearer
+    token: ${env:ARGUS_GATEWAY_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317      # solo local: las apps de esta maquina
+        max_recv_msg_size_mib: 16
+      http:
+        endpoint: 127.0.0.1:4318
+
+  # Salud del host. En macOS esto es buena parte del "nivel 0", porque eBPF
+  # no existe fuera de Linux.
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      filesystem: {}
+      network: {}
+      load: {}
+
+processors:
+  # Siempre el primero. Corta la ingesta antes de que el agente se quede sin
+  # memoria y se lleve por delante a las aplicaciones que comparten maquina.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 65
+    spike_limit_percentage: 20
+
+  # Sin el detector `process`: no es valido en tuberias de logs ni de metricas,
+  # y ademas es innecesario porque el SDK ya aporta process.pid y compania al
+  # construir su Resource. Aqui solo anadimos lo que el proceso no puede saber
+  # de si mismo: el host.
+  resourcedetection:
+    detectors: [env, system]
+    system:
+      hostname_sources: [os]
+    override: false          # no pisar lo que el SDK ya puso
+
+  resource/host:
+    attributes:
+      - key: argus.collector.tier
+        value: agent
+        action: upsert
+
+  # --- Camino CALIENTE -------------------------------------------------------
+  # Lote de 200 ms. Con eso un error llega al alert-bus en ~2 s de punta a
+  # punta. El volumen es bajo por definicion (los errores son la excepcion),
+  # asi que lotes pequenos no cuestan nada aqui.
+  batch/hot:
+    timeout: 200ms
+    send_batch_size: 64
+    send_batch_max_size: 256
+
+  # --- Camino FRIO -----------------------------------------------------------
+  batch/cold:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  batch/metrics:
+    timeout: 10s
+    send_batch_size: 1024
+
+connectors:
+  # Bifurca el flujo de trazas en dos caminos con latencias distintas.
+  # Un connector es el exportador de una tuberia y el receptor de otra, que es
+  # justo el mecanismo para separar caminos dentro de un mismo Collector.
+  routing/paths:
+    default_pipelines: [traces/cold]
+    error_mode: ignore
+    table:
+      # Candidatos a incidente: error, SLO roto o guardarrail incumplido.
+      # El SDK marca `argus.hot` en esos casos.
+      - context: span
+        condition: |
+          attributes["argus.hot"] == true
+          or status.code == STATUS_CODE_ERROR
+          or attributes["argus.guardrail"] != nil
+        pipelines: [traces/hot, traces/cold]
+
+exporters:
+  # Camino caliente: directo al alert-bus, que es un receptor OTLP. La
+  # deteccion ocurre SOBRE EL FLUJO, sin tocar la base de datos. Eso es lo que
+  # separa segundos de minutos.
+  otlp/hot:
+    endpoint: ${env:ARGUS_ALERTBUS_ENDPOINT}
+    tls:
+      insecure: ${env:ARGUS_INSECURE}
+    auth:
+      authenticator: bearertokenauth/gateway
+    timeout: 5s
+    # Cola pequena y en memoria a proposito: si el alert-bus no esta, una
+    # alerta con dos minutos de retraso ya no es una alerta. El camino frio
+    # conserva el dato de todos modos.
+    sending_queue:
+      enabled: true
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+
+  # Camino frio y metricas: al gateway central, con cola EN DISCO.
+  otlp/gateway:
+    endpoint: ${env:ARGUS_GATEWAY_ENDPOINT}
+    tls:
+      insecure: ${env:ARGUS_INSECURE}
+    auth:
+      authenticator: bearertokenauth/gateway
+    timeout: 30s
+    sending_queue:
+      enabled: true
+      # Respaldada en disco: es lo que hace que cerrar la tapa del portatil no
+      # sea perdida de datos.
+      storage: file_storage/queue
+      num_consumers: 4
+      queue_size: 50000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 5m
+      # Generoso a proposito: un fin de semana con el central apagado debe
+      # sobrevivirse. El limite real es el disco, y su ocupacion se vigila.
+      max_elapsed_time: 24h
+
+service:
+  extensions: [health_check, file_storage/queue, bearertokenauth/gateway]
+
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 8888
+    logs:
+      level: info
+      encoding: json
+
+  pipelines:
+    # Entrada unica que se bifurca.
+    traces/in:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, resource/host]
+      exporters: [routing/paths]
+
+    # ~2 s hasta la notificacion.
+    traces/hot:
+      receivers: [routing/paths]
+      processors: [batch/hot]
+      exporters: [otlp/hot]
+
+    # 30-60 s, para almacen e investigacion agentica.
+    traces/cold:
+      receivers: [routing/paths]
+      processors: [batch/cold]
+      exporters: [otlp/gateway]
+
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, resourcedetection, resource/host, batch/metrics]
+      exporters: [otlp/gateway]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, resource/host, batch/cold]
+      exporters: [otlp/gateway]

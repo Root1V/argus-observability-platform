@@ -1,0 +1,280 @@
+# =============================================================================
+# Argus — plano central.
+#
+# Arranca en MODO LIGERO y crece por perfiles. El stack completo (ClickHouse +
+# Langfuse con sus cuatro dependencias + Temporal + VictoriaMetrics + HyperDX)
+# es demasiado para un portatil que ademas corre inferencia local.
+#
+#   docker compose --profile lean   up -d    # 4 contenedores. Fase 0
+#   docker compose --profile genai  up -d    # + Langfuse. Fase 1
+#   docker compose --profile agents up -d    # + Temporal. Fase 3
+#
+# PORTABILIDAD: todo el estado vive en volumenes NOMBRADOS, nunca en rutas
+# absolutas del host. Migrar de la MacBook al iMac es exportar volumenes,
+# restaurarlos y arrancar. Ese procedimiento se ensaya una vez en frio, en la
+# Fase 0, antes de necesitarlo.
+# =============================================================================
+
+name: argus
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ---------------------------------------------------------------------------
+  # PERFIL lean — lo minimo para tener logs, trazas, metricas y SQL
+  # ---------------------------------------------------------------------------
+
+  clickhouse:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    image: clickhouse/clickhouse-server:25.8-alpine
+    environment:
+      CLICKHOUSE_DB: otel
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?define CLICKHOUSE_PASSWORD en .env}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # 9010 y no 9000: el puerto nativo de ClickHouse choca con MinIO y otros
+      # servicios habituales. Dentro de la red de compose sigue siendo 9000.
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9010:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Metricas y reglas de alerta. VictoriaMetrics en vez de Prometheus: un solo
+  # binario y mucha menos memoria, con PromQL compatible. En un portatil la
+  # diferencia se nota.
+  victoriametrics:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    image: victoriametrics/victoria-metrics:v1.111.0
+    command:
+      - --storageDataPath=/vm-data
+      - --retentionPeriod=30d
+      - --httpListenAddr=:8428
+      # Deduplicacion corta: el mismo dato puede llegar por reintento del agente.
+      - --dedup.minScrapeInterval=10s
+    volumes:
+      - vm-data:/vm-data
+    ports:
+      - "127.0.0.1:8428:8428"
+
+  # Reglas de alerta. Intervalo de 10 s: es el presupuesto del camino TEMPLADO
+  # (2-15 s). El camino caliente no pasa por aqui, va directo al alert-bus.
+  vmalert:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    image: victoriametrics/vmalert:v1.111.0
+    depends_on: [victoriametrics]
+    command:
+      - --datasource.url=http://victoriametrics:8428
+      - --remoteWrite.url=http://victoriametrics:8428
+      - --remoteRead.url=http://victoriametrics:8428
+      - --notifier.url=http://alert-bus:8080
+      - --rule=/rules/*.yaml
+      - --evaluationInterval=10s
+    volumes:
+      - ./rules:/rules:ro
+
+  # El Collector corre SIN privilegios (uid 10001), y un volumen nombrado nace
+  # perteneciendo a root. Sin esto, la cola persistente no puede crearse y el
+  # Collector entra en bucle de reinicio. Este init lo arregla una vez y sale.
+  collector-init:
+    profiles: [lean, genai, agents, full]
+    image: busybox:1.37
+    user: "0"
+    command: ["sh", "-c", "mkdir -p /var/lib/argus/gateway-queue && chown -R 10001:10001 /var/lib/argus"]
+    volumes:
+      - collector-queue:/var/lib/argus
+    restart: "no"
+
+  collector:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    # Version FIJADA, nunca `:latest`. Y `contrib`, no `core`: clickhouse,
+    # redaction, tail_sampling, spanmetrics y filestorage son todos de contrib.
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    depends_on:
+      clickhouse: { condition: service_healthy }
+      collector-init: { condition: service_completed_successfully }
+    # El overlay GenAI se anade solo cuando Langfuse esta desplegado. Se activa
+    # con `ARGUS_COLLECTOR_CONFIGS` desde el .env, o usando compose.genai.yaml.
+    command: ${ARGUS_COLLECTOR_CONFIGS:---config=/etc/otel/gateway.yaml}
+    environment:
+      ARGUS_GATEWAY_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
+      ARGUS_CLICKHOUSE_DSN: tcp://${CLICKHOUSE_USER:-argus}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/otel?dial_timeout=10s&compress=lz4
+      ARGUS_LANGFUSE_ENDPOINT: ${ARGUS_LANGFUSE_ENDPOINT:-http://langfuse-web:3000/api/public/otel}
+      ARGUS_LANGFUSE_AUTH: ${ARGUS_LANGFUSE_AUTH:-}
+      ARGUS_VICTORIAMETRICS_ENDPOINT: http://victoriametrics:8428/api/v1/write
+    volumes:
+      - ./collector/gateway.yaml:/etc/otel/gateway.yaml:ro
+      - ./collector/gateway.genai.yaml:/etc/otel/gateway.genai.yaml:ro
+      - collector-queue:/var/lib/argus
+    ports:
+      - "4317:4317"      # OTLP/gRPC — expuesto: llegan agentes de otras maquinas
+      - "4318:4318"      # OTLP/HTTP
+      - "127.0.0.1:13133:13133"
+      - "127.0.0.1:8888:8888"
+    # Sin healthcheck de contenedor: la imagen del Collector es distroless y no
+    # trae wget, curl ni shell. La extension health_check sigue expuesta en
+    # 13133 y se comprueba desde fuera (scripts/verify.sh), que es donde el
+    # dato sirve de algo.
+
+  # ---------------------------------------------------------------------------
+  # PERFIL genai — Langfuse y sus dependencias
+  # ---------------------------------------------------------------------------
+
+  langfuse-postgres:
+    <<: *restart
+    profiles: [genai, agents, full]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:?define LANGFUSE_DB_PASSWORD en .env}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      retries: 10
+
+  langfuse-redis:
+    <<: *restart
+    profiles: [genai, agents, full]
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_PASSWORD:?define LANGFUSE_REDIS_PASSWORD en .env}"]
+    volumes:
+      - langfuse-redis:/data
+
+  # Almacenamiento S3-compatible. Langfuse v3 lo exige para persistir eventos.
+  langfuse-minio:
+    <<: *restart
+    profiles: [genai, agents, full]
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-argus}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?define MINIO_PASSWORD en .env}
+    volumes:
+      - langfuse-minio:/data
+    ports:
+      - "127.0.0.1:9011:9001"   # consola de MinIO; 9001 suele estar ocupado
+
+  langfuse-web:
+    <<: *restart
+    profiles: [genai, agents, full]
+    image: langfuse/langfuse:3
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-postgres:5432/langfuse
+      # Base `default`, SEPARADA de la `otel` del Collector: compartirla
+      # arriesga colisiones con las migraciones de Langfuse.
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      REDIS_CONNECTION_STRING: redis://:${LANGFUSE_REDIS_PASSWORD}@langfuse-redis:6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_USER:-argus}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      NEXTAUTH_URL: ${LANGFUSE_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?define LANGFUSE_NEXTAUTH_SECRET en .env}
+      SALT: ${LANGFUSE_SALT:?define LANGFUSE_SALT en .env}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?define LANGFUSE_ENCRYPTION_KEY en .env}
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  langfuse-worker:
+    <<: *restart
+    profiles: [genai, agents, full]
+    image: langfuse/langfuse-worker:3
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-postgres:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      REDIS_CONNECTION_STRING: redis://:${LANGFUSE_REDIS_PASSWORD}@langfuse-redis:6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_USER:-argus}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+
+  # ---------------------------------------------------------------------------
+  # PERFIL agents — Temporal, para los workflows de investigacion
+  # ---------------------------------------------------------------------------
+
+  temporal-postgres:
+    <<: *restart
+    profiles: [agents, full]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:?define TEMPORAL_DB_PASSWORD en .env}
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      retries: 10
+
+  temporal:
+    <<: *restart
+    profiles: [agents, full]
+    image: temporalio/auto-setup:1.28
+    depends_on:
+      temporal-postgres: { condition: service_healthy }
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD}
+      POSTGRES_SEEDS: temporal-postgres
+    ports:
+      - "127.0.0.1:7233:7233"
+
+  temporal-ui:
+    <<: *restart
+    profiles: [agents, full]
+    image: temporalio/ui:2.34.0
+    depends_on: [temporal]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:8081
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  # Volumenes NOMBRADOS: son lo que hace portable el plano central.
+  clickhouse-data:
+  vm-data:
+  collector-queue:
+  langfuse-postgres:
+  langfuse-redis:
+  langfuse-minio:
+  temporal-postgres:

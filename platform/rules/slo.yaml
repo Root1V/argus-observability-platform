@@ -1,0 +1,66 @@
+# Reglas del CAMINO TEMPLADO (2-15 s).
+#
+# El camino caliente NO pasa por aqui: va directo del Collector agente al
+# alert-bus. Aqui viven las condiciones que necesitan una ventana para tener
+# sentido, no las que se ven en un solo evento.
+groups:
+  - name: argus.slo
+    interval: 10s
+    rules:
+      # Burn-rate multi-ventana, no umbrales estaticos. Corta Y larga tienen
+      # que superar el umbral a la vez para paginar: es lo que evita despertar
+      # a alguien por un pico de treinta segundos.
+      - record: argus:error_ratio:rate5m
+        expr: |
+          sum by (service_namespace, service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[5m]))
+          /
+          clamp_min(sum by (service_namespace, service_name) (rate(traces_span_metrics_calls_total[5m])), 0.001)
+
+      - record: argus:error_ratio:rate1h
+        expr: |
+          sum by (service_namespace, service_name) (rate(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[1h]))
+          /
+          clamp_min(sum by (service_namespace, service_name) (rate(traces_span_metrics_calls_total[1h])), 0.001)
+
+      - alert: ArgusSLOBurnRateFast
+        # 14.4x consume el presupuesto mensual en unos dos dias.
+        expr: argus:error_ratio:rate5m > 0.144 and argus:error_ratio:rate1h > 0.144
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }}: quema rapida del presupuesto de error"
+
+      - alert: ArgusSLOBurnRateSlow
+        expr: argus:error_ratio:rate1h > 0.03
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }}: quema lenta del presupuesto de error"
+
+  - name: argus.platform
+    interval: 30s
+    rules:
+      # La plataforma se vigila a si misma. Si el Collector descarta datos,
+      # todo lo que viene despues esta ciego y no lo sabe.
+      - alert: ArgusCollectorDroppingData
+        expr: rate(otelcol_processor_dropped_spans[5m]) > 0 or rate(otelcol_exporter_send_failed_spans[5m]) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "El Collector esta descartando telemetria"
+
+      # La cola en disco de un agente creciendo significa que el plano central
+      # lleva rato inalcanzable. Es el aviso de que el portatil esta suspendido
+      # o fuera de la red, y de que hay un limite: cuando el disco se llene, se
+      # pierde.
+      - alert: ArgusAgentQueueGrowing
+        expr: otelcol_exporter_queue_size > 30000
+        for: 10m
+        labels:
+          severity: ticket
+          annotations_hint: "El plano central lleva rato inalcanzable"
+        annotations:
+          summary: "Cola del Collector agente creciendo: {{ $value }} elementos"

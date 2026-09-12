@@ -1,0 +1,321 @@
+# =============================================================================
+# Argus — modelo de convenciones semánticas
+#
+# FUENTE DE VERDAD. Las constantes de cada lenguaje se GENERAN desde aquí con
+# `python tools/gen_semconv.py`. Nunca edites los ficheros generados a mano.
+#
+# Por qué existe este fichero: con cinco lenguajes en el portafolio, el riesgo
+# no es que un servicio no emita telemetria, sino que dos emitan lo mismo con
+# nombres distintos. Eso rompe cualquier consulta agregada y no da ningun error.
+# =============================================================================
+
+version: "1.0.0"
+
+# Version de las semconv GenAI contra la que emitimos. Son EXPERIMENTALES:
+# fijarla aqui y tratar las subidas como migraciones planificadas.
+genai_semconv_version: "1.39.0"
+
+groups:
+
+  # ---------------------------------------------------------------------------
+  # Identidad. Dos niveles: la aplicacion y el sub-componente.
+  # Es lo que hace consultable un portafolio que crece.
+  # ---------------------------------------------------------------------------
+  - id: identity
+    brief: Identidad de aplicacion y componente
+    attributes:
+      - id: service.namespace
+        type: string
+        requirement: required
+        brief: La APLICACION. Agrupa todos sus sub-componentes.
+        examples: ["intelligent-document-platform", "aeon-ai"]
+      - id: service.name
+        type: string
+        requirement: required
+        brief: El SUB-COMPONENTE concreto.
+        examples: ["idp-api", "idp-worker", "idp-ocr"]
+      - id: service.version
+        type: string
+        requirement: recommended
+        examples: ["0.4.2"]
+      - id: service.instance.id
+        type: string
+        requirement: recommended
+        examples: ["idp-worker-3"]
+      - id: deployment.environment.name
+        type: string
+        requirement: required
+        brief: Entorno de despliegue.
+        examples: ["mac-dev", "imac", "server-1", "ci"]
+      - id: argus.component.role
+        type: enum
+        requirement: required
+        brief: Forma del componente. Determina los SLO por defecto.
+        members: [api, worker, scheduler, cli, model-server, frontend, library]
+
+  # ---------------------------------------------------------------------------
+  # Puente Langfuse. Langfuse lee estos atributos LITERALMENTE, asi que van en
+  # el Resource: es gratis y ahorra un processor en el Collector.
+  # ---------------------------------------------------------------------------
+  - id: langfuse_bridge
+    brief: Atributos que Langfuse interpreta de forma especial
+    attributes:
+      - id: langfuse.environment
+        type: string
+        brief: Espejo de deployment.environment.name.
+      - id: langfuse.release
+        type: string
+        brief: Espejo de service.version.
+      - id: langfuse.observation.type
+        type: string
+        brief: >
+          Tipo de observacion. NECESARIO para RAG: la tabla de mapeo de Langfuse
+          es CERRADA y no incluye la operacion `retrieval` de las semconv OTel.
+          Sin esto, un span de recuperacion no se renderiza como tal.
+        examples: ["retriever", "generation", "agent", "tool"]
+      - id: langfuse.trace.name
+        type: string
+      - id: langfuse.trace.tags
+        type: string[]
+
+  # ---------------------------------------------------------------------------
+  # Atribucion de coste (TokenOps). Sin estas etiquetas el coste llega como un
+  # numero opaco a fin de mes y no se puede optimizar nada.
+  # ---------------------------------------------------------------------------
+  - id: attribution
+    brief: Etiquetas de atribucion para FinOps y analisis
+    attributes:
+      - id: argus.app
+        type: string
+        brief: Aplicacion propietaria. Viaja en baggage entre procesos.
+      - id: argus.feature
+        type: string
+        brief: Funcionalidad de producto que origino la llamada.
+        examples: ["document-extraction", "chat-support"]
+      - id: argus.use_case
+        type: string
+        brief: Caso de uso, para agrupar coste por proposito.
+        examples: ["ocr", "summarization", "rca-investigation"]
+      - id: argus.run.id
+        type: string
+        brief: Unidad de trabajo de negocio. Viaja en baggage.
+      - id: argus.tenant
+        type: string
+        brief: Inquilino, si aplica. Viaja en baggage.
+
+  # ---------------------------------------------------------------------------
+  # Wide events. Un evento ancho por unidad de trabajo, emitido al cerrar.
+  # ---------------------------------------------------------------------------
+  - id: wide_event
+    brief: Campos del evento ancho canonico
+    attributes:
+      - id: argus.event
+        type: string
+        brief: >
+          Nombre del evento, de CARDINALIDAD CERRADA. Es lo que permite al
+          agente de RCA hacer GROUP BY con resultados accionables, en vez de
+          hacer grep sobre texto libre.
+        examples: ["document.process", "inference.complete", "ocr.extract"]
+      - id: argus.outcome
+        type: enum
+        members: [ok, error, timeout, cancelled, degraded]
+      - id: argus.duration_ms
+        type: int
+      - id: argus.step.depth
+        type: int
+        brief: Profundidad de anidamiento, para detectar trayectorias anomalas.
+
+  # ---------------------------------------------------------------------------
+  # Deteccion en tiempo real. El Collector agente filtra por estos atributos
+  # para decidir que va por el CAMINO CALIENTE (§7.0 del plan).
+  # ---------------------------------------------------------------------------
+  - id: hotpath
+    brief: Marcas que enrutan al camino caliente de deteccion
+    attributes:
+      - id: argus.hot
+        type: boolean
+        brief: >
+          Marcado por el SDK cuando el span es candidato a incidente: error,
+          o duracion por encima del umbral de SLO de su componente. El filtro
+          del Collector agente lo usa para el camino de ~2 segundos.
+      - id: argus.slo.breached
+        type: boolean
+        brief: La operacion supero el objetivo de latencia de su componente.
+      - id: argus.slo.threshold_ms
+        type: int
+      - id: argus.guardrail
+        type: string
+        brief: Guardarrail incumplido, si lo hubo.
+        examples: ["cost-per-run", "tool-call-loop", "token-budget"]
+
+  # ---------------------------------------------------------------------------
+  # Errores. Cardinalidad cerrada a proposito: es lo que hace que
+  # `GROUP BY error.type` devuelva algo accionable.
+  # ---------------------------------------------------------------------------
+  - id: errors
+    brief: Clasificacion de errores
+    attributes:
+      - id: error.type
+        type: string
+        brief: Clase de error, de un catalogo cerrado. Nunca el mensaje.
+        examples: ["timeout", "backend-unavailable", "upstream-error"]
+      - id: argus.error.retryable
+        type: boolean
+        brief: >
+          Si reintentar es una remediacion valida. El agente remediador lo lee:
+          reintentar un error no transitorio es hacer daño, no arreglar.
+      - id: argus.error.retry_policy
+        type: string
+        examples: ["exponential-backoff", "none", "operator-action"]
+
+  # ---------------------------------------------------------------------------
+  # GenAI. Alineado con las semconv de OTel; ver genai_semconv_version arriba.
+  # Se listan aqui las que emitimos para que el generador produzca constantes
+  # y para que el contrato sea explicito entre lenguajes.
+  # ---------------------------------------------------------------------------
+  - id: genai
+    brief: Convenciones GenAI de OpenTelemetry
+    attributes:
+      - id: gen_ai.operation.name
+        type: enum
+        requirement: required
+        members: [chat, text_completion, embeddings, generate_content, retrieval, execute_tool, invoke_agent, create_agent]
+      - id: gen_ai.provider.name
+        type: string
+        requirement: required
+        brief: Sustituye a `gen_ai.system`, que esta OBSOLETO.
+        examples: ["openai", "anthropic", "ollama", "vllm", "aws.bedrock"]
+      - id: gen_ai.request.model
+        type: string
+        requirement: required
+      - id: gen_ai.response.model
+        type: string
+        brief: >
+          Modelo realmente servido. Puede diferir del pedido por alias o
+          routing, y esa diferencia explica incidentes.
+      - id: gen_ai.response.id
+        type: string
+      - id: gen_ai.response.finish_reasons
+        type: string[]
+      - id: gen_ai.usage.input_tokens
+        type: int
+      - id: gen_ai.usage.output_tokens
+        type: int
+      - id: gen_ai.usage.cache_read.input_tokens
+        type: int
+      - id: gen_ai.request.temperature
+        type: double
+      - id: gen_ai.request.max_tokens
+        type: int
+      - id: gen_ai.request.top_p
+        type: double
+      - id: gen_ai.conversation.id
+        type: string
+      - id: gen_ai.agent.name
+        type: string
+      - id: gen_ai.agent.id
+        type: string
+      - id: gen_ai.tool.name
+        type: string
+      - id: gen_ai.tool.type
+        type: string
+      - id: gen_ai.tool.call.id
+        type: string
+      # Contenido. Van en ATRIBUTOS y no en eventos de span: la guia canonica
+      # dice eventos, pero Langfuse los lee de los atributos. Emitir en eventos
+      # significa que Langfuse ingiere el span y lo muestra sin input ni output.
+      - id: gen_ai.input.messages
+        type: string
+        brief: JSON serializado. Gated por ARGUS_CAPTURE_CONTENT.
+      - id: gen_ai.output.messages
+        type: string
+        brief: JSON serializado. Gated por ARGUS_CAPTURE_CONTENT.
+      - id: gen_ai.system_instructions
+        type: string
+      - id: gen_ai.tool.call.arguments
+        type: string
+      - id: gen_ai.tool.call.result
+        type: string
+      - id: gen_ai.content.truncated
+        type: boolean
+
+  # ---------------------------------------------------------------------------
+  # Extensiones de plataforma para inferencia local (Axonium / Prometheus).
+  # Son cosas que SOLO el SDK de inferencia sabe, y ninguna aplicacion.
+  # ---------------------------------------------------------------------------
+  - id: inference
+    brief: Detalles de inferencia local que solo conoce el SDK cliente
+    attributes:
+      - id: argus.backend.id
+        type: string
+        brief: Backend concreto que atendio la peticion.
+      - id: argus.backend.circuit_state
+        type: enum
+        members: [closed, open, half-open]
+      - id: argus.backend.fallback
+        type: boolean
+        brief: Si se sirvio desde un backend alternativo tras un fallo.
+      - id: argus.cost_usd
+        type: double
+      - id: argus.ttft_ms
+        type: int
+        brief: Tiempo hasta el primer token.
+      - id: argus.tokens_per_second
+        type: double
+
+  # ---------------------------------------------------------------------------
+  # Recuperacion (RAG).
+  # ---------------------------------------------------------------------------
+  - id: retrieval
+    brief: Recuperacion de documentos
+    attributes:
+      - id: argus.retrieval.store
+        type: string
+        examples: ["pgvector", "qdrant", "chroma"]
+      - id: argus.retrieval.top_k
+        type: int
+      - id: argus.retrieval.doc_count
+        type: int
+      - id: argus.retrieval.score_min
+        type: double
+      - id: argus.retrieval.score_max
+        type: double
+
+# =============================================================================
+# Metricas. Nombres y unidades fijados aqui para que los cinco lenguajes
+# emitan series compatibles.
+# =============================================================================
+metrics:
+  - name: gen_ai.client.operation.duration
+    instrument: histogram
+    unit: s
+    brief: Duracion de la operacion GenAI.
+    attributes: [gen_ai.operation.name, gen_ai.provider.name, gen_ai.request.model, error.type, server.address]
+    buckets: [0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92]
+
+  - name: gen_ai.client.token.usage
+    instrument: histogram
+    unit: "{token}"
+    brief: >
+      Tokens consumidos. `gen_ai.token.type` va como DIMENSION (input/output),
+      no como dos instrumentos separados: es lo que permite agregar por modelo
+      sin unir series.
+    attributes: [gen_ai.operation.name, gen_ai.provider.name, gen_ai.request.model, gen_ai.token.type]
+    buckets: [1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864]
+
+  - name: gen_ai.server.time_to_first_token
+    instrument: histogram
+    unit: s
+    attributes: [gen_ai.provider.name, gen_ai.request.model, argus.backend.id]
+
+  - name: argus.step.duration
+    instrument: histogram
+    unit: s
+    brief: Duracion de una unidad de trabajo de negocio.
+    attributes: [argus.event, argus.outcome, service.namespace, service.name]
+
+  - name: argus.cost.usd
+    instrument: counter
+    unit: "{usd}"
+    brief: Coste atribuido. Dimensiones pensadas para el agente de FinOps.
+    attributes: [argus.app, argus.feature, argus.use_case, gen_ai.request.model, deployment.environment.name]

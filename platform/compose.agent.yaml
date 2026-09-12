@@ -1,0 +1,58 @@
+# =============================================================================
+# Collector AGENTE — se despliega en CADA maquina que corra aplicaciones.
+#
+# Incluida la propia maquina del plano central: las aplicaciones locales
+# tambien exportan a su agente, no al gateway directamente. Esa uniformidad es
+# lo que permite mover el plano central sin tocar ninguna aplicacion.
+#
+#   cp .env.agent.example .env.agent   # y rellenar
+#   docker compose -f compose.agent.yaml --env-file .env.agent up -d
+#
+# Este fichero es identico en macOS y en Linux. Lo unico que cambia son las
+# variables de entorno.
+# =============================================================================
+
+name: argus-agent
+
+services:
+  # El agente corre sin privilegios y un volumen nombrado nace de root.
+  # Sin este init, la cola persistente no puede crearse.
+  agent-init:
+    image: busybox:1.37
+    user: "0"
+    command: ["sh", "-c", "mkdir -p /var/lib/argus/queue && chown -R 10001:10001 /var/lib/argus"]
+    volumes:
+      - agent-queue:/var/lib/argus
+    restart: "no"
+
+  agent:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    restart: unless-stopped
+    depends_on:
+      agent-init: { condition: service_completed_successfully }
+    command: ["--config=/etc/otel/agent.yaml"]
+    environment:
+      # Nombre ESTABLE del plano central, no una IP. Con una red privada tipo
+      # Tailscale, migrar el plano central de la MacBook al iMac es mover el
+      # servicio y conservar el nombre: ninguna aplicacion se entera.
+      ARGUS_GATEWAY_ENDPOINT: ${ARGUS_GATEWAY_ENDPOINT:?p.ej. argus.tu-tailnet.ts.net:4317}
+      ARGUS_ALERTBUS_ENDPOINT: ${ARGUS_ALERTBUS_ENDPOINT:-${ARGUS_GATEWAY_ENDPOINT}}
+      ARGUS_GATEWAY_TOKEN: ${ARGUS_GATEWAY_TOKEN:?el mismo token que el gateway}
+      ARGUS_INSECURE: ${ARGUS_INSECURE:-true}
+    volumes:
+      - ./collector/agent.yaml:/etc/otel/agent.yaml:ro
+      - agent-queue:/var/lib/argus
+    ports:
+      # SOLO en localhost. Las aplicaciones de esta maquina exportan aqui y
+      # nunca conocen la direccion del plano central.
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
+      - "127.0.0.1:8888:8888"
+
+volumes:
+  # La cola en disco. Es lo que hace que cerrar la tapa del portatil, cambiar
+  # de red o tener el plano central apagado un fin de semana no sea perdida de
+  # datos: el agente escribe a un WAL antes de intentar exportar, y al
+  # reconectar vacia lo acumulado.
+  agent-queue:

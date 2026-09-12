@@ -1,0 +1,17 @@
+# =============================================================================
+# Overlay de compose para el perfil GenAI.
+#
+#   docker compose -f compose.yaml -f compose.genai.yaml --profile genai up -d
+#
+# Existe para que no se pueda arrancar Langfuse sin su pipeline en el Collector,
+# ni el pipeline sin Langfuse. Las dos mitades van juntas o no van.
+# =============================================================================
+
+services:
+  collector:
+    command:
+      - --config=/etc/otel/gateway.yaml
+      - --config=/etc/otel/gateway.genai.yaml
+    depends_on:
+      langfuse-web:
+        condition: service_started

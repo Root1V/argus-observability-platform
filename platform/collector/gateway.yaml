@@ -1,0 +1,321 @@
+# =============================================================================
+# Collector GATEWAY — el plano central. Uno solo.
+#
+# Aqui vive todo lo que necesita ver el conjunto: redaccion de PII,
+# pseudonimizacion, tail sampling y el reparto a los almacenes.
+#
+# DECISION CLAVE: fan-out, no routing.
+#
+# Lo natural pareceria enrutar los spans GenAI a Langfuse y el resto a
+# ClickHouse. Es un error: el `routing` connector con `context: span` separa
+# spans del MISMO trace hacia tuberias distintas, asi que el span `chat qwen`
+# se iria a Langfuse y su padre HTTP a ClickHouse, dejando la traza de
+# ClickHouse con un hueco. Y reconstruir ese arbol completo es justo lo que el
+# agente de RCA necesita para poder decir "esta latencia de LLM causo aquel
+# timeout".
+#
+# Por eso: ClickHouse recibe la traza COMPLETA, Langfuse solo el subarbol
+# GenAI, y los trace_id son identicos en ambos lados. Deep-link gratis.
+#
+# La rama de Langfuse vive en el overlay `gateway.genai.yaml`, que solo se
+# carga cuando Langfuse esta desplegado. Un exportador apuntando a un host
+# inexistente reintenta cada pocos segundos y llena el log de avisos: es
+# exactamente el ruido que te ensena a ignorar los logs.
+# =============================================================================
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  file_storage/queue:
+    directory: /var/lib/argus/gateway-queue
+    create_directory: true
+    timeout: 10s
+
+  # Valida el token que ponen los agentes.
+  bearertokenauth/server:
+    scheme: Bearer
+    token: ${env:ARGUS_GATEWAY_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth/server
+        max_recv_msg_size_mib: 32
+        keepalive:
+          server_parameters:
+            max_connection_idle: 11s
+            max_connection_age: 30s
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/server
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+
+  resource/gateway:
+    attributes:
+      - key: argus.collector.tier
+        value: gateway
+        action: upsert
+      # Un servicio que emite sin declararse aparece igualmente, como
+      # provisional. Descubrir sin avisar llena el registro de basura; avisar
+      # sin descubrir lo deja vacio. Hacemos las dos cosas.
+      - key: service.namespace
+        value: unregistered
+        action: insert
+
+  # --- Privacidad, capa 2 ----------------------------------------------------
+  # Red de seguridad por regex. La capa 1 esta en la aplicacion (el `mask` del
+  # SDK). Esta segunda es la que importa de verdad: significa que un fallo de
+  # instrumentacion en una app no se convierte en una fuga en el almacen.
+  #
+  # Lo que deliberadamente NO va aqui: NER con modelos. Demasiado caro para el
+  # camino caliente. El Collector hace regex; los modelos van en proceso.
+  redaction:
+    allow_all_keys: true
+
+    # Los atributos de IDENTIDAD nunca se redactan.
+    #
+    # Esto no es una comodidad: sin ello, cualquier aplicacion cuyo nombre o
+    # version contenga una tirada de digitos acaba con su `service.namespace`
+    # enmascarado, y entonces no se puede agrupar por aplicacion ni enrutar la
+    # notificacion a su dueno. Lo descubrimos con la prueba de humo: un
+    # namespace terminado en un numero de diez cifras se convertia en
+    # `smoke-****` porque encajaba con el patron de telefono.
+    ignored_keys:
+      - service.name
+      - service.namespace
+      - service.version
+      - service.instance.id
+      - deployment.environment.name
+      - argus.app
+      - argus.component.role
+      - argus.event
+      - argus.run.id
+      - error.type
+      - gen_ai.request.model
+      - gen_ai.response.model
+      - gen_ai.provider.name
+      - gen_ai.operation.name
+      - langfuse.environment
+      - langfuse.release
+      - http.route
+      - url.path
+
+    blocked_values:
+      - '\b[\w.+-]+@[\w-]+\.[\w.-]+\b'                          # email
+      - '\b(?:\d[ -]*?){13,19}\b'                               # tarjeta
+      # Telefono: EXIGE separadores o prefijo internacional. Una tirada suelta
+      # de diez digitos es casi siempre un identificador, un timestamp o un
+      # contador, no un telefono. Redactarla destruye datos utiles y no protege
+      # nada.
+      - '\+\d{1,3}[-.\s]\d{2,4}[-.\s]\d{2,4}[-.\s]?\d{0,4}'    # telefono internacional
+      - '\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b'                     # telefono con separadores
+      - '\b\d{8}[A-HJ-NP-TV-Z]\b'                               # DNI
+      - '\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b'                      # IBAN
+      - '(?i)\b(?:sk|pk)-[A-Za-z0-9_\-]{16,}'                   # claves
+      - '(?i)\bBearer\s+[A-Za-z0-9_\-.]{16,}'                   # tokens
+    # Emite el conteo de redacciones. Es una metrica util por si misma: un pico
+    # significa que alguna aplicacion empezo a filtrar PII.
+    summary: debug
+
+  # --- Privacidad, capa 3 ----------------------------------------------------
+  # Pseudonimizacion. El agente puede agrupar "el mismo usuario" sin saber
+  # quien es.
+  transform/pseudonymize:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "http.request.header.authorization")
+          - delete_key(attributes, "url.query")
+    log_statements:
+      - context: log
+        statements:
+          - delete_key(attributes, "http.request.header.authorization")
+
+  # --- Muestreo --------------------------------------------------------------
+  # AVISO: el tail sampling exige que TODOS los spans de una traza lleguen a la
+  # MISMA instancia. Con un gateway unico es correcto. Al escalar a varios hace
+  # falta una capa previa con `loadbalancing` exporter y routing_key: traceID,
+  # o el muestreo se vuelve incorrecto EN SILENCIO.
+  #
+  # Y ojo: esta espera de 30 s es la razon por la que la deteccion NO pasa por
+  # aqui. El camino caliente va directo del agente al alert-bus.
+  tail_sampling:
+    decision_wait: 30s
+    num_traces: 100000
+    expected_new_traces_per_sec: 500
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+      - name: marked-hot
+        type: boolean_attribute
+        boolean_attribute:
+          key: argus.hot
+          value: true
+
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 3000
+
+      # Todo lo GenAI se queda: es el corpus de evaluacion de Langfuse, y
+      # muestrearlo hace inutiles las metricas de coste.
+      - name: genai-always
+        type: string_attribute
+        string_attribute:
+          key: gen_ai.operation.name
+          values: [chat, text_completion, embeddings, generate_content, retrieval, execute_tool, invoke_agent, create_agent]
+
+      # Las investigaciones del propio agente de RCA se conservan enteras: es
+      # como se evalua si el agente mejora con el tiempo.
+      - name: agent-runs
+        type: string_attribute
+        string_attribute:
+          key: argus.investigation.id
+          values: [".*"]
+          enabled_regex_matching: true
+
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+  # --- Rama ClickHouse -------------------------------------------------------
+  # Fuera el contenido de mensajes. En Langfuse el contenido ES el producto;
+  # en ClickHouse son decenas de KB por span sin ninguna consulta que los use.
+  attributes/strip_content:
+    actions:
+      - key: gen_ai.input.messages
+        action: delete
+      - key: gen_ai.output.messages
+        action: delete
+      - key: gen_ai.system_instructions
+        action: delete
+      - key: gen_ai.tool.call.arguments
+        action: delete
+      - key: gen_ai.tool.call.result
+        action: delete
+
+  batch/clickhouse:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+connectors:
+  # Metricas RED derivadas de TODAS las trazas, antes de muestrear. Si se
+  # derivaran despues, las metricas quedarian sesgadas por el muestreo.
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [2ms, 8ms, 32ms, 128ms, 512ms, 1s, 4s, 16s, 64s]
+    dimensions:
+      - name: service.namespace
+      - name: argus.component.role
+      - name: http.request.method
+      - name: http.route
+      - name: error.type
+      - name: gen_ai.operation.name
+      - name: gen_ai.request.model
+    exemplars:
+      enabled: true
+    metrics_flush_interval: 10s
+
+exporters:
+  # Base de datos `otel`, SEPARADA de la que usa Langfuse en la misma
+  # ClickHouse: compartirla arriesga colisiones con sus migraciones.
+  clickhouse:
+    endpoint: ${env:ARGUS_CLICKHOUSE_DSN}
+    database: otel
+    create_schema: true
+    ttl: 720h                    # 30 dias en caliente
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    metrics_tables:
+      gauge:
+        name: otel_metrics_gauge
+      sum:
+        name: otel_metrics_sum
+      histogram:
+        name: otel_metrics_histogram
+    timeout: 10s
+    sending_queue:
+      enabled: true
+      storage: file_storage/queue
+      num_consumers: 10
+      queue_size: 10000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  prometheusremotewrite:
+    endpoint: ${env:ARGUS_VICTORIAMETRICS_ENDPOINT}
+    target_info:
+      enabled: true
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  extensions: [health_check, file_storage/queue, bearertokenauth/server]
+
+  telemetry:
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+    logs:
+      level: info
+      encoding: json
+
+  pipelines:
+    # Metricas RED derivadas ANTES de muestrear, para que no se sesguen.
+    traces/metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [spanmetrics]
+
+    # Traza COMPLETA a ClickHouse. Fuente de verdad del agente de RCA.
+    traces/clickhouse:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource/gateway
+        - redaction
+        - transform/pseudonymize
+        - tail_sampling
+        - attributes/strip_content
+        - batch/clickhouse
+      exporters: [clickhouse]
+
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [memory_limiter, resource/gateway, batch/clickhouse]
+      exporters: [clickhouse, prometheusremotewrite]
+
+    logs:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource/gateway
+        - redaction
+        - transform/pseudonymize
+        - batch/clickhouse
+      exporters: [clickhouse]

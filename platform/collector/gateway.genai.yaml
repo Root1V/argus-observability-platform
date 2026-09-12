@@ -1,0 +1,59 @@
+# =============================================================================
+# Overlay GenAI — anade la rama de Langfuse al Collector gateway.
+#
+# Se carga ADEMAS de `gateway.yaml`, nunca en su lugar:
+#
+#   otelcol --config=/etc/otel/gateway.yaml --config=/etc/otel/gateway.genai.yaml
+#
+# El Collector fusiona configuraciones, asi que aqui solo se declara lo que se
+# anade. Vive separado porque el perfil ligero no despliega Langfuse.
+# =============================================================================
+
+processors:
+  # --- Rama Langfuse ---------------------------------------------------------
+  # Solo el subarbol GenAI: es lo unico que Langfuse sabe renderizar.
+  filter/genai_only:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["gen_ai.operation.name"] == nil and attributes["langfuse.observation.type"] == nil'
+
+  # Lotes mas pequenos: Langfuse es Next.js, no un ingestor columnar.
+  batch/langfuse:
+    timeout: 2s
+    send_batch_size: 256
+
+exporters:
+  # Langfuse NO soporta OTLP/gRPC, solo el endpoint HTTP.
+  # El exporter anade "/v1/traces" al endpoint: no incluirlo aqui.
+  otlphttp/langfuse:
+    endpoint: ${env:ARGUS_LANGFUSE_ENDPOINT}
+    encoding: proto
+    compression: gzip
+    headers:
+      Authorization: "Basic ${env:ARGUS_LANGFUSE_AUTH}"
+    timeout: 30s
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 600s
+
+service:
+  pipelines:
+    # Subarbol GenAI a Langfuse, con los MISMOS trace_id que arriba.
+    traces/langfuse:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - resource/gateway
+        - redaction
+        - transform/pseudonymize
+        - tail_sampling
+        - filter/genai_only
+        - batch/langfuse
+      exporters: [otlphttp/langfuse]

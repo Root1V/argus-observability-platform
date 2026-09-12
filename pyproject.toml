@@ -1,0 +1,64 @@
+[project]
+name = "argus-platform"
+version = "0.1.0"
+description = "Argus — plataforma de observabilidad, AIOps agentico y explicabilidad"
+requires-python = ">=3.11"
+dependencies = [
+    "argus-semconv",
+    "argus-sdk",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pyyaml>=6",
+    "ruff>=0.6",
+    "opentelemetry-sdk>=1.30,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.30,<2",
+]
+
+[tool.uv.workspace]
+members = ["libs/argus-semconv", "libs/argus-sdk"]
+
+[tool.uv.sources]
+argus-semconv = { workspace = true }
+argus-sdk = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+[tool.pytest.ini_options]
+testpaths = ["libs/argus-semconv/tests", "libs/argus-sdk/tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::RuntimeWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# BLE esta incluido a proposito: capturar Exception a ciegas es exactamente lo
+# que este SDK hace en los caminos de telemetria, y queremos que cada sitio
+# donde ocurre lleve su `# noqa: BLE001` con el motivo escrito al lado. Sin BLE
+# en la lista, esos noqa serian decorativos y nadie los mantendria.
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "BLE"]
+ignore = [
+    "E501",
+    # __all__ agrupado por concepto y comentado se lee mejor que alfabetico.
+    "RUF022",
+    # `contextlib.suppress` anade una llamada por invocacion. En el camino
+    # caliente de la telemetria preferimos el try/except explicito.
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"libs/argus-semconv/src/argus_semconv/attributes.py" = ["E501", "RUF"]
+"**/tests/**" = ["B011", "SIM117"]
+# En los ejemplos el `with` anidado es pedagogico: muestra la jerarquia
+# agente -> paso -> llamada, que es justo lo que el lector tiene que ver.
+"examples/**" = ["SIM117"]
