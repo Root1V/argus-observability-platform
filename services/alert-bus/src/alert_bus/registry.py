@@ -1,0 +1,205 @@
+"""Registro de aplicaciones.
+
+Es el prerequisito silencioso de toda la fase: sin el, ni la correlacion por
+topologia ni el enrutamiento de notificaciones funcionan. Una alerta sin dueno
+es una alerta que nadie atiende.
+
+Dos comportamientos que van juntos y que por separado fallan:
+
+- **Auto-descubrimiento**: un servicio que empieza a emitir con un namespace
+  desconocido aparece solo, como `provisional`, con SLO por defecto segun su
+  rol. Sin esto el registro se queda vacio y la plataforma no ve nada nuevo.
+- **Pero no en silencio**: genera un aviso de severidad baja. Sin esto el
+  registro se llena de basura y deja de ser fuente de verdad.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+from argus_schemas import Severity
+
+log = logging.getLogger("alert_bus.registry")
+
+# SLO por defecto segun la forma del componente, para que una aplicacion nueva
+# tenga alertamiento razonable desde el primer span sin configurar nada.
+DEFAULT_SLO_MS: dict[str, int] = {
+    "api": 3_000,
+    "worker": 60_000,
+    "scheduler": 300_000,
+    "cli": 0,            # sin umbral: un CLI puede durar lo que quiera
+    "model-server": 30_000,
+    "frontend": 5_000,
+    "library": 0,
+}
+
+# Criticidad -> severidad maxima. Una aplicacion de criticidad baja nunca
+# despierta a nadie, por mucho que falle.
+CRITICALITY_CEILING: dict[str, Severity] = {
+    "alta": Severity.PAGE,
+    "media": Severity.TICKET,
+    "baja": Severity.INFO,
+}
+
+
+@dataclass
+class Component:
+    id: str
+    role: str = "api"
+    slo_ms: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.slo_ms:
+            self.slo_ms = DEFAULT_SLO_MS.get(self.role, 0)
+
+
+@dataclass
+class Application:
+    id: str
+    display_name: str = ""
+    state: str = "activo"                 # activo | provisional | retirado
+    criticality: str = "media"
+    owner: str = ""
+    components: dict[str, Component] = field(default_factory=dict)
+    depends_on: list[str] = field(default_factory=list)
+    channels: dict[str, list[str]] = field(default_factory=dict)
+    runbook: str = ""
+
+    @property
+    def severity_ceiling(self) -> Severity:
+        return CRITICALITY_CEILING.get(self.criticality, Severity.TICKET)
+
+    def component(self, component_id: str) -> Component:
+        """Devuelve el componente, creandolo como provisional si no existe.
+
+        Un componente nuevo dentro de una aplicacion conocida es lo mas normal
+        del mundo (un worker que se anade). No merece friccion.
+        """
+        if component_id not in self.components:
+            self.components[component_id] = Component(id=component_id)
+        return self.components[component_id]
+
+
+class Registry:
+    """Catalogo de aplicaciones, recargable en caliente.
+
+    Es datos, no codigo: anadir una aplicacion no reinicia nada.
+    """
+
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = path
+        self._apps: dict[str, Application] = {}
+        self._lock = threading.Lock()
+        self._discovered: set[str] = set()
+        if path:
+            self.load()
+
+    # --- Carga ---------------------------------------------------------------
+
+    def load(self) -> None:
+        if not self._path or not self._path.exists():
+            log.warning("registry.missing", extra={"path": str(self._path)})
+            return
+        try:
+            raw = yaml.safe_load(self._path.read_text(encoding="utf-8")) or []
+        except yaml.YAMLError as exc:
+            # Un registro mal formado no puede tumbar el alert-bus: dejaria de
+            # detectar incidentes por un error de sintaxis en un YAML.
+            log.error("registry.invalid", extra={"error": str(exc)})
+            return
+
+        apps: dict[str, Application] = {}
+        for entry in raw:
+            app = Application(
+                id=entry["id"],
+                display_name=entry.get("nombre_visible", entry["id"]),
+                state=entry.get("estado", "activo"),
+                criticality=entry.get("criticidad", "media"),
+                owner=entry.get("dueño", entry.get("dueno", "")),
+                depends_on=list(entry.get("depende_de", [])),
+                channels=dict(entry.get("canales", {})),
+                runbook=entry.get("runbook", ""),
+            )
+            for comp in entry.get("componentes", []):
+                slo = comp.get("slo", {}) or {}
+                app.components[comp["id"]] = Component(
+                    id=comp["id"],
+                    role=comp.get("rol", "api"),
+                    slo_ms=int(slo.get("p95_ms", 0)),
+                )
+            apps[app.id] = app
+
+        with self._lock:
+            self._apps = apps
+        log.info("registry.loaded", extra={"apps": len(apps)})
+
+    # --- Consulta ------------------------------------------------------------
+
+    def get(self, app_id: str) -> Application | None:
+        with self._lock:
+            return self._apps.get(app_id)
+
+    def resolve(self, app_id: str, component_id: str) -> tuple[Application, bool]:
+        """Devuelve la aplicacion y si acaba de descubrirse.
+
+        El booleano es lo que dispara el aviso de "servicio no registrado".
+        Descubrir sin avisar llena el registro de basura; avisar sin descubrir
+        lo deja vacio. Hacemos las dos cosas.
+        """
+        with self._lock:
+            app = self._apps.get(app_id)
+            if app is not None:
+                app.component(component_id)
+                return app, False
+
+            app = Application(
+                id=app_id,
+                display_name=app_id,
+                state="provisional",
+                criticality="media",
+            )
+            app.component(component_id)
+            self._apps[app_id] = app
+            newly = app_id not in self._discovered
+            self._discovered.add(app_id)
+
+        if newly:
+            log.warning(
+                "registry.unregistered_service",
+                extra={"app": app_id, "component": component_id},
+            )
+        return app, newly
+
+    def dependencies_of(self, app_id: str) -> list[str]:
+        app = self.get(app_id)
+        return list(app.depends_on) if app else []
+
+    def channels_for(self, app_id: str, severity: Severity) -> list[str]:
+        """A donde va el aviso. Es una REGLA, no un juicio (D-014)."""
+        app = self.get(app_id)
+        if app is None:
+            return ["console"]
+        key = "page" if severity is Severity.PAGE else "ticket"
+        return app.channels.get(key) or ["console"]
+
+    @property
+    def apps(self) -> dict[str, Application]:
+        with self._lock:
+            return dict(self._apps)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": a.id,
+                "estado": a.state,
+                "criticidad": a.criticality,
+                "componentes": sorted(a.components),
+                "depende_de": a.depends_on,
+            }
+            for a in self.apps.values()
+        ]

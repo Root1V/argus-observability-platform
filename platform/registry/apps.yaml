@@ -1,0 +1,112 @@
+# Registro de aplicaciones.
+#
+# Fuente de verdad de DOS cosas que sin el no funcionan:
+#   - la correlacion de alertas, que necesita `depende_de` para suprimir
+#     sintomas cuando ya hay una causa aguas arriba;
+#   - el enrutamiento de notificaciones, que es una REGLA y no un juicio.
+#
+# Es datos, no codigo: anadir una aplicacion no reinicia nada. Y un servicio que
+# empiece a emitir sin estar aqui aparecera igualmente como `provisional`, con
+# un aviso de baja severidad.
+#
+# `criticidad` acota la severidad maxima:
+#   alta -> puede paginar · media -> como mucho ticket · baja -> solo digest
+
+- id: argus
+  nombre_visible: Argus (la propia plataforma)
+  estado: activo
+  criticidad: alta
+  dueño: emeric
+  canales:
+    page: [console]
+    ticket: [console]
+  componentes:
+    - {id: alert-bus, rol: api, slo: {p95_ms: 1000}}
+    - {id: notifier, rol: api, slo: {p95_ms: 3000}}
+    - {id: canary, rol: scheduler}
+  depende_de: [clickhouse, victoriametrics]
+
+- id: intelligent-document-platform
+  nombre_visible: IDP
+  estado: activo
+  criticidad: alta
+  dueño: emeric
+  canales:
+    page: [console]
+    ticket: [console]
+  componentes:
+    - {id: idp-api, rol: api, slo: {p95_ms: 8000}}
+    - {id: idp-worker, rol: worker}
+    - {id: idp-ocr, rol: model-server, slo: {p95_ms: 30000}}
+  depende_de: [postgres-main, minio-main]
+  tipo_ia: [llm-api, ocr, extraccion-estructurada]
+
+- id: edge-ai-inference
+  nombre_visible: Inferencia local
+  estado: activo
+  criticidad: alta
+  dueño: emeric
+  canales:
+    page: [console]
+    ticket: [console]
+  componentes:
+    - {id: gateway, rol: api, slo: {p95_ms: 30000}}
+    - {id: auth-service, rol: api, slo: {p95_ms: 1000}}
+    - {id: runtime-manager, rol: scheduler}
+  depende_de: [redis-main]
+  tipo_ia: [llm-local]
+
+- id: aeon-ai
+  estado: activo
+  criticidad: media
+  dueño: emeric
+  canales:
+    page: [console]
+    ticket: [console]
+  componentes:
+    - {id: control-plane, rol: api}
+    - {id: modelgw, rol: api}
+    - {id: toolgw, rol: api}
+    - {id: worker, rol: worker}
+  depende_de: [postgres-main, temporal]
+  tipo_ia: [agentes, llm-local]
+
+# Los laboratorios van con criticidad baja a proposito: un experimento no puede
+# generar guardias por mucho que falle.
+- id: llm-benchmark
+  estado: activo
+  criticidad: baja
+  componentes:
+    - {id: bench-runner, rol: cli}
+
+# Infraestructura compartida. Esta aqui para que `depende_de` pueda apuntar a
+# algo y la supresion de alertas sintoma tenga grafo sobre el que trabajar.
+- id: postgres-main
+  estado: activo
+  criticidad: alta
+  componentes: [{id: postgres-main, rol: model-server}]
+
+- id: redis-main
+  estado: activo
+  criticidad: media
+  componentes: [{id: redis-main, rol: model-server}]
+
+- id: minio-main
+  estado: activo
+  criticidad: media
+  componentes: [{id: minio-main, rol: model-server}]
+
+- id: clickhouse
+  estado: activo
+  criticidad: alta
+  componentes: [{id: clickhouse, rol: model-server}]
+
+- id: victoriametrics
+  estado: activo
+  criticidad: media
+  componentes: [{id: victoriametrics, rol: model-server}]
+
+- id: temporal
+  estado: activo
+  criticidad: media
+  componentes: [{id: temporal, rol: model-server}]

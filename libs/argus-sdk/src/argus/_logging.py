@@ -150,7 +150,8 @@ def _bridge_to_otlp(cfg: Config) -> None:
 
             exporter = OTLPLogExporter(
                 endpoint=cfg.endpoint,
-                headers=tuple(cfg.headers.items()) if cfg.headers else None,
+                # Minuscula obligatoria en metadatos gRPC.
+                headers=tuple((k.lower(), v) for k, v in cfg.headers.items()) if cfg.headers else None,
                 insecure=cfg.endpoint.startswith("http://"),
             )
 
