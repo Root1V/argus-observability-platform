@@ -265,3 +265,38 @@ def test_public_surface_is_pinned() -> None:
         "La superficie publica cambio. Si es intencionado, actualiza este test "
         "y piensa si de verdad hace falta."
     )
+
+
+# --- Detalles del transporte que el SDK debe absorber ------------------------
+
+
+def test_grpc_headers_are_lowercased() -> None:
+    """Regresion encontrada al conectar la tuberia real.
+
+    gRPC rechaza las claves de metadatos en mayuscula con "Illegal header key",
+    asi que `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer xyz` reventaba el
+    exportador. Quien escribe esa variable no tiene por que conocer ese detalle
+    del protocolo: lo absorbe el SDK.
+    """
+    result = _run(
+        """
+        import os, warnings
+        warnings.simplefilter("ignore")
+        os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer secreto,X-Custom=valor"
+        import argus
+        from argus._config import Config
+        from argus import _tracing
+
+        cfg = Config.from_env("svc", endpoint="http://127.0.0.1:1")
+        # La config conserva las claves tal cual las escribio el usuario...
+        assert "Authorization" in cfg.headers
+
+        # ...y el exportador gRPC las pasa en minuscula.
+        exportador = _tracing._build_exporter(cfg)
+        enviadas = dict(getattr(exportador, "_headers", ()) or ())
+        assert all(k == k.lower() for k in enviadas), enviadas
+        print("OK")
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout

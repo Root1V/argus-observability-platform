@@ -6,11 +6,14 @@ requires-python = ">=3.11"
 dependencies = [
     "argus-semconv",
     "argus-sdk",
+    "argus-schemas",
+    "alert-bus",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "httpx>=0.27",
     "pytest-asyncio>=0.24",
     "pyyaml>=6",
     "ruff>=0.6",
@@ -19,11 +22,13 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["libs/argus-semconv", "libs/argus-sdk"]
+members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus"]
 
 [tool.uv.sources]
 argus-semconv = { workspace = true }
 argus-sdk = { workspace = true }
+argus-schemas = { workspace = true }
+alert-bus = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -33,7 +38,12 @@ build-backend = "hatchling.build"
 bypass-selection = true
 
 [tool.pytest.ini_options]
-testpaths = ["libs/argus-semconv/tests", "libs/argus-sdk/tests"]
+testpaths = [
+    "libs/argus-semconv/tests",
+    "libs/argus-sdk/tests",
+    "libs/argus-schemas/tests",
+    "services/alert-bus/tests",
+]
 asyncio_mode = "auto"
 filterwarnings = ["ignore::RuntimeWarning"]
 

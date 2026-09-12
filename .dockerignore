@@ -1,0 +1,26 @@
+# El contexto de build es la raiz del repositorio. Sin esto se copian el .venv
+# (cientos de MB), el historial de git y los cachés, lo que hace los builds
+# lentos y, peor, ensucia el cálculo de capas: un cambio en cualquier cache
+# invalida el COPY y uno en el codigo puede no invalidarlo.
+.venv/
+.git/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.DS_Store
+
+# Secretos: nunca dentro de una imagen.
+platform/.env
+platform/.env.agent
+**/.env
+
+# Nada de esto hace falta para construir un servicio.
+docs/
+examples/
+scripts/
+platform/collector/
+platform/rules/

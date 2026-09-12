@@ -47,7 +47,11 @@ def _build_exporter(cfg: Config) -> Any:
 
     return GRPCExporter(
         endpoint=cfg.endpoint,
-        headers=tuple(cfg.headers.items()) if cfg.headers else None,
+        # Las claves de metadatos de gRPC DEBEN ir en minuscula: el protocolo
+        # rechaza "Authorization" con "Illegal header key". Es un detalle que
+        # el SDK absorbe, porque quien escribe OTEL_EXPORTER_OTLP_HEADERS no
+        # tiene por que saberlo.
+        headers=tuple((k.lower(), v) for k, v in cfg.headers.items()) if cfg.headers else None,
         insecure=cfg.endpoint.startswith("http://"),
     )
 

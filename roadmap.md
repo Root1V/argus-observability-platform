@@ -30,7 +30,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
 | **F1** | Librerías y primeras apps | 🚧 | 7/12 |
-| **F2** | Detección en tiempo real y alertas | ⏳ | 0/10 |
+| **F2** | Detección en tiempo real y alertas | 🚧 | 5/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
@@ -99,15 +99,15 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F2-01` | ⏳ | `alert-bus` como **receptor OTLP** | Evaluar [Keep](https://www.keephq.dev/) **antes** de escribir código |
-| `F2-02` | ⏳ | Normalización, deduplicación por huella, agrupación temporal | |
-| `F2-03` | ⏳ | Correlación por topología: suprimir síntomas con causa aguas arriba | Necesita `F2-08` |
-| `F2-04` | ⏳ | `notifier`: Google Chat (Cards V2) + SMTP | |
-| `F2-05` | ⏳ | **Divulgación progresiva**: un hilo que se actualiza | D-015 |
+| `F2-01` | ✅ | `alert-bus` como **receptor OTLP** | Keep evaluado y descartado para esta capa — D-025 |
+| `F2-02` | ✅ | Normalización, deduplicación por huella, agrupación temporal | Huella de cardinalidad cerrada |
+| `F2-03` | ⏳ | Correlación por topología: suprimir síntomas con causa aguas arriba | El grafo ya está en el registro |
+| `F2-04` | ⏳ | `notifier`: Google Chat (Cards V2) + SMTP | Los *sinks* ya son una interfaz |
+| `F2-05` | ✅ | **Divulgación progresiva**: un hilo que se actualiza | D-015 · `POST /incidents/{huella}/enrich` |
 | `F2-06` | ⏳ | Canario sintético | En macOS es buena parte del nivel 0 |
 | `F2-07` | ⏳ | Detectores de bucle de agente y fuga de coste | `tool_calls_per_run > P99` |
-| `F2-08` | ⏳ | Registro de aplicaciones con auto-descubrimiento | Provisional + aviso de no registrado |
-| `F2-09` | ⏳ | **Medir el presupuesto de latencia**: error → mensaje en Chat | Objetivo < 5 s, presupuesto 2 s |
+| `F2-08` | ✅ | Registro de aplicaciones con auto-descubrimiento | 11 apps · provisional + aviso |
+| `F2-09` | ✅ | **Medir el presupuesto de latencia**: error → aviso | **p95 = 120 ms** contra 2 s de presupuesto · `scripts/measure_latency.py` |
 | `F2-10` | ⏳ | *Dead man's switch* externo | Sin esto, un fallo de la plataforma parece silencio |
 
 ---
@@ -197,6 +197,12 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `X-09` | ✅ | Cola persistente sin permisos: uid 10001 vs volumen de root | D-021 |
 | `X-10` | ✅ | `pytest` no cargaba el conftest raíz con rutas explícitas | D-022 |
 | `X-11` | ✅ | Puerto 9000 ocupado por otro proyecto | D-024, movido a 9010 |
+| `X-12` | ✅ | El agente escuchaba en `127.0.0.1` **dentro** del contenedor | Inalcanzable por el mapeo de puertos; ahora `0.0.0.0` |
+| `X-13` | ✅ | Gateway y agente se disputaban 4317/4318 en la misma máquina | El gateway cede a 14317/14318 — D-026 |
+| `X-14` | ✅ | gRPC rechaza credenciales sin TLS | Agente→gateway pasa a OTLP/HTTP — D-027 |
+| `X-15` | ✅ | El alert-bus no descomprimía gzip | El Collector comprime por defecto; el síntoma era "Wire format corrupt" |
+| `X-16` | ✅ | El SDK mandaba cabeceras gRPC en mayúscula | gRPC las rechaza; ahora se pasan en minúscula |
+| `X-17` | ✅ | Sin `.dockerignore`: el `.venv` entraba en el contexto de build | Builds lentos y capas de caché engañosas |
 
 ---
 

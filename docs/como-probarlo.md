@@ -156,6 +156,68 @@ cuantización— explica incidentes, y por eso se registran por separado.
 
 ---
 
+## 4b. El camino caliente: de un error a un aviso
+
+Necesita el Collector agente, que es quien filtra y alimenta el `alert-bus`:
+
+```bash
+make agent        # arranca el agente en esta máquina
+make latency      # mide el presupuesto, 10 muestras
+```
+
+Salida real de esta máquina:
+
+```
+  p50        112 ms
+  p95        120 ms
+  peor       120 ms
+
+Dentro del presupuesto de 2 s.
+```
+
+**Qué demuestra**. Que la detección ocurre **sobre el flujo**, sin tocar la base
+de datos. El tail sampling del gateway sigue esperando sus 30 s para almacenar,
+y eso ya no retrasa el aviso (D-005).
+
+Dos matices honestos sobre ese número:
+
+- La medición fuerza el envío (`force_flush`). En producción el procesador de
+  spans añade hasta `schedule_delay_ms` (200 ms por defecto), así que el caso
+  real está más cerca de **320 ms en el peor caso** — aún muy dentro.
+- Todo corre en una máquina, sobre la red de Docker. Cruzar máquinas por la red
+  privada añadirá latencia de red (`F1-10`).
+
+### Ver la deduplicación funcionando de verdad
+
+```bash
+make incidents    # antes
+```
+
+Ahora provoca una tormenta:
+
+```bash
+set -a && . platform/.env && set +a
+ARGUS_ENDPOINT=http://127.0.0.1:4318 ARGUS_PROTOCOL=http/protobuf \
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $ARGUS_GATEWAY_TOKEN" \
+uv run --with 'opentelemetry-exporter-otlp-proto-http' python -c "
+import warnings; warnings.simplefilter('ignore')
+import argus
+h = argus.init('dedup-probe', namespace='intelligent-document-platform',
+               role='model-server', json_logs=False)
+for i in range(20):
+    with argus.step('ocr.extract') as s:
+        s.error('timeout', retryable=True)
+h.force_flush(timeout_millis=5000)
+"
+make incidents
+```
+
+Veinte errores idénticos producen **un** incidente con `count: 20`, no veinte
+avisos. Eso es la definición operativa de *"sin fatiga de alertas"*: si esto
+falla, la plataforma manda spam y la gente deja de mirarla.
+
+---
+
 ## 5. Instrumentar una app tuya de verdad
 
 Es la prueba que más te va a decir. Coge una app pequeña con FastAPI:

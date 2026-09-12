@@ -24,6 +24,7 @@ services:
     volumes:
       - agent-queue:/var/lib/argus
     restart: "no"
+    networks: [argus_default]
 
   agent:
     image: otel/opentelemetry-collector-contrib:0.140.0
@@ -47,8 +48,17 @@ services:
       # nunca conocen la direccion del plano central.
       - "127.0.0.1:4317:4317"
       - "127.0.0.1:4318:4318"
-      - "127.0.0.1:13133:13133"
-      - "127.0.0.1:8888:8888"
+      - "127.0.0.1:13134:13133"
+      - "127.0.0.1:8889:8888"
+    networks: [argus_default]
+
+networks:
+  # En esta maquina el agente comparte la red del plano central para alcanzar
+  # al gateway y al alert-bus por nombre. En OTRA maquina no habria red comun:
+  # los endpoints serian nombres de la red privada (Tailscale), y este bloque
+  # sobraria.
+  argus_default:
+    external: true
 
 volumes:
   # La cola en disco. Es lo que hace que cerrar la tapa del portatil, cambiar

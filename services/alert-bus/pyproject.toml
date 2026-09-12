@@ -1,0 +1,25 @@
+[project]
+name = "alert-bus"
+version = "0.1.0"
+description = "Receptor OTLP del camino caliente: normaliza, deduplica, agrupa y decide a quien avisar."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "argus-schemas>=1.0,<2",
+    "argus-sdk>=1.0,<2",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "pyyaml>=6",
+    # Para decodificar OTLP. Es la definicion canonica de los mensajes: escribir
+    # un parser a mano seria reimplementar un formato que ya tiene una.
+    "opentelemetry-proto>=1.30,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/alert_bus"]

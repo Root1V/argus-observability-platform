@@ -120,14 +120,43 @@ services:
       - ./collector/gateway.genai.yaml:/etc/otel/gateway.genai.yaml:ro
       - collector-queue:/var/lib/argus
     ports:
-      - "4317:4317"      # OTLP/gRPC — expuesto: llegan agentes de otras maquinas
-      - "4318:4318"      # OTLP/HTTP
+      # 14317/14318 y no 4317/4318: en la maquina que aloja el plano central,
+      # esos puertos son del Collector AGENTE. El invariante "las aplicaciones
+      # exportan a localhost:4317" tiene que valer tambien aqui, o esta maquina
+      # seria la excepcion que hay que recordar.
+      # Al gateway solo lo alcanzan agentes, con endpoint configurable.
+      - "14317:4317"     # OTLP/gRPC — llegan agentes de otras maquinas
+      - "14318:4318"     # OTLP/HTTP
       - "127.0.0.1:13133:13133"
       - "127.0.0.1:8888:8888"
     # Sin healthcheck de contenedor: la imagen del Collector es distroless y no
     # trae wget, curl ni shell. La extension health_check sigue expuesta en
     # 13133 y se comprueba desde fuera (scripts/verify.sh), que es donde el
     # dato sirve de algo.
+
+  # El receptor del CAMINO CALIENTE. Recibe spans filtrados del Collector
+  # agente y decide si constituyen un incidente, sin tocar la base de datos.
+  # Presupuesto: ~2 s del fallo al aviso.
+  alert-bus:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    build:
+      context: ..
+      dockerfile: services/alert-bus/Dockerfile
+    environment:
+      ALERTBUS_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
+      ALERTBUS_REGISTRY_PATH: /etc/argus/apps.yaml
+      ALERTBUS_SINKS: ${ALERTBUS_SINKS:-console,json}
+      ALERTBUS_GROUP_WINDOW_S: ${ALERTBUS_GROUP_WINDOW_S:-60}
+      # Se observa a si mismo: seria absurdo que la pieza que detecta
+      # incidentes fuera la unica sin telemetria.
+      ARGUS_ENDPOINT: http://collector:4317
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-mac-dev}
+      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
+    volumes:
+      - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
+    ports:
+      - "127.0.0.1:8080:8080"
 
   # ---------------------------------------------------------------------------
   # PERFIL genai — Langfuse y sus dependencias

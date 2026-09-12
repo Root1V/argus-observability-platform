@@ -21,7 +21,8 @@ up:  ## Arranca el plano central en modo ligero (4 contenedores)
 	@until curl -sf http://127.0.0.1:13133/ >/dev/null 2>&1; do sleep 2; done
 	@echo "Listo. OTLP en :4317 (gRPC) y :4318 (HTTP)"
 
-down:  ## Para el plano central (conserva los datos)
+down:  ## Para el plano central y el agente (conserva los datos)
+	-docker compose -f platform/compose.agent.yaml --env-file platform/.env.agent down 2>/dev/null
 	$(COMPOSE) --profile lean --profile genai --profile agents down
 
 clean:  ## Para y BORRA todos los datos
@@ -32,6 +33,24 @@ ps:  ## Estado de los contenedores
 
 logs:  ## Sigue los logs del Collector
 	$(COMPOSE) logs -f collector
+
+agent:  ## Arranca el Collector agente de esta maquina (puertos 4317/4318)
+	@test -f platform/.env.agent || { \
+	  set -a; . platform/.env; set +a; \
+	  printf 'ARGUS_GATEWAY_ENDPOINT=collector:4318\nARGUS_ALERTBUS_ENDPOINT=alert-bus:8080\nARGUS_GATEWAY_TOKEN=%s\nARGUS_INSECURE=true\n' "$$ARGUS_GATEWAY_TOKEN" > platform/.env.agent; \
+	  echo "platform/.env.agent generado"; }
+	docker compose -f platform/compose.agent.yaml --env-file platform/.env.agent up -d
+	@until curl -sf http://127.0.0.1:13134/ >/dev/null 2>&1; do sleep 2; done
+	@echo "Agente listo. Las aplicaciones exportan a localhost:4317 o :4318"
+
+latency:  ## Mide el presupuesto del camino caliente (F2-09)
+	@set -a; . platform/.env; set +a; \
+	ARGUS_ENDPOINT=http://127.0.0.1:4318 ARGUS_PROTOCOL=http/protobuf \
+	OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $$ARGUS_GATEWAY_TOKEN" \
+	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/measure_latency.py --n $${N:-10}
+
+incidents:  ## Incidentes abiertos en el alert-bus
+	@curl -s http://127.0.0.1:8080/incidents | python3 -m json.tool
 
 verify:  ## Verificacion completa (necesita el plano central arrancado)
 	@./scripts/verify.sh
@@ -53,4 +72,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs verify check test demo query semconv
+.PHONY: help setup up down clean ps logs agent latency incidents verify check test demo query semconv

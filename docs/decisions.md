@@ -480,13 +480,107 @@ demás**, y eso condiciona puertos, memoria y GPU.
 
 ---
 
+## D-026 · En la máquina del plano central, el agente se queda con 4317/4318
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. Al desplegar el Collector agente en la misma máquina que el
+gateway, el arranque falló: *"Bind for 0.0.0.0:4317 failed: port is already
+allocated"*. Los dos quieren los puertos OTLP estándar.
+
+**Decisión**. **Gana el agente.** El gateway pasa a publicarse en 14317/14318.
+
+**Por qué**. El invariante de D-003 —*las aplicaciones exportan siempre a
+`localhost:4317`*— tiene que valer en **todas** las máquinas, incluida la que
+aloja el plano central. Si ahí fuera distinto, esa máquina sería la excepción
+que hay que recordar, y las excepciones que hay que recordar se olvidan.
+
+Al gateway solo lo alcanzan Collector agente, y esos usan un endpoint
+configurable: cambiarles el puerto no cuesta nada.
+
+**Relacionado**. El agente tenía sus receptores atados a `127.0.0.1`, que
+**dentro de un contenedor es el loopback del contenedor**: el mapeo de puertos
+de Docker nunca le habría llegado. Quien restringe la exposición es el mapeo del
+host (`127.0.0.1:4317:4317`), no la config del Collector.
+
+---
+
+## D-027 · Agente → gateway por OTLP/HTTP, no gRPC
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. El agente no arrancaba: *"grpc: the credentials require transport
+level security"*. gRPC se niega a enviar credenciales por un canal sin TLS.
+
+**Y hace bien.** No puede verificar que el transporte esté cifrado, así que
+asume lo peor. Es una decisión de diseño correcta de gRPC, no un obstáculo.
+
+**Decisión**. El camino frío del agente al gateway usa **OTLP/HTTP** con el
+token en la cabecera.
+
+**Por qué, y qué se está asumiendo**. Nuestro modelo de seguridad separa dos
+cosas que suelen confundirse:
+
+- **La confidencialidad la pone la red privada** (WireGuard). El túnel cifra.
+- **El token protege la integridad** de lo que entra, no su confidencialidad.
+  Importa porque los agentes de IA leen esta telemetría y sacan conclusiones:
+  aceptar señales de cualquiera es aceptar conclusiones de cualquiera.
+
+Con HTTP esa separación queda explícita en la configuración en vez de escondida
+detrás de un `insecure: true`.
+
+**Cuándo deja de valer**. Si la telemetría sale alguna vez a una red que no
+controlas, **el token solo no basta**: hay que poner TLS. Está anotado en la
+propia config para que quien la lea lo vea.
+
+**Consecuencia menor**. HTTP tiene algo más de sobrecoste que gRPC. Con el
+volumen del camino frío es irrelevante, y la medición del camino caliente
+(120 ms p95 contra un presupuesto de 2 s) deja margen de sobra.
+
+---
+
+## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
+
+**Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código
+
+**Contexto**. El roadmap marcaba evaluar [Keep](https://www.keephq.dev/) antes de
+construir nada, precisamente para no reimplementar una plataforma AIOps madura
+que ya hace deduplicación, correlación, enriquecimiento y workflows.
+
+**Qué se encontró**. Keep opera a nivel de **alerta**, no de **span**. Ingiere
+desde proveedores de monitorización —Datadog, Grafana, CloudWatch, PagerDuty,
+Sentry— mediante integraciones bidireccionales. Usa OpenTelemetry para **su
+propia** observabilidad, no como vía de ingesta.
+
+Nuestro camino caliente necesita otra cosa: un **receptor OTLP que reciba spans
+crudos** del Collector agente y decida en memoria si constituyen un incidente,
+sin pasar por la base de datos. Keep no hace eso, y no es un hueco de Keep — es
+que está una capa por encima.
+
+**Decisión**. Construir `alert-bus` como receptor OTLP, y **dejar la interfaz de
+salida abierta** para que Keep, PagerDuty o lo que venga puedan ser consumidores
+aguas abajo.
+
+**Por qué no Keep para la capa de correlación tampoco, por ahora**:
+- Su stack son Redis + Postgres/MySQL + backend + frontend. En un portátil que
+  ya corre inferencia local, eso pesa (D-017).
+- La correlación depende del registro de aplicaciones propio y de su grafo
+  `depende_de`. Meter Keep significaría mantener ese grafo en dos sitios.
+- Añade una segunda fuente de verdad para los incidentes.
+
+**Consecuencias**. Construimos solo la parte que Keep no cubre, y no cerramos la
+puerta: los *sinks* son una interfaz, así que enchufar Keep más adelante es
+escribir un adaptador, no rehacer la capa. **Reevaluar cuando el volumen de
+alertas justifique una UI dedicada**, que hoy no es el caso.
+
+---
+
 ## Decisiones aún por tomar
 
 Se resuelven con datos, no de antemano. Están en el backlog (`roadmap.md`).
 
 | Decisión | Cuándo resolverla |
 |---|---|
-| ¿`alert-bus` propio o [Keep](https://www.keephq.dev/)? | Evaluar Keep en `F2-01`, **antes** de escribir código |
 | ¿Retención real de cada señal? | Medir volumen en `F1`; el disco de un portátil es finito |
 | ¿Qué modelo para el agente de RCA? | Fijar el techo con uno remoto en `F4`, luego medir cuánto se pierde con uno local |
 | ¿Merece la pena el agente de onboarding? | Reevaluar cuando el catálogo pase de veinte apps |

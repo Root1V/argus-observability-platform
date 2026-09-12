@@ -45,11 +45,15 @@ extensions:
 receivers:
   otlp:
     protocols:
+      # 0.0.0.0 DENTRO del contenedor, no 127.0.0.1: atarlo al loopback del
+      # contenedor lo hace inalcanzable desde el mapeo de puertos de Docker.
+      # Quien restringe la exposicion es el mapeo del host, que publica estos
+      # puertos solo en 127.0.0.1.
       grpc:
-        endpoint: 127.0.0.1:4317      # solo local: las apps de esta maquina
+        endpoint: 0.0.0.0:4317
         max_recv_msg_size_mib: 16
       http:
-        endpoint: 127.0.0.1:4318
+        endpoint: 0.0.0.0:4318
 
   # Salud del host. En macOS esto es buena parte del "nivel 0", porque eBPF
   # no existe fuera de Linux.
@@ -127,10 +131,12 @@ exporters:
   # Camino caliente: directo al alert-bus, que es un receptor OTLP. La
   # deteccion ocurre SOBRE EL FLUJO, sin tocar la base de datos. Eso es lo que
   # separa segundos de minutos.
-  otlp/hot:
-    endpoint: ${env:ARGUS_ALERTBUS_ENDPOINT}
-    tls:
-      insecure: ${env:ARGUS_INSECURE}
+  otlphttp/hot:
+    # El alert-bus es un servicio FastAPI, no un Collector: habla OTLP sobre
+    # HTTP. El exportador anade "/v1/traces" al endpoint, asi que aqui va solo
+    # el origen.
+    endpoint: http://${env:ARGUS_ALERTBUS_ENDPOINT}
+    encoding: proto
     auth:
       authenticator: bearertokenauth/gateway
     timeout: 5s
@@ -147,10 +153,19 @@ exporters:
       max_elapsed_time: 60s
 
   # Camino frio y metricas: al gateway central, con cola EN DISCO.
-  otlp/gateway:
-    endpoint: ${env:ARGUS_GATEWAY_ENDPOINT}
-    tls:
-      insecure: ${env:ARGUS_INSECURE}
+  #
+  # OTLP/HTTP y no gRPC, a proposito. gRPC se NIEGA a enviar credenciales por
+  # un canal sin TLS ("the credentials require transport level security"), y
+  # hace bien: no puede verificar que el transporte este cifrado.
+  #
+  # Nuestro modelo es que el cifrado lo pone la red privada (WireGuard), y el
+  # token protege la INTEGRIDAD de lo que entra, no su confidencialidad. Con
+  # HTTP esa separacion es explicita. Si algun dia la telemetria sale a
+  # internet, hay que poner TLS aqui: el token solo no basta.
+  otlphttp/gateway:
+    endpoint: http://${env:ARGUS_GATEWAY_ENDPOINT}
+    encoding: proto
+    compression: gzip
     auth:
       authenticator: bearertokenauth/gateway
     timeout: 30s
@@ -196,20 +211,20 @@ service:
     traces/hot:
       receivers: [routing/paths]
       processors: [batch/hot]
-      exporters: [otlp/hot]
+      exporters: [otlphttp/hot]
 
     # 30-60 s, para almacen e investigacion agentica.
     traces/cold:
       receivers: [routing/paths]
       processors: [batch/cold]
-      exporters: [otlp/gateway]
+      exporters: [otlphttp/gateway]
 
     metrics:
       receivers: [otlp, hostmetrics]
       processors: [memory_limiter, resourcedetection, resource/host, batch/metrics]
-      exporters: [otlp/gateway]
+      exporters: [otlphttp/gateway]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, resource/host, batch/cold]
-      exporters: [otlp/gateway]
+      exporters: [otlphttp/gateway]
