@@ -75,8 +75,17 @@ def ch_query(sql: str) -> str:
 # --- 1. El endpoint exige token ---------------------------------------------
 
 def test_auth_required() -> None:
+    """El GATEWAY exige token; el AGENTE no, y es deliberado.
+
+    El agente escucha solo en localhost: una aplicacion de esa maquina ya esta
+    dentro. Exigirle token significaria repartir el secreto por quince repos,
+    que es peor postura de seguridad que no tenerlo.
+
+    El gateway si, porque lo alcanzan agentes de otras maquinas y lo que entra
+    alimenta conclusiones de agentes de IA.
+    """
     request = urllib.request.Request(
-        "http://127.0.0.1:4318/v1/traces",
+        "http://127.0.0.1:14318/v1/traces",
         data=b'{"resourceSpans":[]}',
         headers={"Content-Type": "application/json"},
         method="POST",

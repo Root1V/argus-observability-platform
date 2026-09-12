@@ -203,6 +203,7 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `X-15` | ✅ | El alert-bus no descomprimía gzip | El Collector comprime por defecto; el síntoma era "Wire format corrupt" |
 | `X-16` | ✅ | El SDK mandaba cabeceras gRPC en mayúscula | gRPC las rechaza; ahora se pasan en minúscula |
 | `X-17` | ✅ | Sin `.dockerignore`: el `.venv` entraba en el contexto de build | Builds lentos y capas de caché engañosas |
+| `X-18` | ✅ | El modelo de autenticación no distinguía agente de gateway | D-028: el agente escucha en loopback y no pide token |
 
 ---
 

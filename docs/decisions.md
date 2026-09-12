@@ -575,6 +575,40 @@ alertas justifique una UI dedicada**, que hoy no es el caso.
 
 ---
 
+## D-028 · El agente no exige token; el gateway sí
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. Al mover el gateway a 14317/14318 (D-026), la prueba de humo
+empezó a fallar en *"el endpoint OTLP rechaza peticiones sin token"*: ahora
+apuntaba al **agente**, que no pide token.
+
+No era un fallo, era una pregunta de diseño sin responder.
+
+**Decisión**. Dos receptores, dos posturas:
+
+| Receptor | Expuesto en | ¿Token? |
+|---|---|---|
+| Collector **agente** | `127.0.0.1` de su máquina | **No** |
+| Collector **gateway** | La red privada, entre máquinas | **Sí** |
+
+**Por qué el agente no.** Escucha solo en loopback: una aplicación que puede
+hablarle ya está dentro de esa máquina. Exigirle token significaría **repartir
+el secreto por quince o más repositorios** —en variables de entorno, en
+ficheros de compose, en CI—, y un secreto en quince sitios es peor postura de
+seguridad que no tenerlo. La frontera de confianza aquí es la máquina.
+
+**Por qué el gateway sí.** Lo alcanzan agentes de otras máquinas, y lo que entra
+alimenta las conclusiones de los agentes de IA. Aceptar señales de cualquiera es
+aceptar conclusiones de cualquiera.
+
+**Consecuencia**. La prueba de humo comprueba el token contra el gateway
+(`:14318`) y envía su telemetría por el agente (`:4318`), que es el camino real
+de una aplicación. Antes probaba las dos cosas contra el mismo puerto y por eso
+la distinción no se veía.
+
+---
+
 ## Decisiones aún por tomar
 
 Se resuelven con datos, no de antemano. Están en el backlog (`roadmap.md`).
