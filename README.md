@@ -3,41 +3,33 @@
 Plataforma de observabilidad, AIOps agéntico y explicabilidad para un
 portafolio de aplicaciones que crece.
 
-> **Estado**: Fase 0 (plano central) y arranque de Fase 1 (librerías).
-> El plan completo está en `docs/PLAN.md`.
+> **Estado**: Fase 0 completa, Fase 1 en curso. Ver [roadmap.md](roadmap.md).
 
----
+## Los cuatro documentos
 
-## Qué hay construido
-
-| Pieza | Estado |
+| Documento | Para qué |
 |---|---|
-| `libs/semconv-model/argus.yaml` — convenciones, fuente de verdad | ✅ |
-| `tools/gen_semconv.py` — generador de constantes por lenguaje | ✅ Python y Go |
-| `libs/argus-semconv` — para **librerías** (solo `opentelemetry-api`) | ✅ |
-| `libs/argus-sdk` — para **aplicaciones** (`argus.init()`) | ✅ |
-| `platform/` — Collector agente + gateway, ClickHouse, VictoriaMetrics | ✅ perfil ligero |
-| `platform/` — Langfuse (perfil genai), Temporal (perfil agents) | ⏳ definido, sin probar |
-| `services/alert-bus`, `notifier`, `canary` | ⏳ Fase 2 |
-| Flota de agentes | ⏳ Fase 3+ |
+| [roadmap.md](roadmap.md) | Qué está hecho, qué falta, y el backlog. Todo con código estable |
+| [docs/decisions.md](docs/decisions.md) | Por qué está hecho así. 24 decisiones con su coste |
+| [docs/como-probarlo.md](docs/como-probarlo.md) | Cómo verificarlo tú mismo, paso a paso |
+| [docs/PLAN.md](docs/PLAN.md) | El plan completo con la investigación que lo respalda |
 
 ---
 
 ## Arranque rápido
 
 ```bash
-# 1. Secretos
-cp platform/.env.example platform/.env && $EDITOR platform/.env
-
-# 2. Plano central, modo ligero (4 contenedores)
-docker compose -f platform/compose.yaml --profile lean up -d
-
-# 3. Verificación de extremo a extremo contra el stack real
-set -a && . platform/.env && set +a
-uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/e2e_smoke.py
+make setup   # dependencias + secretos locales
+make check   # verificación rápida, sin Docker (~1 min)
+make up      # plano central en modo ligero (4 contenedores)
+make verify  # verificación completa contra el stack real
+make demo    # la demostración más corta: apalancamiento de librerías
 ```
 
-Con Langfuse (Fase 1):
+`make help` lista todo. La guía detallada está en
+[docs/como-probarlo.md](docs/como-probarlo.md).
+
+Con Langfuse (`F1-12`):
 
 ```bash
 docker compose -f platform/compose.yaml -f platform/compose.genai.yaml --profile genai up -d
@@ -98,19 +90,11 @@ detectar.
 ## Desarrollo
 
 ```bash
-uv sync                                   # workspace
-uv run pytest -q                          # 69 pruebas
-uv run python tools/gen_semconv.py        # regenerar constantes
-uv run python tools/gen_semconv.py --check  # detectar deriva (CI)
-uv run ruff check .
-```
-
-### Validar las configs del Collector
-
-Contra el binario real, que es lo único que prueba que funcionan:
-
-```bash
-cd platform && ./scripts/validate-collector.sh
+make test      # 69 pruebas
+make semconv   # regenerar constantes desde argus.yaml
+make query SQL="SELECT ... FORMAT PrettyCompact"
+make logs      # seguir el Collector
+make down      # parar (conserva datos) · make clean borra volúmenes
 ```
 
 ---
@@ -132,4 +116,5 @@ platform/
   rules/                      SLO burn-rate multi-ventana
 tools/gen_semconv.py          generador de constantes por lenguaje
 scripts/e2e_smoke.py          verificación contra el stack real
+scripts/verify.sh             todo lo anterior en un comando
 ```
