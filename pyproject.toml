@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Argus — plataforma de observabilidad, AIOps agentico y explicabilidad"
 requires-python = ">=3.11"
 dependencies = [
-    "argus-semconv",
-    "argus-sdk",
-    "argus-schemas",
+    "argus-obs-semconv",
+    "argus-obs-sdk",
+    "argus-obs-schemas",
     "alert-bus",
     "canary",
 ]
@@ -26,9 +26,9 @@ dev = [
 members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus", "services/canary"]
 
 [tool.uv.sources]
-argus-semconv = { workspace = true }
-argus-sdk = { workspace = true }
-argus-schemas = { workspace = true }
+argus-obs-semconv = { workspace = true }
+argus-obs-sdk = { workspace = true }
+argus-obs-schemas = { workspace = true }
 alert-bus = { workspace = true }
 canary = { workspace = true }
 

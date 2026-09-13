@@ -49,6 +49,28 @@ latency:  ## Mide el presupuesto del camino caliente (F2-09)
 	OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $$ARGUS_GATEWAY_TOKEN" \
 	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/measure_latency.py --n $${N:-10}
 
+wheels:  ## Construye las ruedas instalables de las librerias
+	@rm -rf dist && mkdir -p dist
+	@for p in argus-obs-semconv argus-obs-schemas argus-obs-sdk; do \
+	  uv build --package $$p --out-dir dist --quiet; done
+	@ls -1 dist/*.whl | sed 's|dist/|  |'
+
+pilot-check:  ## ¿Listo para conectar una aplicacion real?
+	@uv run python scripts/pilot_check.py
+
+queue-test:  ## Prueba la cola persistente: para el central, genera trafico, arranca (F1-09)
+	@set -a; . platform/.env; set +a; \
+	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/test_cola_persistente.py --spans $${N:-100}
+
+migrate-rehearse:  ## Ensayo EN FRIO de la migracion de maquina (F1-08)
+	@./scripts/migrate.sh rehearse
+
+migrate-dump:  ## Vuelca los volumenes:  make migrate-dump DEST=~/argus-backup
+	@./scripts/migrate.sh dump $(DEST)
+
+migrate-restore:  ## Restaura los volumenes:  make migrate-restore SRC=~/argus-backup
+	@./scripts/migrate.sh restore $(SRC)
+
 e2e-f2:  ## Verificacion end-to-end de la Fase 2 (deteccion sin ruido)
 	@set -a; . platform/.env; set +a; uv run python scripts/e2e_f2.py
 
@@ -75,4 +97,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 verify check test demo query semconv
+.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
