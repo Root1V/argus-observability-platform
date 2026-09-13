@@ -14,6 +14,7 @@ members = [
     "argus-schemas",
     "argus-sdk",
     "argus-semconv",
+    "canary",
 ]
 
 [[package]]
@@ -100,6 +101,7 @@ dependencies = [
     { name = "argus-schemas" },
     { name = "argus-sdk" },
     { name = "argus-semconv" },
+    { name = "canary" },
 ]
 
 [package.dev-dependencies]
@@ -119,6 +121,7 @@ requires-dist = [
     { name = "argus-schemas", editable = "libs/argus-schemas" },
     { name = "argus-sdk", editable = "libs/argus-sdk" },
     { name = "argus-semconv", editable = "libs/argus-semconv" },
+    { name = "canary", editable = "services/canary" },
 ]
 
 [package.metadata.requires-dev]
@@ -296,6 +299,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c8/a0/2ce10897323d67dd85de6190fdee159013a75741d1dc48b74d4815ec0592/botocore-1.43.93.tar.gz", hash = "sha256:82da355d18a7f784347b00444be33942834651f31b6c5ffef49999cd47364c5e", size = 16103276, upload-time = "2026-09-11T19:22:58.933Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/7e/f858c401f32d980f924c8f8328b62fab463313834a9ad2326f44613b97ec/botocore-1.43.93-py3-none-any.whl", hash = "sha256:3ca57bb5d26d88b554a74de708a5c991f45306436c91aacca931252d1d4d54ff", size = 15794156, upload-time = "2026-09-11T19:22:55.964Z" },
+]
+
+[[package]]
+name = "canary"
+version = "0.1.0"
+source = { editable = "services/canary" }
+dependencies = [
+    { name = "argus-schemas" },
+    { name = "argus-sdk" },
+    { name = "httpx" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "argus-schemas", editable = "libs/argus-schemas" },
+    { name = "argus-sdk", editable = "libs/argus-sdk" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

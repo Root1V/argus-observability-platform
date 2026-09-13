@@ -30,7 +30,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
 | **F1** | Librerías y primeras apps | 🚧 | 7/12 |
-| **F2** | Detección en tiempo real y alertas | 🚧 | 5/10 |
+| **F2** | Detección en tiempo real y alertas | 🚧 | 8/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
@@ -101,10 +101,10 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 |---|---|---|---|
 | `F2-01` | ✅ | `alert-bus` como **receptor OTLP** | Keep evaluado y descartado para esta capa — D-025 |
 | `F2-02` | ✅ | Normalización, deduplicación por huella, agrupación temporal | Huella de cardinalidad cerrada |
-| `F2-03` | ⏳ | Correlación por topología: suprimir síntomas con causa aguas arriba | El grafo ya está en el registro |
-| `F2-04` | ⏳ | `notifier`: Google Chat (Cards V2) + SMTP | Los *sinks* ya son una interfaz |
+| `F2-03` | ✅ | Correlación por topología: suprimir síntomas con causa aguas arriba | Con promoción de síntomas huérfanos |
+| `F2-04` | ✅ | Canales: Google Chat (Cards V2) + SMTP + WhatsApp | *Sinks* en proceso con cola, no servicio aparte — D-029 |
 | `F2-05` | ✅ | **Divulgación progresiva**: un hilo que se actualiza | D-015 · `POST /incidents/{huella}/enrich` |
-| `F2-06` | ⏳ | Canario sintético | En macOS es buena parte del nivel 0 |
+| `F2-06` | ✅ | Canario sintético | Sondas HTTP + de silencio, con confirmación |
 | `F2-07` | ⏳ | Detectores de bucle de agente y fuga de coste | `tool_calls_per_run > P99` |
 | `F2-08` | ✅ | Registro de aplicaciones con auto-descubrimiento | 11 apps · provisional + aviso |
 | `F2-09` | ✅ | **Medir el presupuesto de latencia**: error → aviso | **p95 = 120 ms** contra 2 s de presupuesto · `scripts/measure_latency.py` |
@@ -204,6 +204,9 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `X-16` | ✅ | El SDK mandaba cabeceras gRPC en mayúscula | gRPC las rechaza; ahora se pasan en minúscula |
 | `X-17` | ✅ | Sin `.dockerignore`: el `.venv` entraba en el contexto de build | Builds lentos y capas de caché engañosas |
 | `X-18` | ✅ | El modelo de autenticación no distinguía agente de gateway | D-028: el agente escucha en loopback y no pide token |
+| `X-19` | ✅ | El registro marcaba como activas apps aún no instrumentadas | D-030: el canario las reportaba como silenciosas |
+| `X-20` | ✅ | La sonda de silencio consultaba trazas, que están muestreadas | D-031: ahora consulta métricas, que no lo están |
+| `X-21` | ✅ | El `alert-bus` no se trazaba a sí mismo | Le faltaba el middleware ASGI |
 
 ---
 

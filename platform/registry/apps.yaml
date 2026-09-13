@@ -11,6 +11,17 @@
 #
 # `criticidad` acota la severidad maxima:
 #   alta -> puede paginar · media -> como mucho ticket · baja -> solo digest
+#
+# `estado` decide si el canario la vigila:
+#   activo      -> emite telemetria HOY; su silencio es un incidente
+#   planificado -> esta en el roadmap pero aun no instrumentada; NO se vigila
+#   retirado    -> ya no existe
+#
+# La distincion importa mas de lo que parece. Marcar como `activo` una
+# aplicacion que todavia no emite hace que el canario la reporte como
+# silenciosa cada cinco minutos, y un canario que grita por cosas que sabes que
+# no estan es un canario que se silencia. El registro puede listar el
+# portafolio ENTERO como hoja de ruta; solo lo `activo` genera guardias.
 
 - id: argus
   nombre_visible: Argus (la propia plataforma)
@@ -21,14 +32,16 @@
     page: [console]
     ticket: [console]
   componentes:
+    # `notifier` NO esta aqui: los canales son sinks en proceso dentro del
+    # alert-bus, no un servicio aparte (D-029).
     - {id: alert-bus, rol: api, slo: {p95_ms: 1000}}
-    - {id: notifier, rol: api, slo: {p95_ms: 3000}}
     - {id: canary, rol: scheduler}
   depende_de: [clickhouse, victoriametrics]
 
 - id: intelligent-document-platform
+  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
   nombre_visible: IDP
-  estado: activo
+  estado: planificado
   criticidad: alta
   dueño: emeric
   canales:
@@ -42,8 +55,9 @@
   tipo_ia: [llm-api, ocr, extraccion-estructurada]
 
 - id: edge-ai-inference
+  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
   nombre_visible: Inferencia local
-  estado: activo
+  estado: planificado
   criticidad: alta
   dueño: emeric
   canales:
@@ -57,7 +71,8 @@
   tipo_ia: [llm-local]
 
 - id: aeon-ai
-  estado: activo
+  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
+  estado: planificado
   criticidad: media
   dueño: emeric
   canales:
@@ -74,39 +89,45 @@
 # Los laboratorios van con criticidad baja a proposito: un experimento no puede
 # generar guardias por mucho que falle.
 - id: llm-benchmark
-  estado: activo
+  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
+  estado: planificado
   criticidad: baja
   componentes:
     - {id: bench-runner, rol: cli}
 
-# Infraestructura compartida. Esta aqui para que `depende_de` pueda apuntar a
-# algo y la supresion de alertas sintoma tenga grafo sobre el que trabajar.
+# Infraestructura compartida. Esta aqui por DOS motivos:
+#   - para que `depende_de` pueda apuntar a algo y la correlacion tenga grafo;
+#   - para poder vigilarla con sondas HTTP (ver probes.yaml).
+#
+# Rol `infra`: no emite telemetria propia a nuestro Collector, asi que una
+# sonda de SILENCIO sobre ella daria falso positivo siempre. Se vigila por
+# sonda HTTP, que es lo que corresponde a algo que no instrumentas.
 - id: postgres-main
   estado: activo
   criticidad: alta
-  componentes: [{id: postgres-main, rol: model-server}]
+  componentes: [{id: postgres-main, rol: infra}]
 
 - id: redis-main
   estado: activo
   criticidad: media
-  componentes: [{id: redis-main, rol: model-server}]
+  componentes: [{id: redis-main, rol: infra}]
 
 - id: minio-main
   estado: activo
   criticidad: media
-  componentes: [{id: minio-main, rol: model-server}]
+  componentes: [{id: minio-main, rol: infra}]
 
 - id: clickhouse
   estado: activo
   criticidad: alta
-  componentes: [{id: clickhouse, rol: model-server}]
+  componentes: [{id: clickhouse, rol: infra}]
 
 - id: victoriametrics
   estado: activo
   criticidad: media
-  componentes: [{id: victoriametrics, rol: model-server}]
+  componentes: [{id: victoriametrics, rol: infra}]
 
 - id: temporal
   estado: activo
   criticidad: media
-  componentes: [{id: temporal, rol: model-server}]
+  componentes: [{id: temporal, rol: infra}]

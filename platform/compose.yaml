@@ -147,6 +147,19 @@ services:
       ALERTBUS_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
       ALERTBUS_REGISTRY_PATH: /etc/argus/apps.yaml
       ALERTBUS_SINKS: ${ALERTBUS_SINKS:-console,json}
+      # Canales reales. Se omiten con un aviso si no estan configurados: un
+      # sink que falla en cada envio llena el log y da la falsa impresion de
+      # que la plataforma esta avisando.
+      ALERTBUS_GCHAT_WEBHOOK: ${ALERTBUS_GCHAT_WEBHOOK:-}
+      ALERTBUS_SMTP_HOST: ${ALERTBUS_SMTP_HOST:-}
+      ALERTBUS_SMTP_PORT: ${ALERTBUS_SMTP_PORT:-587}
+      ALERTBUS_SMTP_USER: ${ALERTBUS_SMTP_USER:-}
+      ALERTBUS_SMTP_PASSWORD: ${ALERTBUS_SMTP_PASSWORD:-}
+      ALERTBUS_SMTP_FROM: ${ALERTBUS_SMTP_FROM:-argus@localhost}
+      ALERTBUS_SMTP_TO: ${ALERTBUS_SMTP_TO:-}
+      ALERTBUS_WHATSAPP_PHONE_ID: ${ALERTBUS_WHATSAPP_PHONE_ID:-}
+      ALERTBUS_WHATSAPP_TOKEN: ${ALERTBUS_WHATSAPP_TOKEN:-}
+      ALERTBUS_WHATSAPP_TO: ${ALERTBUS_WHATSAPP_TO:-}
       ALERTBUS_GROUP_WINDOW_S: ${ALERTBUS_GROUP_WINDOW_S:-60}
       # Se observa a si mismo: seria absurdo que la pieza que detecta
       # incidentes fuera la unica sin telemetria.
@@ -157,6 +170,35 @@ services:
       - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
     ports:
       - "127.0.0.1:8080:8080"
+
+  # Sondas sinteticas. Convierte el SILENCIO en una alerta: sin esto, una
+  # aplicacion caida no produce telemetria, y la ausencia de telemetria es
+  # indistinguible de "va todo bien y no hay trafico".
+  #
+  # En macOS importa el doble: el nivel 0 del plan se apoyaba en eBPF, que es
+  # del kernel Linux y aqui no existe.
+  canary:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    build:
+      context: ..
+      dockerfile: services/canary/Dockerfile
+    depends_on: [alert-bus]
+    environment:
+      CANARY_ALERTBUS_URL: http://alert-bus:8080
+      CANARY_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
+      CANARY_REGISTRY_PATH: /etc/argus/apps.yaml
+      CANARY_PROBES_PATH: /etc/argus/probes.yaml
+      CANARY_INTERVALO_S: ${CANARY_INTERVALO_S:-300}
+      CANARY_CLICKHOUSE_URL: http://clickhouse:8123/
+      CANARY_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      CANARY_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      ARGUS_ENDPOINT: http://collector:4317
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-mac-dev}
+      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
+    volumes:
+      - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
+      - ./registry/probes.yaml:/etc/argus/probes.yaml:ro
 
   # ---------------------------------------------------------------------------
   # PERFIL genai — Langfuse y sus dependencias

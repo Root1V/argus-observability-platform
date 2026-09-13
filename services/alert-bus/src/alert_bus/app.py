@@ -25,45 +25,104 @@ from . import normalize
 from .config import Settings
 from .engine import Engine
 from .registry import Registry
-from .sinks import ConsoleSink, JSONSink, MemorySink, Sink
+from .sinks import (
+    ConsoleSink,
+    Dispatcher,
+    EmailSink,
+    GoogleChatSink,
+    JSONSink,
+    MemorySink,
+    Sink,
+    WhatsAppSink,
+)
 
 log = logging.getLogger("alert_bus")
 
-SINK_FACTORIES = {
-    "console": ConsoleSink,
-    "json": JSONSink,
-    "memory": MemorySink,
-}
 
+def build_sinks(settings: Settings) -> list[Sink]:
+    """Construye los canales pedidos, saltando los que no esten configurados.
 
-def build_sinks(names: list[str]) -> list[Sink]:
+    Un canal sin credenciales se OMITE con un aviso, no se construye a medias:
+    un sink que falla en cada envio llena el log y da la falsa impresion de que
+    la plataforma esta avisando.
+    """
     salidas: list[Sink] = []
-    for nombre in names:
-        factory = SINK_FACTORIES.get(nombre)
-        if factory is None:
+
+    for nombre in settings.sink_names():
+        if nombre == "console":
+            salidas.append(ConsoleSink())
+        elif nombre == "json":
+            salidas.append(JSONSink())
+        elif nombre == "memory":
+            salidas.append(MemorySink())
+        elif nombre == "gchat":
+            if not settings.gchat_webhook:
+                log.warning("sink.not_configured", extra={"sink": "gchat", "falta": "ALERTBUS_GCHAT_WEBHOOK"})
+                continue
+            salidas.append(GoogleChatSink(settings.gchat_webhook))
+        elif nombre == "email":
+            if not (settings.smtp_host and settings.smtp_recipients()):
+                log.warning("sink.not_configured", extra={"sink": "email", "falta": "ALERTBUS_SMTP_HOST / _SMTP_TO"})
+                continue
+            salidas.append(EmailSink(
+                host=settings.smtp_host,
+                port=settings.smtp_port,
+                username=settings.smtp_user,
+                password=settings.smtp_password,
+                sender=settings.smtp_from,
+                recipients=settings.smtp_recipients(),
+                use_tls=settings.smtp_tls,
+            ))
+        elif nombre == "whatsapp":
+            if not (settings.whatsapp_phone_id and settings.whatsapp_token and settings.whatsapp_recipients()):
+                log.warning("sink.not_configured", extra={"sink": "whatsapp", "falta": "ALERTBUS_WHATSAPP_*"})
+                continue
+            salidas.append(WhatsAppSink(
+                phone_number_id=settings.whatsapp_phone_id,
+                access_token=settings.whatsapp_token,
+                recipients=settings.whatsapp_recipients(),
+                template=settings.whatsapp_template,
+            ))
+        else:
             log.warning("sink.unknown", extra={"sink": nombre})
-            continue
-        salidas.append(factory())
+
     return salidas
 
 
 def create_app(settings: Settings | None = None, engine: Engine | None = None) -> FastAPI:
     settings = settings or Settings()
 
+    dispatcher: Dispatcher | None = None
+
     if engine is None:
         registry = Registry(settings.registry_path)
+        dispatcher = Dispatcher(
+            workers=settings.dispatch_workers,
+            max_queue=settings.dispatch_queue_size,
+        )
+        sinks = build_sinks(settings)
+        log.info("sinks.ready", extra={"sinks": ",".join(s.name for s in sinks)})
         engine = Engine(
             registry,
-            build_sinks(settings.sink_names()),
+            sinks,
             group_window_s=settings.group_window_s,
             resolve_after_s=settings.resolve_after_s,
+            dispatcher=dispatcher,
         )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if dispatcher is not None:
+            dispatcher.start()
         tarea = asyncio.create_task(_ticker(engine, settings.tick_s))
         yield
         tarea.cancel()
+        if dispatcher is not None:
+            # Vaciar antes de parar: apagar con avisos pendientes en la cola es
+            # perder justo las notificaciones del incidente que probablemente
+            # provoco el apagado.
+            dispatcher.drain(timeout_s=5)
+            dispatcher.stop()
 
     app = FastAPI(
         title="Argus alert-bus",
@@ -71,6 +130,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         version="0.1.0",
         lifespan=lifespan,
     )
+    # El alert-bus se traza a si mismo. No es narcisismo: si la pieza que
+    # detecta incidentes fuera la unica sin telemetria, su propia degradacion
+    # seria invisible, y el canario no podria distinguir "esta callado" de
+    # "esta muerto".
+    try:
+        import argus
+
+        app.add_middleware(argus.ASGIMiddleware, service="alert-bus", propagate_mode="trusted")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("argus.middleware_unavailable", extra={"error": str(exc)})
+
     app.state.engine = engine
     app.state.settings = settings
 
@@ -171,7 +241,12 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     @app.get("/stats")
     async def stats() -> dict[str, Any]:
-        return {**engine.stats, "incidentes_abiertos": len(engine.open_incidents())}
+        return {
+            **engine.stats,
+            "incidentes_abiertos": len(engine.open_incidents()),
+            "canales": [s.name for s in engine._sinks],
+            "despacho": dict(dispatcher.stats) if dispatcher else {},
+        }
 
     return app
 

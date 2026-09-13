@@ -32,5 +32,39 @@ class Settings(BaseSettings):
 
     sinks: str = "console,json"
 
+    # Cuantos envios en paralelo. Dos bastan: el volumen de notificaciones es
+    # bajo por definicion y mas hilos solo anaden contencion.
+    dispatch_workers: int = 2
+    dispatch_queue_size: int = 1_000
+
+    # --- Google Chat ---------------------------------------------------------
+    # El canal principal: un POST con JSON, sin aprobacion de proveedor, sin
+    # coste por mensaje, y el unico con botones.
+    gchat_webhook: str = ""
+
+    # --- Correo --------------------------------------------------------------
+    # El canal del informe COMPLETO, sin limite de longitud ni urgencia.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "argus@localhost"
+    smtp_to: str = ""
+    smtp_tls: bool = True
+
+    # --- WhatsApp ------------------------------------------------------------
+    # SOLO critico fuera de horario: cuesta por mensaje y exige plantilla
+    # preaprobada, clasificada como `utility` y no como `marketing`.
+    whatsapp_phone_id: str = ""
+    whatsapp_token: str = ""
+    whatsapp_to: str = ""
+    whatsapp_template: str = "argus_incidente"
+
     def sink_names(self) -> list[str]:
         return [s.strip() for s in self.sinks.split(",") if s.strip()]
+
+    def smtp_recipients(self) -> list[str]:
+        return [r.strip() for r in self.smtp_to.split(",") if r.strip()]
+
+    def whatsapp_recipients(self) -> list[str]:
+        return [r.strip() for r in self.whatsapp_to.split(",") if r.strip()]

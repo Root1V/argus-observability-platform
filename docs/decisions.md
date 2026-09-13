@@ -539,6 +539,94 @@ volumen del camino frío es irrelevante, y la medición del camino caliente
 
 ---
 
+## D-029 · La notificación son *sinks* en proceso, no un servicio aparte
+
+**Estado**: ✅ Vigente · **revisa lo que decía el plan**
+
+**Contexto**. `docs/PLAN.md` y el roadmap listaban `services/notifier` como un
+servicio propio. Al ir a construirlo, la separación no se sostiene.
+
+**Decisión**. Los canales son **implementaciones del `Sink`** dentro del
+`alert-bus`, despachadas por una **cola con hilo trabajador**.
+
+**Por qué no un servicio aparte**:
+- Añade un salto de red en el camino crítico, con un presupuesto de 2 s que
+  ahora sabemos que se gasta en 120 ms — pero que no conviene malgastar.
+- Un proceso más en una máquina que ya corre inferencia local (D-017).
+- Y un modo de fallo nuevo: el `alert-bus` detecta el incidente y no puede
+  avisar porque el notificador no responde.
+
+**Por qué la cola con trabajador sí es imprescindible**. El argumento real a
+favor de separar era el **aislamiento**: un webhook lento no puede bloquear la
+detección. Eso se consigue con una cola en proceso, que es mucho más barato que
+un servicio. El envío ocurre fuera del camino de ingesta, y un canal que tarda
+treinta segundos no retrasa ni un milisegundo la detección del siguiente
+incidente.
+
+**Cuándo habría que revisarlo**. Si los canales crecen hasta necesitar
+reintentos persistentes entre reinicios, o si alguien quiere notificar desde
+algo que no sea el `alert-bus`. Ninguna de las dos pasa hoy.
+
+**Consecuencia**. `services/notifier/` no se crea. Los canales viven en
+`alert_bus/sinks/`, y el roadmap (`F2-04`) se actualiza para reflejarlo.
+
+---
+
+## D-030 · El registro distingue `activo` de `planificado`
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. Al arrancar el canario por primera vez, empezó a reportar como
+silenciosas todas las aplicaciones del portafolio. Correctamente: están en el
+registro pero **aún no están instrumentadas**.
+
+**Decisión**. `estado` tiene tres valores, y solo uno genera vigilancia:
+
+| Estado | Significado |
+|---|---|
+| `activo` | Emite telemetría **hoy**. Su silencio es un incidente |
+| `planificado` | Está en el roadmap, aún no instrumentada. **No se vigila** |
+| `retirado` | Ya no existe |
+
+**Por qué importa más de lo que parece**. Un canario que grita cada cinco
+minutos por cosas que **sabes** que no están es un canario que se silencia. Y
+un canario silenciado no vale nada el día que grite por algo real.
+
+La distinción permite que el registro liste el portafolio **entero** como hoja
+de ruta —que es útil para el grafo de dependencias y para saber qué falta— sin
+que eso genere guardias.
+
+---
+
+## D-031 · La sonda de silencio consulta métricas, no trazas
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. El canario reportaba silencio de servicios que estaban vivos y
+emitiendo.
+
+**Causa**. La sonda consultaba `otel_traces`, y **las trazas pasan por tail
+sampling**. Un servicio con poco tráfico puede tener todos sus spans
+descartados de forma legítima y parecer muerto.
+
+**Decisión**. La sonda consulta las tablas de **métricas**.
+
+**Por qué funciona**. El pipeline del gateway deriva las métricas RED de
+**todas** las trazas **antes** de muestrear — fue una decisión deliberada al
+construirlo, para que las métricas no salieran sesgadas. Eso las convierte en
+la única fuente que responde *"¿ha estado activo?"* sin sesgo.
+
+**La lección general**. Muestrear es correcto para almacenar y desastroso para
+preguntar *"¿existe esto?"*. Cualquier comprobación de presencia tiene que
+apoyarse en una señal no muestreada, y conviene recordarlo antes de escribir la
+siguiente.
+
+**Relacionado**. El `alert-bus` no se estaba trazando a sí mismo: le faltaba el
+middleware ASGI. Si la pieza que detecta incidentes es la única sin telemetría,
+su propia degradación es invisible.
+
+---
+
 ## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
 
 **Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código

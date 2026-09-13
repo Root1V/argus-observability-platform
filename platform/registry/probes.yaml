@@ -1,0 +1,30 @@
+# Sondas HTTP del canario.
+#
+# Las sondas de SILENCIO se derivan solas del registro de aplicaciones: toda
+# app activa deberia estar emitiendo algo. Estas hay que declararlas, porque
+# solo tu sabes que endpoint de tu aplicacion significa "estoy viva".
+#
+# `slo_ms` marca la frontera entre "lento" y "caido". Sin el, solo se detecta
+# que responde, no que responde a tiempo.
+
+- app: argus
+  componente: alert-bus
+  url: http://alert-bus:8080/healthz
+  slo_ms: 1000
+
+- app: clickhouse
+  componente: clickhouse
+  url: http://clickhouse:8123/ping
+  slo_ms: 2000
+
+- app: victoriametrics
+  componente: victoriametrics
+  url: http://victoriametrics:8428/health
+  slo_ms: 2000
+
+# El gateway del Collector. Si este cae, TODO deja de llegar al almacen, asi que
+# es de las sondas mas importantes del fichero.
+- app: argus
+  componente: collector-gateway
+  url: http://collector:13133/
+  slo_ms: 1000

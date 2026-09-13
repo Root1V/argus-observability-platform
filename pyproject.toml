@@ -8,6 +8,7 @@ dependencies = [
     "argus-sdk",
     "argus-schemas",
     "alert-bus",
+    "canary",
 ]
 
 [dependency-groups]
@@ -22,13 +23,14 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus"]
+members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus", "services/canary"]
 
 [tool.uv.sources]
 argus-semconv = { workspace = true }
 argus-sdk = { workspace = true }
 argus-schemas = { workspace = true }
 alert-bus = { workspace = true }
+canary = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -43,6 +45,7 @@ testpaths = [
     "libs/argus-sdk/tests",
     "libs/argus-schemas/tests",
     "services/alert-bus/tests",
+    "services/canary/tests",
 ]
 asyncio_mode = "auto"
 filterwarnings = ["ignore::RuntimeWarning"]
