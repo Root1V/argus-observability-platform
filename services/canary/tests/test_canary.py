@@ -304,3 +304,65 @@ def test_un_componente_sin_conectar_no_genera_sonda_de_silencio(tmp_path) -> Non
     vigilados = {s.component for s in sondas if isinstance(s, SondaSilencio)}
 
     assert vigilados == {"auth-service"}
+
+
+async def test_la_sonda_mide_crecimiento_y_no_cuenta_puntos(monkeypatch) -> None:
+    """Contar puntos hace que un servicio muerto parezca sano.
+
+    Lo demostro el piloto: `auth-service` llevaba tres horas sin emitir y la
+    sonda veia 1.080 puntos en quince minutos. Eran la misma serie del
+    connector `spanmetrics`, que es ACUMULATIVA y reexporta su valor en cada
+    intervalo aunque no pase nada.
+
+    Esta prueba fija la forma de la consulta, porque el fallo estaba ahi y no
+    en la logica: `count()` no puede volver.
+    """
+    import httpx
+
+    consultas: list[str] = []
+
+    class RespuestaFalsa:
+        text = "0"
+        def raise_for_status(self): ...
+
+    class ClienteFalso:
+        def __init__(self, **kw): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, content, headers):
+            consultas.append(content)
+            return RespuestaFalsa()
+
+    monkeypatch.setattr(httpx, "AsyncClient", ClienteFalso)
+
+    sonda = SondaSilencio(app="a", component="auth-service",
+                          clickhouse_url="http://x", usuario="u", password="p")
+    medicion = await sonda.ejecutar()
+
+    consulta = consultas[0]
+    assert "count()" not in consulta, "contar puntos es lo que hacia invisible un servicio muerto"
+    assert "max(v) - min(v)" in consulta, "acumulativo: activo = el contador crecio"
+    assert "any(temp) = 1" in consulta, "delta y acumulativo no se miden igual"
+    assert "toFloat64" in consulta, "Count es UInt64 y ClickHouse se niega a restarlo de un Int64"
+    assert medicion.resultado is Resultado.SILENCIO
+
+
+async def test_una_serie_congelada_es_silencio(monkeypatch) -> None:
+    """Un contador acumulativo que no crece es un servicio que no trabaja."""
+    import httpx
+
+    class RespuestaFalsa:
+        text = "0"
+        def raise_for_status(self): ...
+
+    class ClienteFalso:
+        def __init__(self, **kw): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, *a, **k): return RespuestaFalsa()
+
+    monkeypatch.setattr(httpx, "AsyncClient", ClienteFalso)
+
+    sonda = SondaSilencio(app="a", component="c", clickhouse_url="http://x",
+                          usuario="u", password="p")
+    assert (await sonda.ejecutar()).resultado is Resultado.SILENCIO

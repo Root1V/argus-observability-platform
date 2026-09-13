@@ -82,6 +82,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-15` | ✅ | **Canal de notificación verificable** | `make channel-test` mide entrega por canal; destapó 3 fallos — D-041, D-042, D-043 |
 | `F1-16` | ✅ | **Canal del piloto: correo** | Chat pide Workspace; correo enhebrado verificado con SMTP local — D-044, D-045 |
 | `F1-17` | ✅ | **Renombrado sin corte: Prometheus activo** | Alias en el registro, identidad normalizada en la huella, componentes sin conectar exentos — D-046, D-047 |
+| `F1-18` | ✅ | **La sonda de silencio funciona de verdad** | Medía puntos y las series acumulativas se reexportan: un muerto parecía sano. Ahora mide crecimiento — D-049 |
 
 ### F1b · Los SDKs propios ⏳
 
