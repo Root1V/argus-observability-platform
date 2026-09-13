@@ -1,12 +1,12 @@
 [project]
 name = "argus-obs-schemas"
-version = "1.0.0a1"
+version = "1.0.0a2"
 description = "Esquemas compartidos de Argus: senal, incidente, severidad."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-    "argus-obs-semconv>=1.0,<2",
+    "argus-obs-semconv>=1.0.0a2,<2",
     "pydantic>=2.9",
 ]
 
