@@ -105,6 +105,15 @@ class Engine:
         if newly_discovered:
             self.stats["unregistered_apps"] += 1
 
+        # La senal se normaliza a la identidad RESUELTA antes de nada mas.
+        # Durante un renombrado llegan los dos namespaces a la vez, y la huella
+        # se construye con `app`: sin esto, el mismo fallo del mismo servicio
+        # abre DOS incidentes —uno por nombre— y notifica dos veces. La
+        # correlacion por topologia tampoco encontraria las dependencias, que
+        # el registro declara con el nombre nuevo.
+        if signal.app != app.id:
+            signal.app = app.id
+
         severity = self._severity_for(signal, app.severity_ceiling)
         huella = signal.fingerprint()
 

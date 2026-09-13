@@ -271,3 +271,36 @@ async def test_si_el_alertbus_no_responde_no_revienta() -> None:
     runner = Runner([SondaFija(Resultado.CAIDO)], alertbus_url="http://127.0.0.1:1", fallos_para_alertar=1, timeout_s=1)
     await runner.ronda()
     assert runner.stats["alertas"] == 1
+
+
+def test_un_componente_sin_conectar_no_genera_sonda_de_silencio(tmp_path) -> None:
+    """Vigilar el silencio de algo que nunca ha emitido es alertar de lo sabido.
+
+    El piloto de Prometheus conecto `auth-service` y dejo `gateway` y el
+    `manager` declarados para despues. Con la aplicacion ya `activa`, sin esto
+    el canario abriria tres incidentes el primer minuto — y asi es como se
+    ensena a la guardia a ignorar al canario.
+    """
+    import yaml
+
+    from canary.build import cargar
+    from canary.config import Settings
+    from canary.probes import SondaSilencio
+
+    registro = tmp_path / "apps.yaml"
+    registro.write_text(yaml.safe_dump([{
+        "id": "prometheus-inference-platform",
+        "estado": "activo",
+        "componentes": [
+            {"id": "auth-service", "rol": "api"},
+            {"id": "gateway", "rol": "api", "estado": "planificado"},
+        ],
+    }], allow_unicode=True), encoding="utf-8")
+
+    sondas = cargar(Settings(
+        registry_path=registro,
+        probes_path=tmp_path / "no-hay-sondas-http.yaml",
+    ))
+    vigilados = {s.component for s in sondas if isinstance(s, SondaSilencio)}
+
+    assert vigilados == {"auth-service"}

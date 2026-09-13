@@ -54,39 +54,42 @@
   depende_de: [postgres-main, minio-main]
   tipo_ia: [llm-api, ocr, extraccion-estructurada]
 
-# OJO con el nombre: el proyecto se llama **Prometheus** (plataforma de
-# inferencia local de nivel empresarial) y `edge-ai-inference` es solo su
-# carpeta. No tiene NADA que ver con Prometheus-el-TSDB, que aparece por otro
-# lado en esta plataforma (PromQL, prometheusremotewrite, VictoriaMetrics).
-# El `id` conserva el nombre del directorio porque es lo que emiten sus
-# servicios hoy en `service.namespace`; cambiarlo seria cambiar su
-# configuracion, y eso es suyo.
-- id: edge-ai-inference
+# APLICACION PILOTO. El nombre lo eligio su equipo el 13/09/2026:
+# `prometheus-inference-platform`, y NO `prometheus` a secas, porque un
+# namespace llamado «prometheus» dentro de una plataforma de observabilidad se
+# confunde con Prometheus-el-TSDB —que aparece por otro lado aqui: PromQL,
+# prometheusremotewrite, VictoriaMetrics— en consultas, en enrutado y en la
+# cabeza de quien este de guardia. `edge-ai-inference` era el nombre de su
+# carpeta, no el del producto.
+- id: prometheus-inference-platform
   nombre_visible: Prometheus (inferencia local)
-  # APLICACION PILOTO, a la espera de su equipo.
+  # El namespace viejo sigue llegando hasta que redesplieguen. El alias evita
+  # que ese trafico entre como `provisional` y pierda criticidad, canales y
+  # runbook durante la ventana. Se retira cuando deje de aparecer.
+  alias: [edge-ai-inference]
   #
-  # `auth-service` ya emite trazas hacia nuestro Collector con solo variables de
-  # entorno, pero llegan bajo `unregistered`: su `configure_tracing` construye el
-  # Resource con el constructor directo, que descarta OTEL_RESOURCE_ATTRIBUTES.
-  #
-  # Pasa a `activo` cuando apliquen el cambio de una linea que les pedimos en
-  # docs/solicitudes/prometheus-resource-create.md. Marcarlo activo antes
-  # haria que el canario reportase silencio de algo que si emite, pero con otra
-  # identidad.
-  estado: planificado
+  # Su equipo aplico `Resource.create()` (S-01) y ADEMAS retiro su pila propia
+  # —Loki, Promtail, Tempo, su Grafana—. Consecuencia que nos toca a nosotros:
+  # ya no hay colector por defecto, asi que **sin OTEL_EXPORTER_OTLP_ENDPOINT no
+  # exportan nada, en silencio**. Somos el unico destino y no hay red debajo.
+  # Por eso pasa a `activo`: el canario trata el silencio como sintoma, que es
+  # justo lo que hace falta ahora (D-046).
+  estado: activo
   criticidad: alta
   dueño: emeric
   canales:
-    page: [console]
-    ticket: [console]
+    page: [gchat, email, console]
+    ticket: [gchat, console]
   componentes:
     # Conectado. Un servicio de autenticacion tiene que ser rapido: si tarda,
     # todo lo que hay detras tarda.
     - {id: auth-service, rol: api, slo: {p95_ms: 1000}}
-    # Pendientes de conectar.
-    - {id: gateway, rol: api, slo: {p95_ms: 30000}}
-    - {id: manager-api, rol: api, slo: {p95_ms: 2000}}
-    - {id: manager-core, rol: scheduler}
+    # Declarados pero aun sin conectar: `estado: planificado` los deja fuera de
+    # la vigilancia de silencio. Si empiezan a emitir se ven igual; lo que no
+    # hacen es alertar por callar algo que nunca ha hablado.
+    - {id: gateway, rol: api, estado: planificado, slo: {p95_ms: 30000}}
+    - {id: manager-api, rol: api, estado: planificado, slo: {p95_ms: 2000}}
+    - {id: manager-core, rol: scheduler, estado: planificado}
   depende_de: [redis-main]
   tipo_ia: [llm-local]
 

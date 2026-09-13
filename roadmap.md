@@ -81,6 +81,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
 | `F1-15` | ✅ | **Canal de notificación verificable** | `make channel-test` mide entrega por canal; destapó 3 fallos — D-041, D-042, D-043 |
 | `F1-16` | ✅ | **Canal del piloto: correo** | Chat pide Workspace; correo enhebrado verificado con SMTP local — D-044, D-045 |
+| `F1-17` | ✅ | **Renombrado sin corte: Prometheus activo** | Alias en el registro, identidad normalizada en la huella, componentes sin conectar exentos — D-046, D-047 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -236,8 +237,10 @@ preparan con parche, tests y evidencia; los aplica su equipo.
 
 | Código | Estado | Proyecto | Petición |
 |---|---|---|---|
-| `S-01` | ⏳ | **Prometheus** (`edge-ai-inference/`) | `Resource.create()` en `configure_tracing` — una línea, desbloquea el piloto. [Solicitud](docs/solicitudes/prometheus-resource-create.md) |
-| `S-02` | 💭 | **Prometheus** | `TraceIDMiddleware` ignora `traceparent` entrante, así que ninguna traza cruza servicios. Conversación aparte: su decisión es deliberada y de seguridad |
+| `S-01` | ✅ | **Prometheus** | `Resource.create()` **aplicado** el 13/09. Retiraron además su pila propia: somos el único destino — [respuesta](docs/solicitudes/prometheus-respuesta.md) |
+| `S-02` | ⏳ | **Prometheus** | `traceparent`: nos piden dirigirlo. Proponemos `ARGUS_PROPAGATE=trusted` solo en `gateway`, **midiendo antes** si rinde |
+| `S-04` | ⏳ | **Prometheus** | Retirar el alias `edge-ai-inference` cuando redesplieguen con el nombre nuevo |
+| `S-05` | 💭 | **Prometheus** | Atributos prompt/completion: nos los piden. Respuesta dada (`argus-obs-semconv`); esperan nuestro «cómo instalarlo» |
 | `S-03` | 💭 | **Axonium** (`llm_arch_sdk/`) | Instrumentar con `argus-obs-semconv`. **En cambio ahora mismo**; esperar a que se estabilice |
 
 ---

@@ -7,6 +7,17 @@ empresarial (repositorio en `edge-ai-inference/`)
 **Impacto**: una línea · **Urgencia**: bloquea el piloto de observabilidad
 **Parche listo**: [`prometheus-resource-create.patch`](prometheus-resource-create.patch)
 
+> **APLICADO** — 13 de septiembre de 2026. Su equipo lo leyó entero antes de
+> aplicarlo, verificó que el primer test **falla sin el cambio** (que es lo que
+> prueba que tiene dientes) y lo comprobó en vivo. Está en su `main`.
+>
+> Dos cosas cambiaron con la respuesta, y ninguna estaba en esta solicitud:
+> el `service.namespace` pasa a ser **`prometheus-inference-platform`** (§2 de
+> su respuesta), y **retiraron su pila de observabilidad entera** —Loki,
+> Promtail, Tempo y su Grafana—, así que somos su único destino y **sin
+> `OTEL_EXPORTER_OTLP_ENDPOINT` no exportan nada, en silencio**.
+> Ver [`prometheus-respuesta.md`](prometheus-respuesta.md).
+
 ---
 
 ## Resumen
@@ -61,7 +72,7 @@ Con `auth-service` apuntando a nuestro Collector, **sin ningún otro cambio**:
 | | `service.namespace` | componente | rol | entorno |
 |---|---|---|---|---|
 | Antes | `unregistered` | auth-service | — | — |
-| Después | `edge-ai-inference` | auth-service | api | mac-dev |
+| Después | `prometheus-inference-platform` | auth-service | api | mac-dev |
 
 Y con la identidad puesta, el resto de la cadena funciona sola: los spans de
 `token.issuance` con `StatusCode=Error` llegaron al camino de detección y
@@ -115,5 +126,5 @@ Todo lo demás es configuración por nuestro lado:
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_SERVICE_NAME=auth-service
-OTEL_RESOURCE_ATTRIBUTES=service.namespace=edge-ai-inference,argus.component.role=api,deployment.environment.name=mac-dev
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=prometheus-inference-platform,argus.component.role=api,deployment.environment.name=mac-dev
 ```

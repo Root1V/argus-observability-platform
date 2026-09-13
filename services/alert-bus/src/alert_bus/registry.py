@@ -52,6 +52,9 @@ class Component:
     id: str
     role: str = "api"
     slo_ms: int = 0
+    # `planificado` = declarado pero aun sin conectar. No se le vigila el
+    # silencio; si empieza a emitir, se ve igual.
+    state: str = "activo"
 
     def __post_init__(self) -> None:
         if not self.slo_ms:
@@ -69,6 +72,14 @@ class Application:
     depends_on: list[str] = field(default_factory=list)
     channels: dict[str, list[str]] = field(default_factory=dict)
     runbook: str = ""
+
+    # Namespaces antiguos que siguen llegando. Renombrar una aplicacion es
+    # cambiar una variable de entorno en un repositorio que no controlamos, asi
+    # que hay una ventana —de minutos o de semanas— en la que conviven los dos
+    # valores. Sin alias, el viejo entra como `provisional`, pierde su
+    # criticidad, sus canales y su runbook, y el aviso de "servicio no
+    # registrado" convierte un renombrado planificado en una alerta.
+    aliases: list[str] = field(default_factory=list)
 
     @property
     def severity_ceiling(self) -> Severity:
@@ -96,6 +107,7 @@ class Registry:
         self._apps: dict[str, Application] = {}
         self._lock = threading.Lock()
         self._discovered: set[str] = set()
+        self._alias: dict[str, str] = {}
         if path:
             self.load()
 
@@ -147,6 +159,7 @@ class Registry:
                 depends_on=list(entry.get("depende_de", [])),
                 channels=dict(entry.get("canales", {})),
                 runbook=entry.get("runbook", ""),
+                aliases=list(entry.get("alias", [])),
             )
             for comp in entry.get("componentes", []):
                 slo = comp.get("slo", {}) or {}
@@ -154,8 +167,29 @@ class Registry:
                     id=comp["id"],
                     role=comp.get("rol", "api"),
                     slo_ms=int(slo.get("p95_ms", 0)),
+                    state=comp.get("estado", "activo"),
                 )
             apps[app.id] = app
+
+        # Un alias que choca con el id de otra aplicacion la dejaria en la
+        # sombra sin decir nada. Se avisa y se ignora el alias: perder el
+        # renombrado es mucho menos malo que perder una aplicacion entera.
+        alias_a_id: dict[str, str] = {}
+        for app in apps.values():
+            for alias in app.aliases:
+                if alias in apps:
+                    log.error(
+                        "registry.alias_colisiona",
+                        extra={"alias": alias, "aplicacion": app.id},
+                    )
+                    continue
+                if alias in alias_a_id:
+                    log.error(
+                        "registry.alias_duplicado",
+                        extra={"alias": alias, "aplicaciones": [alias_a_id[alias], app.id]},
+                    )
+                    continue
+                alias_a_id[alias] = app.id
 
         with self._lock:
             # Los descubrimientos provisionales sobreviven a la recarga: si no,
@@ -165,6 +199,7 @@ class Registry:
                 if app_id not in apps and provisional.state == "provisional":
                     apps[app_id] = provisional
             self._apps = apps
+            self._alias = alias_a_id
         try:
             self._mtime = self._path.stat().st_mtime
         except OSError:
@@ -175,7 +210,10 @@ class Registry:
 
     def get(self, app_id: str) -> Application | None:
         with self._lock:
-            return self._apps.get(app_id)
+            app = self._apps.get(app_id)
+            if app is None and (real := self._alias.get(app_id)):
+                app = self._apps.get(real)
+            return app
 
     def resolve(self, app_id: str, component_id: str) -> tuple[Application, bool]:
         """Devuelve la aplicacion y si acaba de descubrirse.
@@ -186,6 +224,20 @@ class Registry:
         """
         with self._lock:
             app = self._apps.get(app_id)
+            if app is None and (real := self._alias.get(app_id)):
+                # Llega por un namespace antiguo durante un renombrado. Se
+                # atiende con la identidad nueva y no se descubre nada: no es
+                # un servicio desconocido, es el mismo con otro nombre.
+                app = self._apps.get(real)
+                if app is not None:
+                    log.info(
+                        "registry.alias_en_uso",
+                        extra={
+                            "alias": app_id,
+                            "aplicacion": app.id,
+                            "componente": component_id,
+                        },
+                    )
             if app is not None:
                 app.component(component_id)
                 return app, False
