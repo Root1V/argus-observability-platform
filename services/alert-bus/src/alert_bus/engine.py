@@ -207,6 +207,21 @@ class Engine:
                 extra={"incident": incident.id, "app": incident.app, "channels": sorted(canales)},
             )
 
+        # Configurar un canal son DOS cosas: cargar el sink (.env) y enrutar
+        # hacia el (registro). Si el registro pide un canal que no esta cargado,
+        # el aviso sale igual por los demas y nadie se entera de que falto uno
+        # —el modo de fallo mas caro, porque parece exito—. Asi que se dice.
+        ausentes = canales - {s.name for s in self._sinks}
+        if ausentes:
+            log.warning(
+                "notify.channel_not_loaded",
+                extra={
+                    "incident": incident.id,
+                    "app": incident.app,
+                    "channels": sorted(ausentes),
+                },
+            )
+
         # El envio sale del camino de ingesta: un canal lento no puede retrasar
         # la deteccion del siguiente incidente (D-029).
         self._dispatcher.submit(destinos, incident, update=update)

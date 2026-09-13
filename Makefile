@@ -121,6 +121,9 @@ deadman-setup:  ## Genera la tarea de launchd del dead man's switch con rutas re
 release:  ## Etiqueta y construye una version:  make release V=1.0.0a1
 	@./scripts/release.sh $(V)
 
+channel-test:  ## Manda un aviso de PRUEBA por los canales configurados
+	@set -a; . platform/.env; set +a; uv run python scripts/probar_canal.py --severidad $${SEV:-page}
+
 pilot-check:  ## ¿Listo para conectar una aplicacion real?
 	@uv run python scripts/pilot_check.py
 
@@ -163,4 +166,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup genai genai-check up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic install-cmd deadman-setup release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
+.PHONY: help setup genai genai-check up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic install-cmd deadman-setup channel-test release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv

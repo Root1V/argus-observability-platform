@@ -48,6 +48,10 @@ class Dispatcher:
         self._parar = threading.Event()
         self._workers = workers
         self.stats = {"enviados": 0, "fallidos": 0, "descartados": 0}
+        # Desglose por canal. El total no basta: con varios sinks, "2 enviados"
+        # no dice si el que mira una persona fue uno de los dos. Esa diferencia
+        # es la que separa estar avisado de creerlo.
+        self.por_canal: dict[str, dict[str, int]] = {}
 
     def start(self) -> None:
         for i in range(self._workers):
@@ -66,6 +70,12 @@ class Dispatcher:
             hilo.join(timeout=timeout_s)
         self._hilos.clear()
 
+    def _contar(self, sink: str, clave: str) -> None:
+        casilla = self.por_canal.setdefault(
+            sink, {"enviados": 0, "fallidos": 0, "descartados": 0}
+        )
+        casilla[clave] += 1
+
     def submit(self, sinks: Iterable[Sink], incident: Incident, *, update: bool) -> None:
         """Encola los envios. NUNCA bloquea."""
         for sink in sinks:
@@ -73,6 +83,7 @@ class Dispatcher:
                 self._cola.put_nowait(Envio(sink, incident, update))
             except queue.Full:
                 self.stats["descartados"] += 1
+                self._contar(sink.name, "descartados")
                 log.error(
                     "dispatch.queue_full",
                     extra={"sink": sink.name, "incident": incident.id},
@@ -96,9 +107,11 @@ class Dispatcher:
             try:
                 envio.sink.send(envio.incident, update=envio.update)
                 self.stats["enviados"] += 1
+                self._contar(envio.sink.name, "enviados")
             except Exception as exc:  # noqa: BLE001
                 # Un canal caido no puede tumbar a los demas ni al hilo.
                 self.stats["fallidos"] += 1
+                self._contar(envio.sink.name, "fallidos")
                 log.error(
                     "dispatch.send_failed",
                     extra={"sink": envio.sink.name, "incident": envio.incident.id, "error": str(exc)},
@@ -112,6 +125,13 @@ class InlineDispatcher:
 
     def __init__(self) -> None:
         self.stats = {"enviados": 0, "fallidos": 0, "descartados": 0}
+        self.por_canal: dict[str, dict[str, int]] = {}
+
+    def _contar(self, sink: str, clave: str) -> None:
+        casilla = self.por_canal.setdefault(
+            sink, {"enviados": 0, "fallidos": 0, "descartados": 0}
+        )
+        casilla[clave] += 1
 
     def start(self) -> None: ...
     def stop(self, *, timeout_s: float = 5.0) -> None: ...
@@ -122,6 +142,8 @@ class InlineDispatcher:
             try:
                 sink.send(incident, update=update)
                 self.stats["enviados"] += 1
+                self._contar(sink.name, "enviados")
             except Exception as exc:  # noqa: BLE001
                 self.stats["fallidos"] += 1
+                self._contar(sink.name, "fallidos")
                 log.error("dispatch.send_failed", extra={"sink": sink.name, "error": str(exc)})

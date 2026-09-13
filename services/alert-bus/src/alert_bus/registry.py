@@ -265,6 +265,9 @@ class Registry:
                 "criticidad": a.criticality,
                 "componentes": sorted(a.components),
                 "depende_de": a.depends_on,
+                # El enrutamiento es parte del estado consultable: sin el no se
+                # puede comprobar desde fuera a donde iria un aviso.
+                "canales": dict(a.channels),
             }
             for a in self.apps.values()
         ]

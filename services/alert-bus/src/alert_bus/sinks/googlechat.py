@@ -89,12 +89,29 @@ class GoogleChatSink:
 
     def _update(self, nombre_mensaje: str, payload: dict[str, Any]) -> bool:
         try:
-            base = self._url.split("/spaces/")[0]
-            url = f"{base}/v1/{nombre_mensaje}?updateMask=cardsV2"
-            self._request(url, payload, method="PUT")
+            self._request(self._url_de_edicion(nombre_mensaje), payload, method="PUT")
             return True
         except Exception:  # noqa: BLE001
             return False
+
+    def _url_de_edicion(self, nombre_mensaje: str) -> str:
+        """La URL de edicion CONSERVA `key` y `token` del webhook.
+
+        Son las credenciales del webhook y viajan en la query, no en una
+        cabecera. Construir la URL desde el host pelado da un 401 y la
+        divulgacion progresiva degrada a publicar en el hilo: sigue avisando,
+        pero con un mensaje nuevo por actualizacion. Falla en silencio, asi que
+        solo se nota mirando el chat.
+        """
+        partes = urllib.parse.urlsplit(self._url)
+        credenciales = [
+            (k, v) for k, v in urllib.parse.parse_qsl(partes.query)
+            if k in ("key", "token")
+        ]
+        query = urllib.parse.urlencode([*credenciales, ("updateMask", "cardsV2")])
+        return urllib.parse.urlunsplit(
+            (partes.scheme, partes.netloc, f"/v1/{nombre_mensaje}", query, "")
+        )
 
     def _request(self, url: str, payload: dict[str, Any], *, method: str) -> dict[str, Any] | None:
         datos = json.dumps(payload).encode("utf-8")

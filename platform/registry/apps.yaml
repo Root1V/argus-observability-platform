@@ -29,8 +29,8 @@
   criticidad: alta
   dueño: emeric
   canales:
-    page: [console]
-    ticket: [console]
+    page: [gchat, email, console]   # los no configurados se omiten
+    ticket: [gchat, console]
   componentes:
     # `notifier` NO esta aqui: los canales son sinks en proceso dentro del
     # alert-bus, no un servicio aparte (D-029).
@@ -70,7 +70,7 @@
   # Resource con el constructor directo, que descarta OTEL_RESOURCE_ATTRIBUTES.
   #
   # Pasa a `activo` cuando apliquen el cambio de una linea que les pedimos en
-  # docs/solicitudes/edge-ai-inference-resource-create.md. Marcarlo activo antes
+  # docs/solicitudes/prometheus-resource-create.md. Marcarlo activo antes
   # haria que el canario reportase silencio de algo que si emite, pero con otra
   # identidad.
   estado: planificado

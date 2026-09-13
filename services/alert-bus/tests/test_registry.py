@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from alert_bus.registry import Registry
 from argus_schemas import Severity
 
@@ -153,3 +155,45 @@ def test_un_fichero_que_desaparece_no_borra_el_registro(tmp_path) -> None:
 
     registro.reload_if_changed()
     assert registro.get("a") is not None, "quedarse sin registro por un fichero borrado sería peor"
+
+
+async def test_el_ticker_recarga_el_registro(tmp_path) -> None:
+    """El metodo de recarga existia pero nadie lo llamaba.
+
+    Cambiar un canal en el fichero no tenia efecto hasta reiniciar, que es
+    justo lo que la recarga en caliente promete evitar. Esta prueba fija el
+    CABLEADO, no el metodo: un metodo correcto que nadie invoca es un bug.
+    """
+    import asyncio
+
+    import yaml
+
+    from alert_bus.app import _ticker
+    from alert_bus.engine import Engine
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([
+        {"id": "a", "estado": "activo", "componentes": [{"id": "api"}],
+         "canales": {"page": ["console"]}},
+    ]), encoding="utf-8")
+
+    registro = Registry(ruta)
+    motor = Engine(registro, [])
+    assert registro.channels_for("a", Severity.PAGE) == ["console"]
+
+    tarea = asyncio.create_task(_ticker(motor, 0))
+    try:
+        time.sleep(0.01)
+        ruta.write_text(yaml.safe_dump([
+            {"id": "a", "estado": "activo", "componentes": [{"id": "api"}],
+             "canales": {"page": ["gchat"]}},
+        ]), encoding="utf-8")
+        for _ in range(50):
+            await asyncio.sleep(0.02)
+            if registro.channels_for("a", Severity.PAGE) == ["gchat"]:
+                break
+    finally:
+        tarea.cancel()
+
+    assert registro.channels_for("a", Severity.PAGE) == ["gchat"], \
+        "el registro es datos: cambiar un canal no debe exigir reiniciar"

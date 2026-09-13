@@ -975,3 +975,68 @@ Se resuelven con datos, no de antemano. Están en el backlog (`roadmap.md`).
 | ¿Retención real de cada señal? | Medir volumen en `F1`; el disco de un portátil es finito |
 | ¿Qué modelo para el agente de RCA? | Fijar el techo con uno remoto en `F4`, luego medir cuánto se pierde con uno local |
 | ¿Merece la pena el agente de onboarding? | Reevaluar cuando el catálogo pase de veinte apps |
+
+---
+
+## D-041 · Configurar un canal son dos pasos, y la prueba verifica los dos
+
+**Contexto**. `make channel-test` daba verde con `gchat` cargado y el aviso
+saliendo únicamente por consola. El sink estaba construido y aparecía en
+`/stats`, pero el registro enrutaba `argus/page` a `[console]`, así que el
+motor nunca le pasó el incidente. La prueba comprobaba «sinks cargados» y
+«envíos fallidos = 0» — y un canal al que nunca se intenta enviar no falla.
+
+**Decisión**. Cargar un canal (credenciales en `.env`) y enrutar hacia él
+(registro) son pasos distintos, y la verificación mide el resultado, no la
+configuración: `despacho_por_canal` cuenta envíos y fallos **por sink**, y la
+prueba exige que un canal humano incremente su contador durante la prueba.
+
+**Consecuencias**.
+- `Dispatcher` e `InlineDispatcher` llevan `por_canal`; `/stats` lo expone.
+- El snapshot del registro incluye `canales`, para poder comprobar el
+  enrutamiento desde fuera del proceso.
+- El motor avisa con `notify.channel_not_loaded` cuando el registro nombra un
+  canal sin credenciales: el aviso sale por los demás, pero deja rastro.
+- Las entradas del registro listan varios canales a propósito; los no
+  configurados se omiten. Así configurar el `.env` basta, sin segunda edición.
+
+**Lo que no se hizo**. Que el enrutamiento cayera automáticamente a «todos los
+canales cargados» cuando el registro dice `console`. Sería conveniente y
+rompería D-014: a quién se avisa es una regla explícita, no una inferencia.
+
+---
+
+## D-042 · La URL de edición de Google Chat conserva `key` y `token`
+
+**Contexto**. `_update` construía la URL desde el host pelado
+(`self._url.split("/spaces/")[0]`), descartando la query. Pero en un webhook de
+Google Chat las credenciales **viajan en la query**, no en una cabecera: el PUT
+habría dado 401, la edición habría degradado a publicar en el hilo, y la
+divulgación progresiva (D-015) se habría convertido en un mensaje por
+actualización. Con el fallo capturado en un `except`, solo se vería mirando el
+chat.
+
+**Decisión**. La URL de edición se construye conservando `key` y `token` del
+webhook original y añadiendo `updateMask=cardsV2`.
+
+**Consecuencias**. Un test fija la forma de la URL. No se detectó con el
+servidor de pruebas porque aceptaba cualquier petición: un doble permisivo
+verifica que llamas, no que llamas bien.
+
+---
+
+## D-043 · La recarga del registro vive en el `tick`, no en cada consulta
+
+**Contexto**. `reload_if_changed()` existía, tenía tests, y **nadie la
+llamaba**. Cambiar un canal en `apps.yaml` no surtía efecto hasta reiniciar,
+que es justo lo que la recarga en caliente promete evitar. El método correcto
+y el cableado ausente son dos cosas distintas, y la suite solo probaba el
+primero.
+
+**Decisión**. El `_ticker` la invoca en cada vuelta. Y hay un test que fija el
+**cableado**, no el método: arranca el ticker de verdad, toca el fichero y
+espera el cambio.
+
+**Consecuencias**. El registro cambia a ritmo humano, así que un `stat()` cada
+`tick_s` es gratis; hacerlo en cada consulta lo pondría en el camino caliente,
+donde no sobra tiempo.

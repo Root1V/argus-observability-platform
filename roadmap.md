@@ -79,6 +79,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
+| `F1-15` | ✅ | **Canal de notificación verificable** | `make channel-test` mide entrega por canal; destapó 3 fallos — D-041, D-042, D-043 |
 
 ### F1b · Los SDKs propios ⏳
 
