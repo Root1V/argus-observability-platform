@@ -29,8 +29,8 @@
   criticidad: alta
   dueño: emeric
   canales:
-    page: [gchat, email, console]   # los no configurados se omiten
-    ticket: [gchat, console]
+    page: [telegram, gchat, email, console]   # los no configurados se omiten
+    ticket: [telegram, gchat, console]
   componentes:
     # `notifier` NO esta aqui: los canales son sinks en proceso dentro del
     # alert-bus, no un servicio aparte (D-029).
@@ -79,7 +79,7 @@
   dueño: emeric
   canales:
     page: [gchat, email, console]
-    ticket: [gchat, console]
+    ticket: [telegram, gchat, console]
   componentes:
     # Conectado. Un servicio de autenticacion tiene que ser rapido: si tarda,
     # todo lo que hay detras tarda.

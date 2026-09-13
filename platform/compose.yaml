@@ -157,6 +157,9 @@ services:
       # sink que falla en cada envio llena el log y da la falsa impresion de
       # que la plataforma esta avisando.
       ALERTBUS_GCHAT_WEBHOOK: ${ALERTBUS_GCHAT_WEBHOOK:-}
+      ALERTBUS_TELEGRAM_TOKEN: ${ALERTBUS_TELEGRAM_TOKEN:-}
+      ALERTBUS_TELEGRAM_CHAT_ID: ${ALERTBUS_TELEGRAM_CHAT_ID:-}
+      ALERTBUS_TELEGRAM_API_BASE: ${ALERTBUS_TELEGRAM_API_BASE:-https://api.telegram.org}
       ALERTBUS_SMTP_HOST: ${ALERTBUS_SMTP_HOST:-}
       ALERTBUS_SMTP_PORT: ${ALERTBUS_SMTP_PORT:-587}
       ALERTBUS_SMTP_USER: ${ALERTBUS_SMTP_USER:-}

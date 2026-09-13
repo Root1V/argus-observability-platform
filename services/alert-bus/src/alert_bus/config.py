@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     # coste por mensaje, y el unico con botones.
     gchat_webhook: str = ""
 
+    # --- Telegram ------------------------------------------------------------
+    # El canal del piloto. No depende de ningun proveedor de identidad, y es el
+    # unico de los tres que permite EDITAR un mensaje ya enviado, asi que la
+    # divulgacion progresiva es un mensaje que se actualiza (D-053).
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    # Solo para pruebas: apunta el sink a un servidor que imita la API. En
+    # produccion no se toca.
+    telegram_api_base: str = "https://api.telegram.org"
+
     # --- Correo --------------------------------------------------------------
     # El canal del informe COMPLETO, sin limite de longitud ni urgencia.
     smtp_host: str = ""

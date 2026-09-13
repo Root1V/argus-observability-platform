@@ -15,6 +15,7 @@ from .base import ConsoleSink, FailingSink, JSONSink, MemorySink, Sink
 from .dispatch import Dispatcher, InlineDispatcher
 from .email import EmailSink
 from .googlechat import GoogleChatSink
+from .telegram import TelegramSink
 from .render import cuerpo, resumen, texto_plano, titular
 from .whatsapp import WhatsAppSink
 
@@ -25,6 +26,7 @@ __all__ = [
     "MemorySink",
     "FailingSink",
     "GoogleChatSink",
+    "TelegramSink",
     "EmailSink",
     "WhatsAppSink",
     "Dispatcher",

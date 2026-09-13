@@ -1,5 +1,8 @@
 # Configurar un canal de notificación
 
+> **Atajo**: si solo quieres que suene algo, ve a **Telegram** — dos minutos y
+> sin cuenta de Google. Es el canal que usa el piloto.
+
 Es lo único que bloquea el piloto. La plataforma ya detecta perfectamente;
 ahora mismo lo cuenta por consola y por un log JSON, **que nadie mira a las tres
 de la mañana**.
@@ -13,7 +16,7 @@ Son **dos cosas**, y confundirlas es el error que más cuesta ver:
 
 Con solo la primera, el canal está cargado y **no lo usa nadie**: el aviso sale
 por consola, todo parece correcto, y a las tres de la mañana no suena nada. Las
-entradas del registro que trae el repositorio ya listan `gchat` y `email`, y los
+entradas del registro que trae el repositorio ya listan `telegram`, `gchat` y `email`, y los
 que no estén configurados se omiten — así que en la práctica basta con el `.env`.
 
 ```bash
@@ -22,7 +25,71 @@ make channel-test     # comprueba las dos, y qué canal entregó de verdad
 
 ---
 
-## Google Chat — el más rápido
+## Telegram — el canal del piloto
+
+Dos minutos, gratis, y **no depende de ninguna cuenta de Google**. Se llegó aquí
+por descarte razonado: los webhooks de Chat son de Workspace y las contraseñas
+de aplicación no están disponibles en esta cuenta. Pero resulta ser **el mejor
+de los tres técnicamente**, por una razón concreta:
+
+> Telegram permite **editar un mensaje ya enviado**. La divulgación progresiva
+> es entonces UN mensaje que se actualiza —el aviso se convierte en el informe
+> del agente— en vez de dos correos en un hilo, que es lo mejor que puede hacer
+> el correo. Y admite botones, que el correo no: es el sitio natural para
+> aprobar remediaciones cuando llegue F6-06.
+
+### 1. Crear el bot
+
+1. En Telegram, habla con **[@BotFather](https://t.me/BotFather)**.
+2. `/newbot`
+3. Nombre: `Argus`. Usuario: algo acabado en `bot`, p. ej. `argus_avisos_bot`.
+4. Copia el **token**. Tiene esta pinta: `8123456789:AAH...`
+
+### 2. Saber a qué chat escribir
+
+Lo más simple es que el bot te escriba a ti:
+
+1. Busca tu bot por su nombre de usuario y pulsa **Iniciar** (`/start`).
+   Sin ese paso el bot **no puede escribirte**: Telegram lo impide a propósito.
+2. Pide el `chat_id`:
+
+```bash
+curl -s "https://api.telegram.org/bot<TU-TOKEN>/getUpdates" | python3 -m json.tool | grep -A2 '"chat"'
+```
+
+El `id` que salga es tu `chat_id`. Si es un grupo, es negativo (`-100...`).
+
+### 3. Ponerlo en la configuración
+
+En `platform/.env`:
+
+```bash
+ALERTBUS_SINKS=console,json,telegram
+ALERTBUS_TELEGRAM_TOKEN=8123456789:AAH...
+ALERTBUS_TELEGRAM_CHAT_ID=123456789
+```
+
+Y:
+
+```bash
+make up && make channel-test
+```
+
+Verás **un solo mensaje que se edita**: primero el aviso, luego el mismo mensaje
+convertido en informe. Si ves dos, la edición no está funcionando.
+
+> **El token es una credencial y viaja en la URL.** Por eso el sink nunca
+> registra la URL en el log, solo el método y el error. Si lo compartes por
+> error, `/revoke` en BotFather.
+
+**Lo que pierdes frente al correo**: longitud. Telegram corta a 4096 caracteres,
+así que un informe con mucha evidencia se recorta —marcándolo—. El correo no
+tiene ese límite, y por eso los dos canales juntos son mejores que cualquiera
+solo: Telegram avisa, el correo guarda el informe entero.
+
+---
+
+## Google Chat — si algún día hay Workspace
 
 Cinco minutos, sin aprobación de nadie y sin coste por mensaje. Además es el
 único canal con **botones**, así que es donde más adelante aprobarás
@@ -182,6 +249,8 @@ docker compose -f platform/compose.yaml logs alert-bus | grep -i sink
 | `notify.no_sink` | El registro no lista ningún canal cargado para esa aplicación y severidad |
 | `notify.channel_not_loaded` | El registro enruta a un canal sin credenciales. Los demás sí reciben |
 | `dispatch.send_failed` | El canal responde mal. El mensaje lleva el error del proveedor |
+| `telegram.edit_failed` | No se pudo editar el mensaje; sale uno nuevo. Suele ser que el original es muy viejo o se borró |
+| `telegram.call_failed` | Token incorrecto, o el bot no puede escribirte porque nunca le diste a **Iniciar** |
 
 Un canal caído **no impide que los demás reciban**: perder un canal es malo,
 perder la alerta entera es peor.

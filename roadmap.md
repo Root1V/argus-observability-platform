@@ -85,6 +85,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-18` | ✅ | **La sonda de silencio funciona de verdad** | Medía puntos y las series acumulativas se reexportan: un muerto parecía sano. Ahora mide crecimiento — D-049 |
 | `F1-19` | ✅ | **Seudonimización implementada** | Estaba diseñada y no existía: UUIDs de usuario en crudo. Hasheados con sal, verificado — D-050 |
 | `F1-20` | ✅ | **Canal de coordinación con Prometheus** | Fichero compartido; 5 respuestas y 8 entradas nuevas, incluido un incidente real suyo — D-052 |
+| `F1-21` | ✅ | **Canal Telegram** | Google bloqueó Chat y las contraseñas de aplicación. Telegram edita mensajes: divulgación progresiva real — D-053 |
 
 ### F1b · Los SDKs propios ⏳
 
