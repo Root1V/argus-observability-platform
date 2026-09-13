@@ -34,10 +34,22 @@ for lib in "${LIBS[@]}"; do
   python3 - "$lib/pyproject.toml" "$VERSION" <<'PY'
 import re, sys, pathlib
 ruta, version = pathlib.Path(sys.argv[1]), sys.argv[2]
+mayor = version.split(".")[0]
 t = ruta.read_text()
 t = re.sub(r'^version = "[^"]+"', f'version = "{version}"', t, count=1, flags=re.M)
-# Las dependencias entre nuestras librerias se fijan al rango de la mayor, no a
-# la version exacta: fijarlas exacto obligaria a publicar las tres siempre.
+
+# Las dependencias ENTRE nuestras librerias se fijan al limite inferior de ESTA
+# version, no a `>=1.0`.
+#
+# PEP 440 dice que `>=1.0` NO acepta `1.0.0a1`: un prelanzamiento solo satisface
+# un especificador que mencione un prelanzamiento. Con `>=1.0` publicabamos tres
+# paquetes que no podian instalarse entre ellos, y el error que sale
+# ("pre-releases weren't enabled") no apunta a la causa.
+t = re.sub(
+    r'"(argus-obs-[a-z]+)(\[[^\]]*\])?>=[^,"]+,<\d+"',
+    lambda m: f'"{m.group(1)}{m.group(2) or ""}>={version},<{int(mayor) + 1}"',
+    t,
+)
 ruta.write_text(t)
 PY
   printf '  %-24s %s\n' "$(basename "$lib")" "$VERSION"

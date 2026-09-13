@@ -23,7 +23,17 @@ from .genai import GenAISpan, agent, documents, genai, retrieval, tool
 from .guardrails import AgentRun, Budget, GuardrailBreach, current_run
 from .steps import Step, instrument, step
 
-__version__ = attributes.SEMCONV_VERSION
+# La version del PAQUETE, distinta de la de las convenciones: el paquete puede
+# publicarse varias veces sin que cambien las convenciones.
+try:
+    from importlib.metadata import version as _version
+
+    __version__ = _version("argus-obs-semconv")
+except Exception:  # noqa: BLE001
+    __version__ = "0.0.0.dev0"
+
+#: Version del MODELO de convenciones (libs/semconv-model/argus.yaml).
+SEMCONV_VERSION = attributes.SEMCONV_VERSION
 
 __all__ = [
     # Convenciones generadas
@@ -47,5 +57,6 @@ __all__ = [
     # Contenido
     "capture_enabled",
     "mask",
+    "SEMCONV_VERSION",
     "__version__",
 ]

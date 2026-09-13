@@ -129,7 +129,8 @@ def main() -> int:
         "Hay ruedas construidas de argus-obs-sdk",
         bool(ruedas),
         "Constrúyelas: make wheels",
-        detalle_ok=f"{len(list((RAIZ / 'dist').glob('*.whl')))} ruedas en dist/",
+        detalle_ok=f"{len(list((RAIZ / 'dist').glob('*.whl')))} ruedas en dist/"
+                   + (f" (v{ruedas[0].name.split('-')[1]})" if ruedas else ""),
     )
 
     if ruedas:
@@ -142,9 +143,13 @@ def main() -> int:
         try:
             subprocess.run(["uv", "venv", "--quiet"], cwd=prueba, check=True, timeout=120,
                            capture_output=True)
+            # Con la version EXPLICITA, que es lo que hay que teclear cuando
+            # es un prelanzamiento: PEP 440 no resuelve `1.0.0a1` a partir de
+            # un nombre pelado, y el error que sale no apunta a la causa.
+            version = ruedas[0].name.split("-")[1]
             resultado = subprocess.run(
                 ["uv", "pip", "install", "--quiet", "--find-links", str(RAIZ / "dist"),
-                 "argus-obs-sdk[asgi,client]"],
+                 f"argus-obs-sdk[asgi,client]=={version}"],
                 cwd=prueba, capture_output=True, text=True, timeout=300,
             )
             instalable = resultado.returncode == 0

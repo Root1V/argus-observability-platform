@@ -54,7 +54,14 @@ from ._resource import build_resource
 from ._tracing import configure_tracing
 from .asgi import ASGIMiddleware
 
-__version__ = "1.0.0"
+# De los metadatos del paquete instalado, no de una constante: una constante se
+# queda obsoleta en cuanto se publica una version y nadie se entera.
+try:
+    from importlib.metadata import version as _version
+
+    __version__ = _version("argus-obs-sdk")
+except Exception:  # noqa: BLE001 - sin instalar (ejecucion desde el arbol)
+    __version__ = "0.0.0.dev0"
 
 _HANDLE: Argus | None = None
 _log = logging.getLogger("argus")
