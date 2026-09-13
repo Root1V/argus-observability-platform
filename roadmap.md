@@ -216,6 +216,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `X-25` | ✅ | `pip install argus-sdk` traía un paquete ajeno de PyPI | D-035: confusión de dependencias |
 | `X-26` | ⏳ | **Ningún canal de notificación real configurado** | Único bloqueante del piloto; necesita una credencial tuya |
 | `X-27` | ✅ | Las métricas GenAI estaban definidas y **nadie las emitía** | Lo descubrió el dashboard; ahora salen solas de `genai()` |
+| `X-28` | ✅ | Los prelanzamientos publicaban paquetes mutuamente inalcanzables | D-038: PEP 440 exige límites inferiores con prelanzamiento |
 
 ---
 

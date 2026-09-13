@@ -762,11 +762,13 @@ git**; antes del rollout, índice privado.
 **Qué sí, y por qué es suficiente**:
 
 ```bash
-uv pip install "argus-obs-sdk[asgi] @ git+<repo>@v1.0.0a1#subdirectory=libs/argus-sdk"
+uv pip install "argus-obs-sdk[asgi] @ git+<repo>@v1.0.0a2#subdirectory=libs/argus-sdk"
 ```
 
 Da versionado real, es reproducible, funciona dentro de contenedores y **no
-necesita infraestructura**. `scripts/release.sh` etiqueta, construye y corre las
+necesita infraestructura**.
+
+**Dos detalles de PEP 440 que costaron un error real** (ver D-038). `scripts/release.sh` etiqueta, construye y corre las
 pruebas —publicar una versión que alguien va a instalar no puede saltarse los
 tests—, y usa PEP 440 (`1.0.0a1`) para que un `pip install` sin `--pre` nunca se
 lleve un prelanzamiento por accidente.
@@ -811,6 +813,43 @@ que vive fuera (D-033).
   valor doble-codifica la longitud en el tono y quema el único canal libre.
 - La paleta de series se validó con el verificador (separación CVD ΔE 9.4,
   visión normal 26.5, contraste sobre fondo oscuro ≥3:1).
+
+---
+
+## D-038 · Los prelanzamientos exigen límites inferiores con prelanzamiento
+
+**Estado**: ✅ Vigente · **descubierta al publicar la primera versión**
+
+**Contexto**. `make release V=1.0.0a1` terminó bien —etiquetó, construyó,
+pruebas en verde— y las librerías resultantes **no podían instalarse entre
+ellas**.
+
+**Causa**. PEP 440: un prelanzamiento **solo satisface un especificador que
+mencione un prelanzamiento**. `argus-obs-sdk` declaraba
+`argus-obs-semconv>=1.0,<2`, y `1.0.0a1` no cumple `>=1.0`. Publicamos tres
+paquetes mutuamente inalcanzables.
+
+Y el error no ayuda: *«pre-releases weren't enabled»* apunta al invocante, no a
+la dependencia interna mal declarada.
+
+**Decisión, dos partes**:
+
+1. `release.sh` fija el límite inferior de las dependencias **internas** a la
+   versión que se publica: `argus-obs-semconv>=1.0.0a2,<2`.
+2. Instalar un prelanzamiento exige la **versión explícita**:
+   `argus-obs-sdk[asgi]==1.0.0a2`. Es la contrapartida deseada de que un
+   `pip install` normal nunca se lleve un prelanzamiento por accidente, así que
+   se documenta en vez de eliminarse.
+
+**Lo que lo detectó**: `make pilot-check`, que instala en un entorno limpio con
+el comando que teclearía una persona. Las 190 pruebas no lo vieron porque todas
+corren dentro del workspace, donde las dependencias se resuelven por otra vía.
+
+**Relacionado**. La versión de los paquetes salía de una constante en el código
+y se quedó en `1.0.0` mientras la distribución era `1.0.0a1`. Ahora sale de
+`importlib.metadata`. En `argus_semconv` conviven dos números distintos a
+propósito: `__version__` es la del paquete y `SEMCONV_VERSION` la del modelo de
+convenciones, que cambia por otros motivos.
 
 ---
 

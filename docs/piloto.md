@@ -86,24 +86,35 @@ Durante el piloto se instala desde una **etiqueta de git**: da versionado real,
 es reproducible, funciona dentro de contenedores y no necesita infraestructura.
 
 ```bash
-# En el repo de Argus: etiqueta una version
-make release V=1.0.0a1
-
-# En el repo de tu aplicación
-uv pip install "argus-obs-sdk[asgi,client,sql] @ git+<repo>@v1.0.0a1#subdirectory=libs/argus-sdk"
+# En el repo de Argus: etiqueta una versión
+make release V=1.0.0a2
 ```
 
-Cuando ajustemos algo del SDK: `make release V=1.0.0a2` y tu app sube la
-etiqueta. Con `1.0.0aN` (PEP 440), un `pip install` sin `--pre` nunca se lleva
-un prelanzamiento por accidente.
+El propio comando imprime al final las dos formas de instalarla, con la ruta y
+la versión ya rellenadas. Cópialas de ahí en vez de escribirlas a mano.
 
-También valen las ruedas locales, más rápido para iterar en la misma máquina:
+**Desde la etiqueta de git** — es lo que usarás si la app vive en otra máquina:
+
+```bash
+uv pip install "argus-obs-sdk[asgi,client,sql] @ git+<repo>@v1.0.0a2#subdirectory=libs/argus-sdk"
+```
+
+**Desde las ruedas locales** — más rápido para iterar en la misma máquina:
 
 ```bash
 make wheels
 uv pip install --find-links /ruta/a/app_monitoring_explainability/dist \
-  'argus-obs-sdk[asgi,client,sql]'
+  'argus-obs-sdk[asgi,client,sql]==1.0.0a2'
 ```
+
+> **La versión va explícita, y no es opcional.** Con un prelanzamiento
+> (`1.0.0aN`), `uv pip install argus-obs-sdk` a secas falla con
+> *«pre-releases weren't enabled»*, que no apunta a la causa. Poner `==1.0.0a2`
+> lo resuelve. Es la contrapartida de que un `pip install` normal nunca se lleve
+> un prelanzamiento por accidente.
+
+Cuando ajustemos algo del SDK: `make release V=1.0.0a3` y tu app sube la
+versión.
 
 > **No usamos TestPyPI**, aunque parezca hecho para esto: sus dependencias no
 > están ahí de forma fiable, así que haría falta apuntar también a PyPI real —
