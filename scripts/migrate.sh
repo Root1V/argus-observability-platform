@@ -16,7 +16,7 @@ COMPOSE="docker compose -f platform/compose.yaml"
 
 # Los volumenes que importan. El de las colas es recomendable pero no
 # imprescindible: si se pierde, se pierde lo que estuviera pendiente de enviar.
-VOLUMENES_CORE=(clickhouse-data vm-data collector-queue)
+VOLUMENES_CORE=(clickhouse-data vm-data collector-queue grafana-data)
 VOLUMENES_GENAI=(langfuse-postgres langfuse-redis langfuse-minio)
 VOLUMENES_AGENTS=(temporal-postgres)
 

@@ -82,14 +82,33 @@ para aquí y averigua por qué: todo lo demás depende de esto.
 
 ## Paso 2 — Instalar la librería
 
+Durante el piloto se instala desde una **etiqueta de git**: da versionado real,
+es reproducible, funciona dentro de contenedores y no necesita infraestructura.
+
 ```bash
-# En el repo de Argus
-make wheels
+# En el repo de Argus: etiqueta una version
+make release V=1.0.0a1
 
 # En el repo de tu aplicación
+uv pip install "argus-obs-sdk[asgi,client,sql] @ git+<repo>@v1.0.0a1#subdirectory=libs/argus-sdk"
+```
+
+Cuando ajustemos algo del SDK: `make release V=1.0.0a2` y tu app sube la
+etiqueta. Con `1.0.0aN` (PEP 440), un `pip install` sin `--pre` nunca se lleva
+un prelanzamiento por accidente.
+
+También valen las ruedas locales, más rápido para iterar en la misma máquina:
+
+```bash
+make wheels
 uv pip install --find-links /ruta/a/app_monitoring_explainability/dist \
   'argus-obs-sdk[asgi,client,sql]'
 ```
+
+> **No usamos TestPyPI**, aunque parezca hecho para esto: sus dependencias no
+> están ahí de forma fiable, así que haría falta apuntar también a PyPI real —
+> y eso reintroduce justo la confusión de dependencias que el renombrado
+> eliminó (D-036).
 
 Los extras según lo que use tu app: `asgi` para FastAPI, `client` para
 httpx/requests, `sql` para SQLAlchemy, `celery`, `kafka`, `redis`, `genai`.
@@ -175,6 +194,42 @@ Esto hace tres cosas: el canario empieza a vigilar su silencio, la correlación
 puede usar sus dependencias, y las notificaciones saben a dónde ir.
 
 Reinicia el `alert-bus` y el `canary` para que lo recojan.
+
+---
+
+## Paso 4b — Dónde lo miras
+
+```bash
+make dash        # abre Grafana e imprime la credencial
+```
+
+Dos dashboards, que responden preguntas distintas:
+
+**`Argus · una aplicación`** — *«¿cómo va mi aplicación?»*. Elige la tuya en el
+selector de arriba. De arriba abajo: los seis números del estado actual, luego
+tasa de error y latencia en el tiempo, luego el desglose por componente y por
+tipo de error, luego tokens y coste, y al final una tabla de trazas con error o
+lentas.
+
+Esa tabla es el puente entre las dos preguntas: pulsa un `TraceId` y saltas de
+*«cómo va»* a *«qué pasó exactamente en esta petición»*.
+
+**`Argus · la plataforma`** — *«¿está la plataforma mirando?»*. Ningún otro
+dashboard puede responder eso, porque todos los demás asumen que sí. Si
+`Descartes` sube de cero, hay huecos en tus datos — y un hueco parece silencio.
+
+Y tiene un límite honesto: si la plataforma cae del todo, este dashboard
+tampoco se ve. Para eso está el *dead man's switch*, que vive fuera.
+
+### Para verlos con datos antes de conectar nada
+
+```bash
+make demo-traffic M=2
+```
+
+Genera tráfico de una aplicación simulada —tres componentes, algo de error,
+llamadas a un LLM— para que puedas mirar los dashboards y decidir si te sirven
+antes de tocar una app real.
 
 ---
 

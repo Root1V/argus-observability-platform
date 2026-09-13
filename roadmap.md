@@ -29,7 +29,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | Fase | Título | Estado | Avance |
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
-| **F1** | Librerías y primeras apps | 🚧 | 10/13 |
+| **F1** | Librerías y primeras apps | 🚧 | 11/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
@@ -77,7 +77,8 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-10` | ⏳ | Desplegar Collector agente en una **segunda máquina** | Valida D-003 de verdad |
 | `F1-11` | ⏳ | Adoptar en 3 apps reales: una API, una con worker, una Go | Go con instrumentación en compilación |
 | `F1-12` | ⏳ | Perfil `genai`: Langfuse arrancado y verificado | Solo hace falta si la app piloto usa LLM |
-| `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels`; nombres `argus-obs-*` por colisión en PyPI — D-035 |
+| `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
+| `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -214,6 +215,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `X-24` | ✅ | Las métricas del agente escuchaban en `127.0.0.1` dentro del contenedor | Mismo fallo que `X-12`, en otro sitio |
 | `X-25` | ✅ | `pip install argus-sdk` traía un paquete ajeno de PyPI | D-035: confusión de dependencias |
 | `X-26` | ⏳ | **Ningún canal de notificación real configurado** | Único bloqueante del piloto; necesita una credencial tuya |
+| `X-27` | ✅ | Las métricas GenAI estaban definidas y **nadie las emitía** | Lo descubrió el dashboard; ahora salen solas de `genai()` |
 
 ---
 
@@ -229,10 +231,11 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-04` | 💭 | Agente de **runbooks** desde incidentes resueltos | Cuando haya suficientes que destilar |
 | `B-05` | 💭 | Agente de **onboarding**: PR automático para instrumentar | Reevaluar pasando de 20 apps |
 | `B-06` | 💭 | **OBI/eBPF** en las máquinas Linux | No funciona en macOS |
-| `B-07` | 💭 | HyperDX o Grafana como UI de exploración | Hoy se consulta por SQL |
+| `B-07` | ✅ | Grafana con dashboards provisionados | Dos: una aplicación y la plataforma — D-037 |
 | `B-08` | 💭 | Vistas materializadas de ClickHouse para burn-rate | Camino templado, si vmalert se queda corto |
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
-| `B-10` | 💭 | Índice PyPI privado (`devpi`) en el plano central | Hoy `make wheels` + `--find-links`; **necesario antes del rollout** |
+| `B-10` | 💭 | Índice PyPI privado (`devpi`) en el plano central | Hoy etiquetas de git; **necesario antes del rollout** — D-036 |
+| `B-14` | 💭 | **Registrar `argus-obs-*` en PyPI defensivamente** | La protección de D-035 depende de que sigan libres |
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |

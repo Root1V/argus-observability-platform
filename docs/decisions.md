@@ -741,6 +741,79 @@ nivel de distribución.
 
 ---
 
+## D-036 · Nada publica todavía en un índice; se instala desde etiquetas de git
+
+**Estado**: ✅ Vigente · se revisa antes del rollout
+
+**Contexto**. Durante el piloto las aplicaciones necesitan instalar las
+librerías e iterar con ellas. ¿Publicamos prelanzamientos en TestPyPI?
+
+**Decisión**. **No TestPyPI.** Durante el piloto se instala desde **etiquetas de
+git**; antes del rollout, índice privado.
+
+**Por qué TestPyPI es mala idea aquí, aunque parezca hecho para esto**:
+- Las dependencias (`opentelemetry-api` y compañía) **no están** de forma fiable
+  en TestPyPI, así que haría falta `--extra-index-url` apuntando a PyPI real —
+  y eso **reintroduce exactamente la confusión de dependencias** que D-035
+  acaba de eliminar.
+- TestPyPI purga paquetes periódicamente. Un piloto que dura semanas no puede
+  apoyarse en algo que puede desaparecer.
+
+**Qué sí, y por qué es suficiente**:
+
+```bash
+uv pip install "argus-obs-sdk[asgi] @ git+<repo>@v1.0.0a1#subdirectory=libs/argus-sdk"
+```
+
+Da versionado real, es reproducible, funciona dentro de contenedores y **no
+necesita infraestructura**. `scripts/release.sh` etiqueta, construye y corre las
+pruebas —publicar una versión que alguien va a instalar no puede saltarse los
+tests—, y usa PEP 440 (`1.0.0a1`) para que un `pip install` sin `--pre` nunca se
+lleve un prelanzamiento por accidente.
+
+**Pendiente, y conviene no olvidarlo**: los nombres `argus-obs-*` están libres
+en PyPI, y de eso depende la protección de D-035. **Si alguien los registra, la
+protección se invierte en vulnerabilidad.** Registrarlos defensivamente —aunque
+sea con un `0.0.1` vacío— es barato y cierra esa puerta. Está en el backlog
+como `B-14`.
+
+---
+
+## D-037 · Los dashboards son código, provisionados desde disco
+
+**Estado**: ✅ Vigente
+
+**Decisión**. Fuentes de datos y dashboards se provisionan desde
+`platform/grafana/`, con `allowUiUpdates: false`.
+
+**Por qué**. Un dashboard que depende de que alguien configurara una fuente de
+datos hace seis meses es un dashboard que se rompe al migrar de máquina — y
+migrar de máquina es un requisito explícito (D-003). Editar en la UI produce
+cambios que nadie revisa y que se pierden en el siguiente despliegue.
+
+**Dos dashboards, dos preguntas distintas**:
+
+| Dashboard | Responde |
+|---|---|
+| **Una aplicación** | ¿Cómo va mi aplicación? RED, latencia, errores, tokens, coste |
+| **La plataforma** | ¿Está la plataforma mirando? Descartes, colas, exportación |
+
+El segundo existe porque **ningún otro dashboard puede responder esa pregunta**:
+todos los demás asumen que la plataforma funciona. Y tiene un límite honesto: si
+la plataforma cae del todo, tampoco se ve. Para eso está el *dead man's switch*,
+que vive fuera (D-033).
+
+**Sobre el diseño de los paneles**, siguiendo las reglas de visualización:
+- Un valor suelto es un **tile**, no un gráfico de una barra.
+- **Ningún eje doble.** Tokens y coste van en paneles separados: alinear dos
+  escalas distintas inventa una correlación que no está en los datos.
+- Las barras por categoría nominal usan **un solo color**: un degradado por
+  valor doble-codifica la longitud en el tono y quema el único canal libre.
+- La paleta de series se validó con el verificador (separación CVD ΔE 9.4,
+  visión normal 26.5, contraste sobre fondo oscuro ≥3:1).
+
+---
+
 ## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
 
 **Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código

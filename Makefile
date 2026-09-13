@@ -55,6 +55,23 @@ wheels:  ## Construye las ruedas instalables de las librerias
 	  uv build --package $$p --out-dir dist --quiet; done
 	@ls -1 dist/*.whl | sed 's|dist/|  |'
 
+dash:  ## Abre los dashboards e imprime la credencial
+	@set -a; . platform/.env; set +a; \
+	echo "  Grafana:  http://localhost:3001"; \
+	echo "  usuario:  $$GRAFANA_USER"; \
+	echo "  clave:    $$GRAFANA_PASSWORD"; \
+	echo; \
+	echo "  Una aplicacion:  http://localhost:3001/d/argus-aplicacion"; \
+	echo "  La plataforma:   http://localhost:3001/d/argus-plataforma"
+	@command -v open >/dev/null && open http://localhost:3001/d/argus-aplicacion || true
+
+demo-traffic:  ## Genera trafico de una app simulada, para ver los dashboards con datos
+	@set -a; . platform/.env; set +a; \
+	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/trafico_demo.py --minutos $${M:-2}
+
+release:  ## Etiqueta y construye una version:  make release V=1.0.0a1
+	@./scripts/release.sh $(V)
+
 pilot-check:  ## ¿Listo para conectar una aplicacion real?
 	@uv run python scripts/pilot_check.py
 
@@ -97,4 +114,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
+.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv

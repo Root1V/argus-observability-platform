@@ -15,6 +15,7 @@ Uso tipico dentro de una libreria de inferencia (Axonium):
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Literal
@@ -22,6 +23,7 @@ from typing import Any, Literal
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
+from . import _metrics_api as _metrics
 from . import attributes as A
 from ._content import capture_enabled, serialize
 from .guardrails import AgentRun, Budget, GuardrailBreach, current_run, reset_run, set_run, signature
@@ -58,10 +60,19 @@ class GenAISpan:
     logica de negocio de quien nos importa.
     """
 
-    __slots__ = ("_span",)
+    __slots__ = ("_app", "_error", "_feature", "_model", "_op", "_provider", "_span", "_use_case")
 
-    def __init__(self, span: Span) -> None:
+    def __init__(self, span: Span, *, operation: str = "", provider: str = "", model: str | None = None) -> None:
         self._span = span
+        # Se guarda el contexto para poder emitir las metricas: sin el, cada
+        # `usage()` tendria que recibir de nuevo operacion, proveedor y modelo.
+        self._op = operation
+        self._provider = provider
+        self._model = model
+        self._error: str | None = None
+        self._app: str | None = None
+        self._feature: str | None = None
+        self._use_case: str | None = None
 
     @property
     def span(self) -> Span:
@@ -86,6 +97,13 @@ class GenAISpan:
         self._set(A.GEN_AI_USAGE_INPUT_TOKENS, input_tokens)
         self._set(A.GEN_AI_USAGE_OUTPUT_TOKENS, output_tokens)
         self._set(A.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS, cached_input_tokens)
+
+        # Las metricas salen SOLAS del mismo sitio que ya emite los atributos.
+        # Si hubiera que emitirlas a mano, nadie las emitiria.
+        _metrics.record_tokens(
+            operation=self._op, provider=self._provider, model=self._model,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+        )
 
         # Acumular contra el presupuesto del agente que englobe esta llamada.
         # Es lo que convierte "esta peticion gasto X" en "esta EJECUCION lleva
@@ -147,6 +165,17 @@ class GenAISpan:
         self._set(A.ARGUS_TOKENS_PER_SECOND, tokens_per_second)
         self._set(A.ARGUS_COST_USD, cost_usd)
 
+        if ttft_ms:
+            _metrics.record_ttft(
+                provider=self._provider, model=self._model,
+                seconds=ttft_ms / 1000.0, backend_id=backend_id,
+            )
+        if cost_usd:
+            _metrics.record_cost(
+                cost_usd=cost_usd, model=self._model,
+                app=self._app, feature=self._feature, use_case=self._use_case,
+            )
+
         if cost_usd and (run := current_run()) is not None and (incumplido := run.record_usage(cost_usd=cost_usd)):
             self._set(A.ARGUS_GUARDRAIL, incumplido)
             self._set(A.ARGUS_HOT, True)
@@ -194,6 +223,9 @@ class GenAISpan:
         self._set(A.ARGUS_FEATURE, feature)
         self._set(A.ARGUS_USE_CASE, use_case)
         self._set(A.GEN_AI_CONVERSATION_ID, conversation_id)
+        # Se recuerdan para la metrica de coste, que necesita atribuir.
+        self._feature = feature or self._feature
+        self._use_case = use_case or self._use_case
 
     def error(self, error_type: str, *, retryable: bool | None = None, retry_policy: str | None = None) -> None:
         """Marca el span como fallido con un tipo de error de catalogo cerrado.
@@ -201,6 +233,7 @@ class GenAISpan:
         `retryable` lo lee el agente remediador: reintentar un error no
         transitorio es hacer daño, no arreglar.
         """
+        self._error = error_type
         self._set(A.ERROR_TYPE, error_type)
         self._set(A.ARGUS_ERROR_RETRYABLE, retryable)
         self._set(A.ARGUS_ERROR_RETRY_POLICY, retry_policy)
@@ -231,9 +264,19 @@ def genai(
     `chat qwen2.5-coder-7b`. Sin modelo, solo la operacion.
     """
     name = f"{operation} {request_model}" if request_model else operation
+    inicio = time.perf_counter()
 
     with _tracer.start_as_current_span(name, kind=kind) as span:
-        wrapper = GenAISpan(span)
+        wrapper = GenAISpan(span, operation=operation, provider=provider, model=request_model)
+        # `argus.app` viaja en baggage; leerlo aqui permite atribuir el coste
+        # sin que cada llamada tenga que repetirlo.
+        try:
+            from opentelemetry import baggage
+
+            valor = baggage.get_baggage(A.ARGUS_APP)
+            wrapper._app = str(valor) if valor else None
+        except Exception:  # noqa: BLE001
+            pass
         wrapper.set(A.GEN_AI_OPERATION_NAME, operation)
         wrapper.set(A.GEN_AI_PROVIDER_NAME, provider)
         wrapper.set(A.GEN_AI_REQUEST_MODEL, request_model)
@@ -249,6 +292,16 @@ def genai(
         except Exception as exc:
             wrapper.error(type(exc).__name__)
             raise
+        finally:
+            # La duracion se emite SIEMPRE, tambien cuando la llamada falla:
+            # ese es justo el caso en que interesa saber cuanto tardo en fallar.
+            _metrics.record_duration(
+                operation=operation,
+                provider=provider,
+                model=request_model,
+                seconds=time.perf_counter() - inicio,
+                error_type=wrapper._error,
+            )
 
 
 @contextmanager

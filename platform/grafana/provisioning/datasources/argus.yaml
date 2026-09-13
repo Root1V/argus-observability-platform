@@ -1,0 +1,57 @@
+# Fuentes de datos, provisionadas desde disco.
+#
+# Provisionadas y no creadas a mano a proposito: un dashboard que depende de que
+# alguien configurara una fuente de datos hace seis meses es un dashboard que se
+# rompe al migrar de maquina.
+
+apiVersion: 1
+
+datasources:
+  # Metricas: RED derivadas de TODAS las trazas antes de muestrear, mas las
+  # metricas GenAI que emite el SDK. VictoriaMetrics habla PromQL.
+  - name: Argus Metricas
+    uid: argus-metricas
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+
+  # Trazas y logs. Aqui se responde "que paso en ESTA peticion", que es otra
+  # pregunta distinta de "como va la aplicacion".
+  - name: Argus Trazas
+    uid: argus-trazas
+    type: grafana-clickhouse-datasource
+    access: proxy
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      secure: false
+      username: ${CLICKHOUSE_USER}
+      defaultDatabase: otel
+      logs:
+        defaultDatabase: otel
+        defaultTable: otel_logs
+        otelEnabled: true
+        timeColumn: Timestamp
+        levelColumn: SeverityText
+        messageColumn: Body
+      traces:
+        defaultDatabase: otel
+        defaultTable: otel_traces
+        otelEnabled: true
+        traceIdColumn: TraceId
+        spanIdColumn: SpanId
+        operationNameColumn: SpanName
+        parentSpanIdColumn: ParentSpanId
+        serviceNameColumn: ServiceName
+        durationColumn: Duration
+        durationUnit: nanoseconds
+        startTimeColumn: Timestamp
+        tagsColumn: SpanAttributes
+        serviceTagsColumn: ResourceAttributes
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}

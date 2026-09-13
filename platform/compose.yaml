@@ -200,6 +200,35 @@ services:
       - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
       - ./registry/probes.yaml:/etc/argus/probes.yaml:ro
 
+  # Los dashboards. Responden "¿como va mi aplicacion?"; para "¿que paso en
+  # ESTA peticion?" esta la vista de trazas, que es otra pregunta distinta.
+  #
+  # Fuentes de datos y dashboards PROVISIONADOS desde disco: un dashboard que
+  # depende de que alguien configurara algo a mano hace seis meses es un
+  # dashboard que se rompe al migrar de maquina.
+  grafana:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    image: grafana/grafana:11.6.0
+    depends_on: [victoriametrics, clickhouse]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?define GRAFANA_PASSWORD en .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # El conector de ClickHouse es un plugin; sin el, la tabla de trazas
+      # queda vacia y el resto del dashboard sigue funcionando.
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+
   # ---------------------------------------------------------------------------
   # PERFIL genai — Langfuse y sus dependencias
   # ---------------------------------------------------------------------------
@@ -341,6 +370,7 @@ services:
       - "127.0.0.1:8081:8080"
 
 volumes:
+  grafana-data:
   # Volumenes NOMBRADOS: son lo que hace portable el plano central.
   clickhouse-data:
   vm-data:
