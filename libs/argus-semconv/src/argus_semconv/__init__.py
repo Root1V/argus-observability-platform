@@ -20,6 +20,7 @@ from __future__ import annotations
 from . import attributes
 from ._content import capture_enabled, mask
 from .genai import GenAISpan, agent, documents, genai, retrieval, tool
+from .guardrails import AgentRun, Budget, GuardrailBreach, current_run
 from .steps import Step, instrument, step
 
 __version__ = attributes.SEMCONV_VERSION
@@ -34,6 +35,11 @@ __all__ = [
     "agent",
     "documents",
     "GenAISpan",
+    # Guardarrailes de agentes
+    "Budget",
+    "GuardrailBreach",
+    "AgentRun",
+    "current_run",
     # Unidades de trabajo
     "step",
     "instrument",

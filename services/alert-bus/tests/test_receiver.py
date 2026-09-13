@@ -189,3 +189,40 @@ def test_un_cuerpo_sin_comprimir_sigue_funcionando() -> None:
     peticion = build_request(span_attrs={A.ERROR_TYPE: "timeout"}, status_code=STATUS_ERROR)
     decodificada = normalize.parse_body(peticion.SerializeToString(), "application/x-protobuf", None)
     assert len(list(normalize.signals_from_otlp(decodificada))) == 1
+
+
+# --- El formato REAL de vmalert ----------------------------------------------
+# Regresion encontrada al arrancar vmalert contra el alert-bus. Manda un ARRAY
+# pelado, que es el formato de la API v2 de Alertmanager; nosotros asumiamos
+# `{"alerts": [...]}`, que es el formato de WEBHOOK.
+#
+# La integracion real llevaba rota un rato mientras los tests pasaban, porque
+# los tests hablaban nuestro formato en vez del suyo.
+
+
+def test_acepta_el_array_pelado_que_manda_vmalert() -> None:
+    payload = [
+        {
+            "labels": {
+                "alertname": "ArgusSLOBurnRateFast",
+                "service_namespace": "intelligent-document-platform",
+                "service_name": "idp-api",
+                "severity": "page",
+            },
+            "annotations": {"summary": "quema rápida del presupuesto de error"},
+            "startsAt": "2026-09-13T00:02:46Z",
+        }
+    ]
+    (senal,) = normalize.signals_from_alertmanager(payload)
+    assert senal.kind is SignalKind.BURN_RATE
+    assert senal.app == "intelligent-document-platform"
+
+
+def test_sigue_aceptando_el_formato_de_webhook() -> None:
+    """Los scripts y el canario usan esta forma, que es mas comoda de escribir."""
+    payload = {"alerts": [{"labels": {"alertname": "x", "service_namespace": "a"}, "annotations": {}}]}
+    assert len(list(normalize.signals_from_alertmanager(payload))) == 1
+
+
+def test_un_array_vacio_no_produce_senales() -> None:
+    assert list(normalize.signals_from_alertmanager([])) == []

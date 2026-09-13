@@ -24,6 +24,7 @@ from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
 from . import attributes as A
 from ._content import capture_enabled, serialize
+from .guardrails import AgentRun, Budget, GuardrailBreach, current_run, reset_run, set_run, signature
 
 Operation = Literal[
     "chat",
@@ -86,6 +87,15 @@ class GenAISpan:
         self._set(A.GEN_AI_USAGE_OUTPUT_TOKENS, output_tokens)
         self._set(A.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS, cached_input_tokens)
 
+        # Acumular contra el presupuesto del agente que englobe esta llamada.
+        # Es lo que convierte "esta peticion gasto X" en "esta EJECUCION lleva
+        # gastado X", que es la unidad en la que se fuga el coste.
+        if (run := current_run()) is not None:
+            total = (input_tokens or 0) + (output_tokens or 0)
+            if total and (incumplido := run.record_usage(tokens=total)):
+                self._set(A.ARGUS_GUARDRAIL, incumplido)
+                self._set(A.ARGUS_HOT, True)
+
     def response(
         self,
         *,
@@ -136,6 +146,10 @@ class GenAISpan:
         self._set(A.ARGUS_TTFT_MS, ttft_ms)
         self._set(A.ARGUS_TOKENS_PER_SECOND, tokens_per_second)
         self._set(A.ARGUS_COST_USD, cost_usd)
+
+        if cost_usd and (run := current_run()) is not None and (incumplido := run.record_usage(cost_usd=cost_usd)):
+            self._set(A.ARGUS_GUARDRAIL, incumplido)
+            self._set(A.ARGUS_HOT, True)
 
     def messages(
         self,
@@ -255,25 +269,72 @@ def retrieval(
 
 
 @contextmanager
-def tool(name: str, *, call_id: str | None = None, tool_type: str = "function") -> Iterator[GenAISpan]:
-    """Span de ejecucion de herramienta."""
+def tool(
+    name: str,
+    *,
+    call_id: str | None = None,
+    tool_type: str = "function",
+    args: Any = None,
+) -> Iterator[GenAISpan]:
+    """Span de ejecucion de herramienta.
+
+    Si hay una ejecucion de agente en curso, la llamada se CUENTA contra su
+    presupuesto. Pasar `args` activa ademas la deteccion de bucles: la misma
+    herramienta con los mismos argumentos varias veces es la firma inequivoca
+    de un agente atascado.
+    """
     with genai("execute_tool", provider="local", tool_name=name, kind=SpanKind.INTERNAL) as g:
         g.set(A.GEN_AI_TOOL_TYPE, tool_type)
         g.set(A.GEN_AI_TOOL_CALL_ID, call_id)
+
+        run = current_run()
+        if run is not None:
+            incumplido = run.record_tool_call(name, signature(args) if args is not None else None)
+            if incumplido:
+                g.set(A.ARGUS_GUARDRAIL, incumplido)
+                g.set(A.ARGUS_HOT, True)
+                if run.budget.stops():
+                    # Parar ANTES de ejecutar la herramienta: el objetivo es no
+                    # hacer la llamada numero cuarenta y uno, no registrarla.
+                    raise GuardrailBreach(incumplido, run.detalle)
         yield g
 
 
 @contextmanager
-def agent(name: str, *, agent_id: str | None = None, conversation_id: str | None = None) -> Iterator[GenAISpan]:
+def agent(
+    name: str,
+    *,
+    agent_id: str | None = None,
+    conversation_id: str | None = None,
+    budget: Budget | None = None,
+) -> Iterator[GenAISpan]:
     """Span padre `invoke_agent` que agrupa el ciclo de razonamiento.
 
     Sus hijos alternan `chat` y `execute_tool`, que es la estructura que
     permite detectar bucles contando tool calls por ejecucion.
+
+    Con `budget`, la ejecucion queda acotada: llamadas, coste, tokens y
+    repeticiones identicas. Los guardarrailes viven AQUI y no en el backend
+    porque aqui se puede parar el bucle; detectarlo desde el almacen llega
+    tarde, cuando el agente ya lleva veinte llamadas mas.
     """
-    with genai("invoke_agent", provider="local", agent_name=name, kind=SpanKind.INTERNAL) as g:
-        g.set(A.GEN_AI_AGENT_ID, agent_id)
-        g.set(A.GEN_AI_CONVERSATION_ID, conversation_id)
-        yield g
+    run = AgentRun(name=name, budget=budget or Budget())
+    token = set_run(run)
+
+    try:
+        with genai("invoke_agent", provider="local", agent_name=name, kind=SpanKind.INTERNAL) as g:
+            g.set(A.GEN_AI_AGENT_ID, agent_id)
+            g.set(A.GEN_AI_CONVERSATION_ID, conversation_id)
+            try:
+                yield g
+            finally:
+                # Las estadisticas se adjuntan SIEMPRE, tambien cuando la
+                # ejecucion termina por un guardarrail: ese es justo el caso en
+                # que hacen falta para entender que paso.
+                for clave, valor in run.attributes().items():
+                    g.set(clave, valor)
+    finally:
+        reset_run(token)
 
 
 def documents(span: GenAISpan, docs: Sequence[tuple[Any, float]]) -> None:

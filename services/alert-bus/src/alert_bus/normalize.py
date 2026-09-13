@@ -185,13 +185,25 @@ def _classify(span: Any, attrs: dict[str, Any], component: str) -> tuple[SignalK
     return (None, "", "")
 
 
-def signals_from_alertmanager(payload: dict[str, Any]) -> Iterator[Signal]:
+def signals_from_alertmanager(payload: dict[str, Any] | list[dict[str, Any]]) -> Iterator[Signal]:
     """Alertas de vmalert en formato Alertmanager -> senales.
 
     Es el camino TEMPLADO: burn-rate y bandas de anomalia, que necesitan una
     ventana para tener sentido y por tanto nunca podrian venir por el caliente.
+
+    Acepta DOS formas, y la distincion costo un fallo en produccion:
+
+      - Un ARRAY pelado `[{...}, {...}]`. Es lo que manda vmalert, porque es el
+        formato de la API v2 de Alertmanager.
+      - Un objeto `{"alerts": [...]}`. Es el formato de WEBHOOK de Alertmanager,
+        comodo para scripts y para el canario.
+
+    Asumir solo el segundo dejo la integracion real rota mientras los tests
+    pasaban, porque los tests hablaban nuestro formato en vez del suyo.
     """
-    for alert in payload.get("alerts", []):
+    alertas = payload if isinstance(payload, list) else payload.get("alerts", [])
+
+    for alert in alertas:
         labels = alert.get("labels", {}) or {}
         annotations = alert.get("annotations", {}) or {}
         name = labels.get("alertname", "alerta")

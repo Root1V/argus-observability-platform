@@ -67,8 +67,20 @@ def incidentes() -> list[dict]:
     return api("/incidents")  # type: ignore[return-value]
 
 
-def buscar(app: str) -> dict | None:
-    return next((i for i in incidentes() if i["app"] == app), None)
+def buscar(app: str, firma: str | None = None) -> dict | None:
+    """Busca por app Y FIRMA.
+
+    Buscar solo por app era fragil: una aplicacion puede tener varios
+    incidentes abiertos con firmas distintas, y el test encontraba el de una
+    ejecucion anterior en vez del suyo. Cada ejecucion marca sus alertas con el
+    sello de tiempo justo para poder aislarse.
+    """
+    for inc in incidentes():
+        if inc["app"] != app:
+            continue
+        if firma is None or inc["signature"] == firma:
+            return inc
+    return None
 
 
 def main() -> int:
@@ -85,16 +97,18 @@ def main() -> int:
     antes = api("/stats")
 
     # --- 1. Un error abre un incidente --------------------------------------
-    alerta("llm-benchmark", "bench-runner", f"prueba-basica-{marca}")
+    firma_basica = f"prueba-basica-{marca}"
+    alerta("llm-benchmark", "bench-runner", firma_basica)
     time.sleep(1)
-    check("Una alerta abre un incidente", buscar("llm-benchmark") is not None)
+    check("Una alerta abre un incidente", buscar("llm-benchmark", firma_basica) is not None)
 
     # --- 2. Deduplicación ---------------------------------------------------
+    firma_tormenta = f"tormenta-{marca}"
     for _ in range(20):
-        alerta("edge-ai-inference", "gateway", f"tormenta-{marca}")
+        alerta("edge-ai-inference", "gateway", firma_tormenta)
     time.sleep(1.5)
 
-    incidente = buscar("edge-ai-inference")
+    incidente = buscar("edge-ai-inference", firma_tormenta)
     check(
         "Veinte alertas idénticas son UN incidente",
         incidente is not None and incidente["count"] >= 20,
@@ -103,13 +117,15 @@ def main() -> int:
 
     # --- 3. Correlación por topología ---------------------------------------
     # `intelligent-document-platform` declara depender de `postgres-main`.
-    alerta("postgres-main", "postgres-main", f"causa-{marca}")
+    firma_causa = f"causa-{marca}"
+    firma_sintoma = f"sintoma-{marca}"
+    alerta("postgres-main", "postgres-main", firma_causa)
     time.sleep(1)
-    alerta("intelligent-document-platform", "idp-api", f"sintoma-{marca}")
+    alerta("intelligent-document-platform", "idp-api", firma_sintoma)
     time.sleep(1.5)
 
-    causa = buscar("postgres-main")
-    sintoma = buscar("intelligent-document-platform")
+    causa = buscar("postgres-main", firma_causa)
+    sintoma = buscar("intelligent-document-platform", firma_sintoma)
 
     check(
         "El síntoma se suprime cuando hay causa aguas arriba",
@@ -131,7 +147,7 @@ def main() -> int:
             "similar_incidents": ["#12 (3 feb): mismo patrón tras una migración"],
         })
         time.sleep(1)
-        enriquecido = buscar("postgres-main")
+        enriquecido = buscar("postgres-main", firma_causa)
         check(
             "La investigación enriquece el MISMO incidente",
             enriquecido is not None and enriquecido.get("root_cause") is not None,
@@ -139,7 +155,8 @@ def main() -> int:
         )
         check(
             "Y no abre uno nuevo",
-            len([i for i in incidentes() if i["app"] == "postgres-main"]) == 1,
+            len([i for i in incidentes() if i["signature"] == firma_causa]) == 1,
+            "el enriquecimiento duplicó el incidente en vez de actualizarlo",
         )
 
     # --- 5. Contabilidad ----------------------------------------------------
