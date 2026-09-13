@@ -55,8 +55,17 @@
   tipo_ia: [llm-api, ocr, extraccion-estructurada]
 
 - id: edge-ai-inference
-  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
-  nombre_visible: Inferencia local
+  nombre_visible: Inferencia local (Prometheus)
+  # APLICACION PILOTO, a la espera de su equipo.
+  #
+  # `auth-service` ya emite trazas hacia nuestro Collector con solo variables de
+  # entorno, pero llegan bajo `unregistered`: su `configure_tracing` construye el
+  # Resource con el constructor directo, que descarta OTEL_RESOURCE_ATTRIBUTES.
+  #
+  # Pasa a `activo` cuando apliquen el cambio de una linea que les pedimos en
+  # docs/solicitudes/edge-ai-inference-resource-create.md. Marcarlo activo antes
+  # haria que el canario reportase silencio de algo que si emite, pero con otra
+  # identidad.
   estado: planificado
   criticidad: alta
   dueño: emeric
@@ -64,9 +73,13 @@
     page: [console]
     ticket: [console]
   componentes:
-    - {id: gateway, rol: api, slo: {p95_ms: 30000}}
+    # Conectado. Un servicio de autenticacion tiene que ser rapido: si tarda,
+    # todo lo que hay detras tarda.
     - {id: auth-service, rol: api, slo: {p95_ms: 1000}}
-    - {id: runtime-manager, rol: scheduler}
+    # Pendientes de conectar.
+    - {id: gateway, rol: api, slo: {p95_ms: 30000}}
+    - {id: manager-api, rol: api, slo: {p95_ms: 2000}}
+    - {id: manager-core, rol: scheduler}
   depende_de: [redis-main]
   tipo_ia: [llm-local]
 
