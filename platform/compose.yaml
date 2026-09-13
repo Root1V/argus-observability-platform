@@ -157,10 +157,18 @@ services:
       ALERTBUS_SMTP_PASSWORD: ${ALERTBUS_SMTP_PASSWORD:-}
       ALERTBUS_SMTP_FROM: ${ALERTBUS_SMTP_FROM:-argus@localhost}
       ALERTBUS_SMTP_TO: ${ALERTBUS_SMTP_TO:-}
+      # Gmail y la mayoria exigen STARTTLS; un SMTP local de pruebas no lo
+      # soporta y falla con "STARTTLS extension not supported by server".
+      ALERTBUS_SMTP_TLS: ${ALERTBUS_SMTP_TLS:-true}
       ALERTBUS_WHATSAPP_PHONE_ID: ${ALERTBUS_WHATSAPP_PHONE_ID:-}
       ALERTBUS_WHATSAPP_TOKEN: ${ALERTBUS_WHATSAPP_TOKEN:-}
       ALERTBUS_WHATSAPP_TO: ${ALERTBUS_WHATSAPP_TO:-}
+      ALERTBUS_WHATSAPP_TEMPLATE: ${ALERTBUS_WHATSAPP_TEMPLATE:-argus_incidente}
       ALERTBUS_GROUP_WINDOW_S: ${ALERTBUS_GROUP_WINDOW_S:-60}
+      ALERTBUS_RESOLVE_AFTER_S: ${ALERTBUS_RESOLVE_AFTER_S:-900}
+      ALERTBUS_TICK_S: ${ALERTBUS_TICK_S:-5}
+      ALERTBUS_DISPATCH_WORKERS: ${ALERTBUS_DISPATCH_WORKERS:-2}
+      ALERTBUS_DISPATCH_QUEUE_SIZE: ${ALERTBUS_DISPATCH_QUEUE_SIZE:-1000}
       # Se observa a si mismo: seria absurdo que la pieza que detecta
       # incidentes fuera la unica sin telemetria.
       ARGUS_ENDPOINT: http://collector:4317
