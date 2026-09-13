@@ -209,3 +209,36 @@ def test_la_memoria_esta_acotada(registry, sink: MemorySink) -> None:
     for i in range(200):
         engine.ingest([senal(signature=f"error-{i}")])
     assert len(engine.open_incidents()) <= 51
+
+
+def test_los_dos_nombres_de_un_renombrado_abren_un_solo_incidente(tmp_path) -> None:
+    """Durante un renombrado llegan los dos namespaces a la vez.
+
+    La huella se construye con la aplicacion, asi que sin normalizar a la
+    identidad resuelta el mismo fallo del mismo servicio abre dos incidentes y
+    notifica dos veces — justo lo que la deduplicacion existe para evitar.
+    """
+    import yaml
+
+    from alert_bus.registry import Registry
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([{
+        "id": "prometheus-inference-platform",
+        "alias": ["edge-ai-inference"],
+        "estado": "activo",
+        "criticidad": "alta",
+        "componentes": [{"id": "auth-service", "rol": "api"}],
+    }], allow_unicode=True), encoding="utf-8")
+
+    motor = Engine(Registry(ruta), [])
+    motor.ingest([
+        senal(app="edge-ai-inference", component="auth-service", signature="TimeoutError"),
+        senal(app="prometheus-inference-platform", component="auth-service",
+               signature="TimeoutError"),
+    ])
+
+    abiertos = motor.open_incidents()
+    assert len(abiertos) == 1, "el mismo fallo con dos nombres es un incidente, no dos"
+    assert abiertos[0].app == "prometheus-inference-platform"
+    assert abiertos[0].count == 2

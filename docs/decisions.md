@@ -1081,3 +1081,69 @@ compose declara, con una lista explícita de los que la imagen fija a propósito
 **Consecuencias**. Añadir un ajuste sin exponerlo rompe la suite. Es la clase de
 fallo que solo aparece al usar la documentación al pie de la letra, porque el
 código está bien y la suite pasa.
+
+---
+
+## D-046 · Somos el único destino de Prometheus, y eso cambia quién responde del silencio
+
+**Contexto**. El 13/09/2026 el equipo de Prometheus aplicó `Resource.create()`
+y, por decisión propia, **retiró su pila de observabilidad entera** —Loki,
+Promtail, Tempo y su Grafana—. Con ella se fue el colector por defecto: su
+código tenía `http://tempo:4318` codificado como respaldo y ya no lo tiene. Sin
+`OTEL_EXPORTER_OTLP_ENDPOINT`, **no exportan nada, en silencio y a propósito**.
+
+**Decisión**. `prometheus-inference-platform` pasa a `activo`, que es lo que
+enciende la sonda de silencio: 15 minutos sin métricas de un componente abren
+un incidente `page`. La sonda mira **métricas y no trazas**, porque las trazas
+pasan por muestreo y un servicio con poco tráfico puede tener todos sus spans
+descartados legítimamente.
+
+**Consecuencias**. Ya no hay una segunda pila que desmienta un silencio, así que
+el canario deja de ser una red de seguridad y pasa a ser **la** red.
+
+**El límite, dicho claro**: la sonda detecta que un servicio **deja** de emitir,
+no que **nunca** empezó. Un endpoint mal configurado desde el arranque es
+indistinguible de «no está desplegado». El primer despliegue hay que
+confirmarlo mirando.
+
+---
+
+## D-047 · Renombrar una aplicación es una ventana, no un corte
+
+**Contexto**. Prometheus pidió cambiar `service.namespace` de
+`edge-ai-inference` a `prometheus-inference-platform` —y no a `prometheus` a
+secas, porque aquí dentro conviven PromQL, `prometheusremotewrite` y
+VictoriaMetrics—. La variable la pone **su** despliegue, así que entre el
+acuerdo y su redespliegue llegan los dos nombres a la vez.
+
+**Decisión**. El registro admite `alias: [...]`. Un namespace en la lista se
+atiende con la identidad nueva: conserva criticidad, canales y runbook, y no
+dispara el aviso de «servicio no registrado».
+
+**Y el arreglo que hizo falta de verdad**: la señal se **normaliza a la
+identidad resuelta** antes de calcular la huella. La huella se construye con la
+aplicación, así que sin eso el mismo fallo del mismo servicio abría **dos**
+incidentes —uno por nombre— y notificaba dos veces durante toda la ventana. La
+correlación por topología tampoco habría encontrado las dependencias, que el
+registro declara con el nombre nuevo.
+
+**Consecuencias**. Un alias que choca con el id de otra aplicación se descarta
+con un error en el log: perder el renombrado es mucho menos malo que dejar una
+aplicación entera en la sombra. El alias es temporal por definición y se retira
+cuando el nombre viejo deja de aparecer (S-04).
+
+---
+
+## D-048 · Un componente declarado pero sin conectar no se vigila
+
+**Contexto**. Marcar Prometheus como `activo` habría abierto tres incidentes en
+el primer minuto: `gateway`, `manager-api` y `manager-core` están en el registro
+—son el plan del piloto— pero nunca han emitido.
+
+**Decisión**. Los componentes admiten `estado`. Solo los `activo` generan sonda
+de silencio.
+
+**Consecuencias**. El registro sigue siendo el catálogo completo, incluido lo
+planificado, sin que planificar cueste alertas. Alertar de que calla algo que
+nunca ha hablado es como se le enseña a la guardia a ignorar al canario, y la
+fatiga de alertas es el problema dominante de 2026 (§2.12 del plan).

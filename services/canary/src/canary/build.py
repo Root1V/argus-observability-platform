@@ -87,11 +87,22 @@ def _sondas_silencio(settings: Settings) -> list[SondaSilencio]:
         for componente in app.get("componentes", []):
             # El registro admite `[{id: x, rol: y}]` y tambien `[{id: x}]`.
             if isinstance(componente, str):
-                comp_id, rol = componente, "api"
+                comp_id, rol, estado = componente, "api", "activo"
             else:
-                comp_id, rol = componente["id"], componente.get("rol", "api")
+                comp_id = componente["id"]
+                rol = componente.get("rol", "api")
+                estado = componente.get("estado", "activo")
 
             if rol in ROLES_SIN_LATIDO:
+                continue
+
+            # Una aplicacion puede estar activa con parte de sus componentes
+            # todavia sin conectar: el piloto de Prometheus conecto primero
+            # `auth-service` y dejo `gateway` y el `manager` para despues.
+            # Vigilar el silencio de algo que nunca ha emitido es alertar de
+            # algo que ya sabes, y es como se ensena a la guardia a ignorar al
+            # canario.
+            if estado != "activo":
                 continue
 
             sondas.append(

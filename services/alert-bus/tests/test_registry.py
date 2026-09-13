@@ -197,3 +197,72 @@ async def test_el_ticker_recarga_el_registro(tmp_path) -> None:
 
     assert registro.channels_for("a", Severity.PAGE) == ["gchat"], \
         "el registro es datos: cambiar un canal no debe exigir reiniciar"
+
+
+def _escribir(ruta, entradas) -> None:
+    import yaml
+    ruta.write_text(yaml.safe_dump(entradas, allow_unicode=True), encoding="utf-8")
+
+
+def test_un_namespace_antiguo_se_atiende_con_la_identidad_nueva(tmp_path) -> None:
+    """Renombrar una aplicacion no es un corte seco.
+
+    El `service.namespace` lo pone el despliegue de OTRO repositorio, asi que
+    entre que se acuerda el nombre y se redespliega conviven los dos valores.
+    Sin alias, el viejo entra como `provisional` y pierde criticidad, canales y
+    runbook: un renombrado planificado se convierte en una degradacion.
+    """
+    ruta = tmp_path / "apps.yaml"
+    _escribir(ruta, [{
+        "id": "prometheus-inference-platform",
+        "alias": ["edge-ai-inference"],
+        "estado": "activo",
+        "criticidad": "alta",
+        "canales": {"page": ["email"]},
+        "componentes": [{"id": "auth-service", "rol": "api"}],
+    }])
+    registro = Registry(ruta)
+
+    app, nueva = registro.resolve("edge-ai-inference", "auth-service")
+
+    assert nueva is False, "el nombre viejo no es un servicio desconocido"
+    assert app.id == "prometheus-inference-platform"
+    assert app.criticality == "alta"
+    assert registro.channels_for("edge-ai-inference", Severity.PAGE) == ["email"]
+
+
+def test_un_alias_no_puede_tapar_a_otra_aplicacion(tmp_path) -> None:
+    """Un alias que choca con un id real dejaria esa aplicacion en la sombra.
+
+    Perder el renombrado es mucho menos malo que perder una aplicacion entera,
+    asi que gana el id y el alias se descarta.
+    """
+    ruta = tmp_path / "apps.yaml"
+    _escribir(ruta, [
+        {"id": "a", "estado": "activo", "criticidad": "alta",
+         "componentes": [{"id": "api"}]},
+        {"id": "b", "alias": ["a"], "estado": "activo", "criticidad": "baja",
+         "componentes": [{"id": "api"}]},
+    ])
+    registro = Registry(ruta)
+
+    app, nueva = registro.resolve("a", "api")
+    assert app.id == "a" and app.criticality == "alta"
+    assert nueva is False
+
+
+def test_el_alias_desaparece_al_retirarlo(tmp_path) -> None:
+    """El alias es temporal por definicion: se retira cuando deja de llegar."""
+    ruta = tmp_path / "apps.yaml"
+    _escribir(ruta, [{"id": "nueva", "alias": ["vieja"], "estado": "activo",
+                      "componentes": [{"id": "api"}]}])
+    registro = Registry(ruta)
+    assert registro.get("vieja") is not None
+
+    time.sleep(0.01)
+    _escribir(ruta, [{"id": "nueva", "estado": "activo",
+                      "componentes": [{"id": "api"}]}])
+    registro.reload_if_changed()
+
+    _, nueva = registro.resolve("vieja", "api")
+    assert nueva is True, "sin alias, el nombre viejo vuelve a ser un desconocido"
