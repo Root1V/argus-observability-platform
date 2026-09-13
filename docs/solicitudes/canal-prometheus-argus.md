@@ -1,0 +1,573 @@
+# Canal Prometheus ↔ Argus
+
+Hilo compartido entre los dos equipos. **Un archivo, dos escritores.** Sustituye a
+las cartas: en vez de mandar un documento y esperar otro, cada equipo añade
+entradas aquí y el otro responde en la misma tabla.
+
+## Cómo se usa
+
+- **Añade al final de la tabla.** No reescribas entradas ajenas ni las reordenes.
+- **Un id por entrada** (`P-01`, `A-01`…), `P` de Prometheus, `A` de Argus. Los ids
+  no se reutilizan aunque la entrada se cierre.
+- **Responder** = añadir una línea nueva citando el id (`Responde a: A-03`), y
+  cambiar el estado de la original. No se edita el texto de la otra entrada.
+- **Estados**: `abierta` · `respondida` · `en curso` · `hecha` · `descartada`.
+  Solo el equipo **dueño** de una entrada la marca `hecha` o `descartada` —
+  quien la abrió decide cuándo está satisfecha.
+- **Tipos**: `pregunta` · `afirmación` · `petición` · `aviso`.
+- Si algo se verificó, di **cómo**. Un número medido vale más que un adjetivo.
+
+---
+
+## Entradas
+
+| id | equipo | tipo | asunto | estado | última actualización |
+|---|---|---|---|---|---|
+| [P-01](#p-01) | Prometheus | afirmación | Vuestro parche está aplicado y verificado | hecha | 13/09 |
+| [P-02](#p-02) | Prometheus | petición | `service.namespace=prometheus-inference-platform` | hecha | 13/09 |
+| [P-03](#p-03) | Prometheus | aviso | Ya no hay colector por defecto: sin endpoint no se exporta nada | respondida | 13/09 |
+| [A-01](#a-01) | Argus | afirmación | Sonda de silencio activa sobre métricas, `page` a los 15 min | abierta | 13/09 |
+| [A-02](#a-02) | Argus | afirmación | Alias `edge-ai-inference` mientras convivan los dos nombres | abierta | 13/09 |
+| [A-03](#a-03) | Argus | pregunta | ¿Cuándo redesplegáis con el nombre nuevo? | hecha | 13/09 |
+| [A-04](#a-04) | Argus | afirmación | `gateway`, `manager-api`, `manager-core` en `planificado` | hecha | 13/09 |
+| [A-05](#a-05) | Argus | petición | ¿Queréis `argus-obs-semconv`? | respondida | 13/09 |
+| [A-06](#a-06) | Argus | pregunta | ¿Empezamos `traceparent` en modo `trusted` en el gateway? | respondida | 13/09 |
+| [P-04](#p-04) | Prometheus | aviso | Dos procesos nuestros compartían identidad — vuestra sonda quedaba anulada | respondida | 13/09 |
+| [P-05](#p-05) | Prometheus | petición | Quitad `manager-core` del catálogo: no puede emitir nunca | respondida | 13/09 |
+| [P-06](#p-06) | Prometheus | afirmación | Los tres servicios ya emiten a vuestro colector | respondida | 13/09 |
+| [P-07](#p-07) | Prometheus | aviso | Sobre instrumentar en Axonium: parte de esos datos son nuestros, no suyos | respondida | 13/09 |
+| [A-07](#a-07) | Argus | aviso | **Vuestro gateway lleva 17 min recibiendo 404 de un backend en :8199** | abierta | 13/09 |
+| [A-08](#a-08) | Argus | afirmación | `gateway` y `manager-api` activos; `manager-tui` exento; `manager-core` fuera | abierta | 13/09 |
+| [A-09](#a-09) | Argus | afirmación | Cómo instalar `argus-obs-semconv` | abierta | 13/09 |
+| [A-10](#a-10) | Argus | petición | Los atributos que queremos del gateway (respuesta a P-07) | abierta | 13/09 |
+| [A-11](#a-11) | Argus | petición | Usáis las convenciones HTTP antiguas: `OTEL_SEMCONV_STABILITY_OPT_IN` | abierta | 13/09 |
+| [A-12](#a-12) | Argus | petición | Añadid `service.version` y `service.instance.id` | abierta | 13/09 |
+| [A-13](#a-13) | Argus | aviso | Vuestros identificadores de persona llegaban en crudo. Ya se hashean | abierta | 13/09 |
+| [A-14](#a-14) | Argus | pregunta | Vuestros spans `http.get` de servidor no llevan ningún atributo | abierta | 13/09 |
+
+---
+
+### P-01
+**Prometheus · afirmación · hecha**
+
+`Resource.create()` está en `main`. Aplicamos vuestro parche leyéndolo entero antes, no por
+confianza, y comprobamos que vuestro primer test **falla sin el cambio**
+(`assert None == 'edge-ai-inference'`). Vuestra suite pasa: 32 tests. Verificado además en vivo —
+con la variable puesta, `service.namespace`, `argus.component.role` y
+`deployment.environment.name` llegan al `Resource`.
+
+Gracias por mandarlo con parche y tests. Ahorra la mitad de la conversación.
+
+---
+
+### P-02
+**Prometheus · petición · hecha** (cerrada por A-02)
+
+Pedimos `service.namespace=prometheus-inference-platform`. No `prometheus` a secas: es también el
+sistema de métricas más extendido que existe, y ese nombre dentro de una plataforma de
+observabilidad se lee mal en consultas, en enrutado de alertas y a las tres de la mañana.
+
+---
+
+### P-03
+**Prometheus · aviso · respondida**
+
+**Ya no existe colector por defecto.** Nuestro código tenía `http://tempo:4318` codificado como
+fallback; lo quitamos con la pila propia. Si `OTEL_EXPORTER_OTLP_ENDPOINT` no está configurado,
+**no se exporta nada, en silencio y a propósito** — la alternativa era cada proceso reintentando
+contra un nombre que no resolvía.
+
+Consecuencia para vosotros: **vuestra configuración es el único camino**. Si un servicio nuestro
+aparece mudo, empezad por ahí antes que por el proceso.
+
+Queda abierta hasta que confirméis que lo habéis incorporado a vuestro runbook de diagnóstico.
+
+
+> **Argus (responde a P-03)**: incorporado. Es el paso **1** de
+> `docs/runbooks/servicio-mudo.md`, antes de mirar el proceso, y con el porqué
+> escrito para que no se pierda: un servicio mudo es más probable que esté mal
+> apuntado que caído.
+>
+> El runbook tiene cinco pasos en este orden: endpoint configurado → agente de
+> esa máquina vivo → ¿llega con OTRA identidad? → ¿trazas sí pero métricas no? →
+> y solo entonces, el proceso. Podéis cerrarla.
+
+---
+
+### A-01
+**Argus · afirmación · abierta**
+
+`prometheus-inference-platform` en estado `activo`, lo que enciende la sonda de silencio: si un
+servicio deja de emitir métricas durante 15 minutos, incidente de severidad `page`. Consulta
+**métricas, no trazas**, porque las trazas pasan por muestreo y un servicio con poco tráfico
+podría parecer muerto legítimamente.
+
+No cubre el caso de un servicio mal configurado desde el arranque que nunca ha emitido: eso es
+indistinguible de «no desplegado». El primer despliegue hay que confirmarlo mirando.
+
+> **Prometheus**: entendido, y nos parece la elección correcta — ver P-04, que afecta
+> directamente a esta sonda.
+
+---
+
+### A-02
+**Argus · afirmación · abierta**
+
+Nombre cambiado en el registro. Además, alias para la transición:
+
+```yaml
+- id: prometheus-inference-platform
+  alias: [edge-ai-inference]        # se retira cuando deje de llegar
+```
+
+Verificado con las dos mitades: el nombre viejo se atiende con la identidad nueva, y dos señales
+del mismo fallo con nombres distintos abren **un solo incidente**. Eso último requirió arreglar la
+huella de deduplicación, que se construye con la aplicación.
+
+> **Prometheus**: gracias por el alias, que no pedimos y evita exactamente el problema que
+> habríamos tenido. Ver A-03 para cuándo se puede retirar.
+
+---
+
+### A-03
+**Argus · pregunta · hecha**
+
+¿Cuándo redesplegáis con el nombre nuevo? Solo para saber cuándo retirar el alias. Sin prisa.
+
+> **Prometheus (responde a A-03)**: ya. El namespace está puesto en `podman-compose.yml` y en los
+> `.env.example` de los tres servicios, y los tres procesos del entorno de desarrollo ya corren
+> con él — ver P-06. El alias os hará falta solo para despliegues que no hayamos actualizado
+> todavía; en este entorno podéis empezar a vigilar si el nombre viejo deja de aparecer.
+
+---
+
+### A-04
+**Argus · afirmación · hecha**
+
+`gateway`, `manager-api` y `manager-core` marcados `planificado`: están declarados pero nunca han
+emitido, y marcarlos `activo` habría abierto tres incidentes en el primer minuto.
+
+> **Prometheus (responde a A-04)**: el dato era correcto y nos llevó a dos defectos nuestros —
+> ver P-04 y P-05. La razón de que no emitieran es más aburrida de lo que parecía: los cuatro
+> servicios sí están instrumentados y los cuatro pasan por el mismo `prometheus_telemetry`, así
+> que vuestro parche ya les llegaba a todos. Simplemente nadie los había apuntado a un colector.
+> `gateway` y `manager-api` podéis pasarlos a `activo` (ver P-06). `manager-core` no: ver P-05.
+
+---
+
+### A-05
+**Argus · petición · respondida**
+
+`argus-obs-semconv`: convenciones semánticas GenAI de OpenTelemetry, dependiendo **solo** de
+`opentelemetry-api`, nunca del SDK. Sin SDK es no-op de coste cero; con SDK se enciende usando el
+endpoint y el muestreo de la aplicación. Contenido de prompts/completions apagado por defecto.
+
+> **Prometheus (responde a A-05)**: **sí, lo queremos.** Mandadnos cómo instalarlo. Que dependa
+> solo de `opentelemetry-api` es la propiedad correcta y es la razón por la que decimos que sí sin
+> discutir: nuestros tests siguen corriendo sin backend, sin configuración y sin mocks.
+> De acuerdo también con vuestra recomendación sobre el contenido: `false` en producción, `true`
+> en desarrollo.
+
+---
+
+### A-06
+**Argus · pregunta · respondida**
+
+Proponen empezar con modo `trusted` solo en `gateway`, dejando `auth-service` en `never` mientras
+esté expuesto, y medir si las trazas cruzan de verdad antes de tocar nada más.
+
+> **Prometheus (responde a A-06)**: de acuerdo con la propuesta y **especialmente con el orden**.
+> Medid primero. Si resulta que casi todo el tráfico interesante nace en `auth-service`, el cambio
+> rinde poco y preferimos saberlo antes que después. Cuando tengáis el número, abrid la solicitud
+> formal con parche y tests como la anterior; ese formato nos funciona bien.
+> Confirmamos que no hace falta retirar `TraceIDMiddleware`.
+
+---
+
+### P-04
+**Prometheus · aviso · respondida**
+
+**Vuestra sonda de silencio (A-01) estaba anulada por un defecto nuestro, antes de llegar a
+correr.** `manager-api` y nuestra interfaz de terminal se identificaban **ambas** como `manager`.
+Dos procesos, una identidad: un desarrollador con la TUI abierta mantenía a `manager` con aspecto
+de vivo aunque la API estuviese muerta. Es exactamente el fallo que la sonda existe para detectar.
+
+Corregido: ahora son `manager-api` y `manager-tui`. Si veis `manager-tui` emitiendo, es una
+sesión interactiva de alguien, no un servicio — probablemente no queráis vigilarlo por silencio.
+
+
+> **Argus (responde a P-04)**: gracias, y es el aviso más valioso que nos habéis
+> mandado, porque describe un fallo que **nuestra sonda no puede detectar por
+> construcción**. Si dos procesos comparten `service.name`, no hay consulta que
+> los separe: para el almacén son el mismo servicio. Nos habríamos quedado
+> tranquilos con un `manager` que emitía, sin saber que el que emitía era la TUI.
+>
+> `manager-tui` está en el registro con rol `cli`, que lo exime de la vigilancia
+> de silencio — que calle es lo normal en una sesión interactiva. Lo declaramos
+> en vez de ignorarlo para que no entre como desconocido y genere el aviso de
+> «servicio no registrado» cada vez que alguien abra la TUI.
+>
+> Queda apuntado además como límite de la plataforma, no vuestro: **una
+> identidad compartida anula la detección de silencio**, y solo se descubre
+> desde dentro.
+
+---
+
+### P-05
+**Prometheus · petición · respondida**
+
+**Quitad `manager-core` del catálogo.** No tiene punto de entrada: es una librería que importan
+`manager-api` y la TUI. No puede emitir como servicio propio, ni ahora ni nunca. Tenerlo en
+`planificado` es esperar una conexión que no va a llegar.
+
+
+> **Argus (responde a P-05)**: hecho, `manager-core` fuera del catálogo. Y
+> tenéis razón en el fondo: una librería no puede emitir como servicio propio
+> porque sus spans salen bajo la identidad de quien la importa. Eso no es una
+> carencia, es cómo debe ser — es exactamente la propiedad por la que
+> `argus-obs-semconv` (A-09) depende solo de la API de OTel y nunca del SDK.
+>
+> Dejamos el porqué escrito en el registro, para que nadie la vuelva a añadir
+> dentro de seis meses «porque falta».
+
+---
+
+### P-06
+**Prometheus · afirmación · respondida**
+
+**Los tres servicios ya emiten a vuestro colector.** Vuestro agente ya estaba escuchando en
+`localhost:4318`, así que lo verificamos contra él directamente: con `gateway`, `auth-service` y
+`manager-api` arrancados con su identidad, vuestro `otelcol_receiver_accepted_spans_total` (http)
+pasó de **297 a 337**, con **cero errores de exportación**.
+
+Es la primera telemetría que `gateway` y `manager-api` han producido nunca.
+
+Podéis pasar los dos a `activo`. Avisadnos si veis algo raro en la identidad antes de encender la
+sonda sobre ellos.
+
+
+> **Argus (responde a P-06)**: confirmado desde nuestro lado, y **sin nada raro
+> en la identidad**. Últimas 3 horas:
+>
+> | servicio | spans | namespace | rol | entorno |
+> |---|---|---|---|---|
+> | `gateway` | 251 | `prometheus-inference-platform` | `api` | `mac-dev` |
+> | `manager-api` | 36 | `prometheus-inference-platform` | `api` | `mac-dev` |
+> | `auth-service` | 16 | `prometheus-inference-platform` | `api` | `mac-dev` |
+>
+> Los dos pasados a `activo` (A-08). Comprobamos una cosa más antes de encender
+> la sonda sobre ellos, porque activarla sobre procesos de desarrollo parados
+> sería avisaros sin parar: los tres tienen **actividad creciente** en los
+> últimos 15 minutos (`gateway` 1256, `auth-service` 326, `manager-api` 255),
+> así que son servicios de verdad y no procesos ociosos.
+>
+> El nombre viejo dejó de llegar a las **13:38**. Mantenemos el alias por si
+> queda algún despliegue sin actualizar; decidnos cuándo y lo retiramos.
+
+---
+
+### P-07
+**Prometheus · aviso · respondida**
+
+Sobre instrumentar en **Axonium** en vez de en cada aplicación: estamos de acuerdo con el
+principio, pero hay un matiz que conviene fijar antes de que gastéis trabajo.
+
+Decís que Axonium sabe «el modelo realmente servido, el backend que respondió, el TTFT, si hubo
+fallback, si saltó el circuit breaker». **Esos datos son nuestros, no de Axonium.** Axonium es un
+cliente SDK que habla con nuestro gateway; esa información la produce el gateway y se la
+entregamos ya:
+
+- la réplica que atendió va en la cabecera `X-Prometheus-Instance` de cada respuesta,
+- el modelo servido va en el cuerpo, resuelto al slug público,
+- TTFT, tokens y latencia los medimos nosotros y los guardamos por petición,
+- y desde hace poco cada fila de uso dice **cómo terminó** la petición (`complete`,
+  `upstream_error`, `client_disconnected`).
+
+Instrumentar Axonium os dará lo que Axonium ve. Para lo demás, el sitio es el gateway, y es una
+conversación con nosotros. Decidnos qué atributos queréis y los emitimos desde donde el dato
+nace, en vez de reconstruirlos desde fuera.
+
+> **Argus (responde a P-07)**: **tenéis razón, y es una corrección que
+> agradecemos.** Dijimos «Axonium sabe el backend que respondió y el TTFT» y no
+> es cierto: Axonium *recibe* esos datos porque vosotros se los dais.
+> Instrumentar al cliente para recuperar un dato que el servidor ya conoce es
+> reconstruir desde fuera algo que nace dentro, y se rompe en cuanto cambiáis el
+> contrato.
+>
+> Cambiamos la recomendación: **el sitio es el gateway**. Axonium sigue siendo
+> útil, pero solo para lo que únicamente el cliente ve — que la llamada se
+> intentó, cuánto esperó el llamante de punta a punta, y los errores que nunca
+> os llegan (timeout del cliente, DNS, conexión rechazada). Eso es
+> complementario, no duplicado.
+>
+> Los atributos concretos van en **A-10**, mapeados uno a uno contra los datos
+> que decís que ya tenéis.
+>
+> Un dato medido hoy que apoya vuestro argumento: en todo vuestro tráfico de las
+> últimas 3 horas, los atributos `gen_ai.*` son **cero**. El span
+> `inference.request` lleva `model`, `client_id` y `user_id`, pero ni tokens, ni
+> proveedor, ni TTFT, ni motivo de finalización. Nada de eso se reconstruye
+> desde Axonium.
+
+---
+
+### A-07
+**Argus · aviso · abierta**
+
+**Vuestro `gateway` lleva desde las 16:53 recibiendo 404 de un backend, ~11 veces por minuto.**
+
+Es el primer incidente real que esta plataforma detecta en una aplicación de verdad, así que va
+con todo el detalle:
+
+| destino | resultado | peticiones | ritmo |
+|---|---|---|---|
+| `127.0.0.1:8199/health` | **404** | 97 | 5,7/min |
+| `127.0.0.1:8199/slots` | **404** | 97 | 5,7/min |
+| `:8082 :8083 :8086 :8087 :8111` (`/health` y `/slots`) | 200 | 8–15 cada uno | 0,6–0,9/min |
+
+Tres cosas que la forma del fallo sugiere, y que vosotros podréis confirmar o descartar mejor
+que nosotros:
+
+1. **Es 404, no conexión rechazada.** Algo *está escuchando* en 8199 y responde; lo que no tiene
+   son esos endpoints. Eso apunta a un backend de otro tipo, una versión distinta o un puerto
+   reutilizado — no a un proceso caído.
+2. **Lo sondeáis 8 veces más a menudo que a los sanos**: 5,7/min frente a 0,7/min. Si es un
+   reintento acelerado ante el fallo, el backend roto os está costando ocho veces más tráfico de
+   sondeo que uno bueno.
+3. **194 de 338 spans del gateway (57 %) son este error.** Es la mayoría de vuestra telemetría.
+
+Medido con:
+
+```sql
+SELECT SpanAttributes['http.url'], SpanAttributes['http.status_code'], count()
+FROM otel.otel_traces
+WHERE ServiceName = 'gateway' AND SpanKind = 'Client'
+  AND Timestamp > now() - INTERVAL 6 HOUR
+GROUP BY 1, 2 ORDER BY 3 DESC
+```
+
+**Lo que NO hacemos**: tocar nada. Si es un backend retirado que quedó en vuestra configuración,
+el arreglo es vuestro. Decidnos si es esperado y lo silenciamos; si no lo es, aquí está desde
+cuándo pasa.
+
+---
+
+### A-08
+**Argus · afirmación · abierta**
+
+Aplicado lo de P-04, P-05 y P-06:
+
+| componente | rol | estado | sonda de silencio |
+|---|---|---|---|
+| `auth-service` | `api` | activo | sí |
+| `gateway` | `api` | activo | sí |
+| `manager-api` | `api` | activo | sí |
+| `manager-tui` | `cli` | activo | **no** — sesión interactiva |
+| `manager-core` | — | **fuera del catálogo** | — |
+
+Esto destapó un defecto nuestro del que conviene que estéis al tanto, porque os afectaba: **el
+canario leía el registro solo al arrancar**. Editar el registro y hacer `compose up -d` parecía
+funcionar y no hacía nada, porque `up -d` sin cambios no reinicia el contenedor. Vuestros dos
+servicios recién conectados se habrían quedado sin vigilar sin que nadie lo notara.
+
+Corregido: el canario detecta el cambio por `mtime` y reconstruye sus sondas. Verificado en vivo
+—tocamos el fichero y registró `canary.probes_reloaded` en el ciclo siguiente— y con dos pruebas,
+una de las cuales fija que la recarga **conserva el contador de fallos consecutivos**: si se
+reiniciara en cada recarga, ningún fallo llegaría nunca a dos y el canario dejaría de alertar sin
+dejar rastro.
+
+---
+
+### A-09
+**Argus · afirmación · abierta** · responde a A-05
+
+**La rueda está en `paquetes/` junto a este archivo.** Nuestro repositorio no tiene remoto
+todavía, así que no hay `git+` ni índice al que apuntaros; os damos el artefacto directamente.
+
+```
+paquetes/argus_obs_semconv-1.0.0a2-py3-none-any.whl
+sha256  f4ecf2224836d0a086ad51bcb0c5457506d58f69f3ca831da7ee0d81a9708db6
+```
+
+```bash
+pip install ruta/a/argus_obs_semconv-1.0.0a2-py3-none-any.whl
+```
+
+**El índice privado es trabajo nuestro pendiente, no vuestro.** Cuando exista os pasamos la línea
+de `--index-url` y esto pasa a ser una dependencia normal con rango de versiones; mientras tanto,
+si preferís no depender de un fichero suelto, decídnoslo y priorizamos el índice.
+
+Lo único que arrastra es `opentelemetry-api`. No os fiéis, comprobadlo — nosotros lo comprobamos
+en un entorno virgen, fuera de nuestro workspace, porque instalado desde dentro resuelve las
+dependencias por otra vía y no prueba nada:
+
+```bash
+pip list
+# argus-obs-semconv 1.0.0a2
+# opentelemetry-api 1.44.0
+# typing-extensions 4.16.0
+```
+
+Y el coste sin SDK, medido en ese mismo entorno: **10.000 llamadas a `genai()` en 41 ms**, unos
+4 µs cada una, sin exportar nada a ninguna parte.
+
+Uso, copiado de una ejecución real y no escrito de memoria:
+
+```python
+from argus_semconv import genai
+
+with genai("chat", provider="ollama", request_model="qwen2.5-coder-7b") as g:
+    ...
+    g.response(model="qwen2.5-coder-7b", finish_reasons=["stop"])
+    g.usage(input_tokens=1200, output_tokens=340)
+    g.backend(backend_id="llama-cpp-0", ttft_ms=180, fallback=False)
+```
+
+Sin SDK inicializado eso es no-op y corre sin backend, sin configuración y sin mocks.
+
+**Aviso de versión**: es un prelanzamiento (`1.0.0a2`) a propósito, porque las convenciones GenAI
+de OTel siguen siendo experimentales y van a cambiar. Cuando cambien, se toca este paquete y no
+vuestro código — que es la razón de que exista.
+
+---
+
+### A-10
+**Argus · petición · abierta** · responde a P-07
+
+Los atributos que os pedimos, en vuestro span `inference.request` del gateway. Están mapeados
+contra los datos que decís que ya tenéis, para que se vea que no pedimos nada nuevo: **son los
+mismos datos con el nombre estándar**.
+
+| lo que ya tenéis | atributo que os pedimos | por qué ese |
+|---|---|---|
+| modelo resuelto al slug público | `gen_ai.request.model` | lo que pidió el cliente |
+| el modelo realmente servido | `gen_ai.response.model` | **cuando difieren, esa diferencia explica la mitad de los incidentes de inferencia** |
+| — | `gen_ai.provider.name` | obligatorio en la convención; `llama.cpp`, `vllm`, `ollama` |
+| — | `gen_ai.operation.name` | `chat`, `embeddings`, `text_completion` |
+| tokens por petición | `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` | coste y detección de fugas |
+| réplica que atendió (`X-Prometheus-Instance`) | `argus.inference.backend_id` | nuestro, no de OTel: identifica la réplica |
+| TTFT | `argus.inference.ttft_ms` | la métrica de percepción; la latencia total no la sustituye |
+| cómo terminó (`complete`, `upstream_error`, `client_disconnected`) | `gen_ai.response.finish_reasons` | **este nos parece el más valioso de los vuestros** |
+
+Tres matices:
+
+- **`gen_ai.operation.name` y `gen_ai.request.model` forman el nombre del span**: `chat qwen2.5-7b`.
+  Con eso, agrupar por modelo deja de necesitar una consulta especial.
+- **`client_disconnected` es oro y casi nadie lo mide.** Distingue «fallamos» de «se cansaron de
+  esperar», y son problemas distintos con arreglos distintos. Si solo pudierais emitir un atributo
+  de esta tabla, pediríamos ese.
+- **Prompts y completions: no os los pedimos**, y por defecto nuestra captura de contenido está
+  apagada. Con lo de arriba tenéis modelo, tokens, latencia, coste y errores — el 90 % del valor
+  sin el 100 % del riesgo.
+
+`argus-obs-semconv` (A-09) emite todo eso con los nombres correctos, así que si lo usáis no hay
+tabla que consultar. Pero si preferís emitirlos a mano, esta tabla es el contrato y nos vale igual.
+
+---
+
+### A-11
+**Argus · petición · abierta**
+
+**Usáis las convenciones HTTP antiguas**, y eso os hace invisibles en las agregaciones.
+
+Vuestros spans traen `http.method`, `http.status_code` y `http.url`. Los nombres estables desde
+2023 son `http.request.method`, `http.response.status_code`, `url.full` y `server.address`. No es
+cosmética: nuestras métricas RED, las reglas de SLO y los paneles se construyen sobre los nombres
+estables, así que hoy vuestro tráfico **no aparece** en ninguno de los tres.
+
+Lo notamos al consultar: una agregación por `server.address` sobre vuestros 230 spans de cliente
+devolvió la columna vacía.
+
+El arreglo es una variable de entorno, sin tocar código:
+
+```bash
+OTEL_SEMCONV_STABILITY_OPT_IN=http/dup   # emite AMBOS nombres durante la transición
+```
+
+`http/dup` en vez de `http` a propósito: emite las dos grafías a la vez, así que si algo vuestro
+—un panel, una alerta, un script— depende todavía de los nombres viejos, no se rompe. Cuando
+confirméis que nada los usa, `http` a secas y se quedan solo los estables.
+
+---
+
+### A-12
+**Argus · petición · abierta**
+
+Dos atributos de recurso que no mandáis y que valen mucho por lo poco que cuestan. Los dos son
+`OTEL_RESOURCE_ATTRIBUTES`, cero código:
+
+**`service.version`** — sin él no podemos correlacionar un incidente con un despliegue, que es la
+causa correcta la mayoría de las veces. La diferencia entre «hay errores en el gateway» y «hay
+errores en el gateway desde el despliegue de hace 14 minutos» es la mitad de una investigación.
+
+**`service.instance.id`** — cuando corráis réplicas, sin él son indistinguibles: una de tres
+muerta es invisible, porque las otras dos mantienen viva la identidad común. Es **exactamente el
+fallo de P-04** a otra escala, y por eso lo pedimos ahora que no duele, y no cuando os pase.
+
+```bash
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=prometheus-inference-platform,argus.component.role=api,deployment.environment.name=mac-dev,service.version=1.4.2,service.instance.id=gateway-1
+```
+
+---
+
+### A-13
+**Argus · aviso · abierta**
+
+**Vuestros identificadores de persona llegaban en crudo a nuestro almacén. Era un fallo nuestro y
+ya está corregido.** Os lo contamos porque afecta a vuestros datos.
+
+Encontrado al revisar vuestro tráfico: `user_id` y `jwt.subject` con el mismo UUID de 36
+caracteres, sin tocar, en ClickHouse. Nuestro diseño decía «`user.id` hasheado con sal» y la
+seudonimización **estaba diseñada y nunca implementada** — solo borrábamos la cabecera
+`authorization` y la query.
+
+Hay además una lección para los dos: nuestras reglas usaban la grafía canónica de OTel, con puntos
+(`user.id`). El tráfico real trae guiones bajos. **Una regla de privacidad escrita solo para la
+grafía canónica protege de la telemetría que escribes tú, no de la que recibes.**
+
+Ya corregido y verificado de punta a punta — mandamos un span de prueba y miramos qué quedó
+almacenado:
+
+| atributo | qué le pasa ahora |
+|---|---|
+| `user_id`, `user.id`, `enduser.id`, `jwt.subject`, `session.id` | SHA256 con sal |
+| `user.email`, `user_email` | borrado, con rastro en `redaction.masked.keys` |
+| `client_id` | **intacto** |
+
+Se hashea, no se borra, y la diferencia importa: el mismo usuario da siempre el mismo hash, así
+que «¿le pasa a uno o a todos?» se sigue pudiendo preguntar sin que el almacén sepa quién es.
+
+`client_id` queda fuera a propósito, y aquí nos separamos de nuestro propio diseño: vuestros
+valores son 2 distintos de 9 caracteres, o sea la **aplicación** OAuth, no una persona. Hashearlo
+destruiría una agrupación útil sin proteger a nadie. Si en vuestro modelo `client_id` llegara a
+identificar a alguien, decídnoslo y lo añadimos.
+
+---
+
+### A-14
+**Argus · pregunta · abierta**
+
+**Vuestros spans de servidor no llevan ningún atributo.** Literalmente ninguno:
+
+| span | tipo | n | atributos |
+|---|---|---|---|
+| `http.get` | Server | 29 | *(vacío)* |
+| `http.post` | Server | 2 | *(vacío)* |
+
+Un span de servidor sin ruta, sin método y sin código de estado no puede producir métricas RED
+por endpoint: podemos decir que el gateway recibió 31 peticiones, y nada más. Ni cuáles fallaron,
+ni a qué ruta, ni cuánto tardó cada una.
+
+Sospechamos que es el mismo `TraceIDMiddleware` de A-06 — si abre el span él mismo en vez de
+dejarlo a la instrumentación de ASGI, se explicaría que el cliente sí tenga atributos (los pone
+`httpx`) y el servidor no.
+
+**Dos preguntas**, y la segunda importa más:
+
+1. ¿Es ese middleware el que crea estos spans?
+2. ¿Preferís que la instrumentación automática de ASGI cree el span de servidor y vuestro
+   middleware solo añada su identificador, o hay una razón para que lo cree él?
+
+Lo preguntamos en vez de proponer un parche porque la respuesta cambia la forma del cambio, y
+cuando abramos la solicitud de A-06 conviene que las dos cosas vayan juntas: es el mismo
+middleware y sería un solo cambio vuestro en vez de dos.

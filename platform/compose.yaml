@@ -110,6 +110,12 @@ services:
     # con `ARGUS_COLLECTOR_CONFIGS` desde el .env, o usando compose.genai.yaml.
     command: ${ARGUS_COLLECTOR_CONFIGS:---config=/etc/otel/gateway.yaml}
     environment:
+      # Sal de la seudonimizacion. Sin ella, el hash de un UUID conocido se
+      # comprueba por fuerza bruta; con ella, el mismo usuario sigue dando el
+      # mismo hash y la agrupacion se conserva.
+      # CAMBIARLA reescribe todos los hashes futuros: los incidentes viejos
+      # dejan de agrupar con los nuevos. Es una decision, no un ajuste.
+      ARGUS_PSEUDONYM_SALT: ${ARGUS_PSEUDONYM_SALT:?define ARGUS_PSEUDONYM_SALT en .env}
       ARGUS_GATEWAY_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
       ARGUS_CLICKHOUSE_DSN: tcp://${CLICKHOUSE_USER:-argus}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/otel?dial_timeout=10s&compress=lz4
       ARGUS_LANGFUSE_ENDPOINT: ${ARGUS_LANGFUSE_ENDPOINT:-http://langfuse-web:3000/api/public/otel}

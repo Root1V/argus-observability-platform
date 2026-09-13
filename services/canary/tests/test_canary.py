@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
@@ -366,3 +367,67 @@ async def test_una_serie_congelada_es_silencio(monkeypatch) -> None:
     sonda = SondaSilencio(app="a", component="c", clickhouse_url="http://x",
                           usuario="u", password="p")
     assert (await sonda.ejecutar()).resultado is Resultado.SILENCIO
+
+
+async def test_el_canario_recarga_el_registro_sin_reiniciar(tmp_path) -> None:
+    """Derivar las sondas del registro solo al arrancar deja el registro inerte.
+
+    Y el modo de fallo es silencioso de la peor manera: `docker compose up -d`
+    sin cambios NO reinicia el contenedor, así que editar el registro y
+    redesplegar parece funcionar y no hace nada. Un componente recién conectado
+    se queda sin vigilar sin que nadie lo note.
+    """
+    import yaml
+
+    from canary.build import cargar, firma
+    from canary.config import Settings
+    from canary.probes import SondaSilencio
+
+    registro = tmp_path / "apps.yaml"
+    sondas_http = tmp_path / "probes.yaml"
+    sondas_http.write_text("[]", encoding="utf-8")
+
+    def escribir(componentes):
+        registro.write_text(yaml.safe_dump([{
+            "id": "p", "estado": "activo", "componentes": componentes,
+        }], allow_unicode=True), encoding="utf-8")
+
+    escribir([{"id": "auth-service", "rol": "api"}])
+    settings = Settings(registry_path=registro, probes_path=sondas_http)
+
+    runner = Runner(cargar(settings), alertbus_url="http://x")
+    antes = firma(settings)
+
+    time.sleep(0.01)
+    escribir([{"id": "auth-service", "rol": "api"}, {"id": "gateway", "rol": "api"}])
+
+    assert firma(settings) != antes, "el cambio del registro tiene que ser detectable"
+
+    runner.recargar(cargar(settings))
+    vigilados = {s.component for s in runner._sondas if isinstance(s, SondaSilencio)}
+    assert vigilados == {"auth-service", "gateway"}
+
+
+async def test_la_recarga_conserva_los_fallos_consecutivos(tmp_path) -> None:
+    """Reiniciar el contador en cada recarga silenciaría al canario.
+
+    Si el registro se edita más a menudo que el intervalo de sondeo, ningún
+    fallo llegaría nunca a dos consecutivos y el canario dejaría de alertar sin
+    dejar rastro.
+    """
+    from canary.probes import SondaSilencio
+
+    def sonda(componente):
+        return SondaSilencio(app="p", component=componente,
+                             clickhouse_url="http://x", usuario="u", password="p")
+
+    runner = Runner([sonda("auth-service")], alertbus_url="http://x")
+    runner._consecutivos["p/auth-service"] = 1
+    runner._consecutivos["p/se-va"] = 1
+    runner._alertados = {"p/auth-service", "p/se-va"}
+
+    runner.recargar([sonda("auth-service"), sonda("gateway")])
+
+    assert runner._consecutivos["p/auth-service"] == 1, "el que sigue vigilado conserva su cuenta"
+    assert "p/se-va" not in runner._consecutivos, "el que desaparece del registro se olvida"
+    assert runner._alertados == {"p/auth-service"}

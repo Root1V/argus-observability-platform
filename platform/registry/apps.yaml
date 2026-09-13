@@ -84,12 +84,24 @@
     # Conectado. Un servicio de autenticacion tiene que ser rapido: si tarda,
     # todo lo que hay detras tarda.
     - {id: auth-service, rol: api, slo: {p95_ms: 1000}}
-    # Declarados pero aun sin conectar: `estado: planificado` los deja fuera de
-    # la vigilancia de silencio. Si empiezan a emitir se ven igual; lo que no
-    # hacen es alertar por callar algo que nunca ha hablado.
-    - {id: gateway, rol: api, estado: planificado, slo: {p95_ms: 30000}}
-    - {id: manager-api, rol: api, estado: planificado, slo: {p95_ms: 2000}}
-    - {id: manager-core, rol: scheduler, estado: planificado}
+    # Conectados el 13/09 (P-06). Verificado en el almacen antes de encender la
+    # sonda: namespace, `service.name`, rol y entorno correctos en los tres.
+    - {id: gateway, rol: api, slo: {p95_ms: 30000}}
+    - {id: manager-api, rol: api, slo: {p95_ms: 2000}}
+    # La interfaz de terminal. Declarada para que no entre como desconocida, y
+    # con rol `cli` para que NO se le vigile el silencio: es una sesion
+    # interactiva de una persona, no un servicio. Que calle es lo normal.
+    #
+    # Existe porque compartia identidad con `manager-api` (P-04): dos procesos
+    # bajo el nombre `manager`, asi que un desarrollador con la TUI abierta
+    # mantenia vivo el aspecto de una API muerta. Lo encontro su equipo al
+    # revisar por que estos componentes no emitian.
+    - {id: manager-tui, rol: cli}
+    # `manager-core` NO esta aqui, a peticion suya (P-05): es una libreria que
+    # importan `manager-api` y la TUI, sin punto de entrada propio. No puede
+    # emitir como servicio ni ahora ni nunca; sus spans salen bajo la identidad
+    # de quien la importa. Tenerla en `planificado` era esperar una conexion
+    # que no iba a llegar.
   depende_de: [redis-main]
   tipo_ia: [llm-local]
 
