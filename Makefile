@@ -14,6 +14,19 @@ setup:  ## Instala dependencias y genera los secretos locales
 	    $$(openssl rand -hex 32) $$(openssl rand -hex 32) $$(openssl rand -hex 16) \
 	    > platform/.env && echo "platform/.env generado"; }
 
+genai:  ## Arranca el perfil GenAI: Langfuse para trazas de prompts (F1-12)
+	docker compose -f platform/compose.yaml -f platform/compose.genai.yaml --profile genai up -d
+	@echo "Esperando a Langfuse (la primera vez migra ClickHouse, tarda)..."
+	@until curl -sf http://127.0.0.1:3000/api/public/health >/dev/null 2>&1; do sleep 5; done
+	@set -a; . platform/.env; set +a; \
+	echo "  Langfuse:  http://localhost:3000"; \
+	echo "  usuario:   $$LANGFUSE_INIT_EMAIL"; \
+	echo "  clave:     $$LANGFUSE_INIT_PASSWORD"
+
+genai-check:  ## Verifica que las trazas de prompts llegan a Langfuse
+	@set -a; . platform/.env; set +a; \
+	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/verificar_langfuse.py
+
 up:  ## Arranca el plano central en modo ligero (4 contenedores)
 	$(COMPOSE) --profile lean up -d
 	@echo "Esperando a ClickHouse..."
@@ -150,4 +163,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic install-cmd deadman-setup release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
+.PHONY: help setup genai genai-check up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic install-cmd deadman-setup release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv

@@ -853,6 +853,49 @@ convenciones, que cambia por otros motivos.
 
 ---
 
+## D-039 · Langfuse se provisiona por variables de entorno, no por la UI
+
+**Estado**: ✅ Vigente
+
+**Decisión**. La organización, el proyecto y **las claves de API** de Langfuse se
+provisionan con `LANGFUSE_INIT_*` desde el `.env`. Nadie hace clic por la UI
+para que la plataforma funcione.
+
+**Por qué**. Es la misma razón que con los dashboards (D-037): lo que depende de
+que alguien hiciera clic hace seis meses se rompe al migrar de máquina. Y aquí
+había un paso manual especialmente molesto —*«crea un proyecto, copia las
+claves, codifícalas en base64 y pégalas en el .env»*— que ahora desaparece:
+`ARGUS_LANGFUSE_AUTH` se calcula al generar las credenciales.
+
+**Consecuencia**. Levantar el perfil GenAI en una máquina nueva es
+`make genai`, y el Collector se autentica desde el primer arranque.
+
+---
+
+## D-040 · MinIO viene de quay.io, no de Docker Hub
+
+**Estado**: ✅ Vigente · **descubierta al arrancar el perfil GenAI**
+
+**Contexto**. El primer arranque falló con `pull access denied for minio/minio,
+repository does not exist or may require 'docker login'`.
+
+**Causa**. MinIO **retiró sus imágenes de Docker Hub**. Ninguna etiqueta existe
+ya ahí, ni siquiera `latest`.
+
+**Por qué el error confunde**. *«pull access denied … or may require docker
+login»* sugiere un problema de credenciales sobre una imagen privada, no que el
+repositorio entero se haya mudado. Perseguir ese mensaje lleva a intentar
+autenticarse en vez de a cambiar de registro.
+
+**Decisión**. `quay.io/minio/minio`, con versión fijada como todas las demás.
+
+**La lección general**: fijar versiones protege de que una imagen cambie bajo
+tus pies, pero **no** de que desaparezca. Un `compose` que funcionaba hace
+meses puede dejar de funcionar sin que nada del repositorio cambie, y el error
+no siempre dice por qué.
+
+---
+
 ## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
 
 **Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código

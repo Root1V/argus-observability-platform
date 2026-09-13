@@ -29,7 +29,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | Fase | Título | Estado | Avance |
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
-| **F1** | Librerías y primeras apps | 🚧 | 11/14 |
+| **F1** | Librerías y primeras apps | 🚧 | 12/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
@@ -76,7 +76,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-09` | ✅ | **Prueba de la cola persistente** | 100/100 spans; sobrevive al reinicio del propio agente |
 | `F1-10` | ⏳ | Desplegar Collector agente en una **segunda máquina** | Valida D-003 de verdad |
 | `F1-11` | ⏳ | Adoptar en 3 apps reales: una API, una con worker, una Go | Go con instrumentación en compilación |
-| `F1-12` | ⏳ | Perfil `genai`: Langfuse arrancado y verificado | Solo hace falta si la app piloto usa LLM |
+| `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
 
@@ -191,7 +191,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 |---|---|---|---|
 | `X-01` | ✅ | El runbook de migración se planificó en F0 y no se hizo | Hecho y ejecutado de verdad en `F1-08` |
 | `X-02` | ⏳ | Sin CI: los tests y la validación se corren a mano | `scripts/verify.sh` es el contenido del pipeline |
-| `X-03` | ⏳ | El perfil `genai` está configurado pero nunca arrancado | `F1-12` lo cubre |
+| `X-03` | ✅ | El perfil `genai` está configurado pero nunca arrancado | Arrancado y provisionado en `F1-12` |
 | `X-04` | ⏳ | El perfil `agents` está configurado pero nunca arrancado | `F3-01` lo cubre |
 | `X-05` | ✅ | La cola persistente no se había probado con un corte real | Probada en `F1-09`, incluido reinicio del agente |
 | `X-06` | ✅ | El regex de teléfono enmascaraba `service.namespace` | D-018, corregido con tests |
@@ -217,6 +217,11 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `X-26` | ⏳ | **Ningún canal de notificación real configurado** | Único bloqueante del piloto; necesita una credencial tuya |
 | `X-27` | ✅ | Las métricas GenAI estaban definidas y **nadie las emitía** | Lo descubrió el dashboard; ahora salen solas de `genai()` |
 | `X-28` | ✅ | Los prelanzamientos publicaban paquetes mutuamente inalcanzables | D-038: PEP 440 exige límites inferiores con prelanzamiento |
+| `X-29` | ✅ | `.../dist` en la documentación se copiaba literal | `make install-cmd` imprime la ruta real; sin huecos que rellenar |
+| `X-30` | ✅ | La imagen de MinIO ya no existe en Docker Hub | D-040: migrada a quay.io; fijar versión no protege de que desaparezca |
+| `X-31` | ✅ | Langfuse intentaba crear tablas replicadas en un ClickHouse de un nodo | `CLICKHOUSE_CLUSTER_ENABLED=false` |
+| `X-32` | ✅ | `argus@localhost` no pasaba la validación de Langfuse | Sin dominio de nivel superior; el error solo decía «Invalid environment variables» |
+| `X-33` | ✅ | Langfuse no crea su bucket de S3: espera encontrarlo | Init de MinIO; el 500 solo se veía en los logs de Langfuse, no en los del Collector |
 
 ---
 
