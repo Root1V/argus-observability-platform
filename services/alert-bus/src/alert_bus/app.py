@@ -30,6 +30,7 @@ from .sinks import (
     Dispatcher,
     EmailSink,
     GoogleChatSink,
+    TelegramSink,
     JSONSink,
     MemorySink,
     Sink,
@@ -60,6 +61,15 @@ def build_sinks(settings: Settings) -> list[Sink]:
                 log.warning("sink.not_configured", extra={"sink": "gchat", "falta": "ALERTBUS_GCHAT_WEBHOOK"})
                 continue
             salidas.append(GoogleChatSink(settings.gchat_webhook))
+        elif nombre == "telegram":
+            if not (settings.telegram_token and settings.telegram_chat_id):
+                log.warning("sink.not_configured", extra={"sink": "telegram", "falta": "ALERTBUS_TELEGRAM_TOKEN / _CHAT_ID"})
+                continue
+            salidas.append(TelegramSink(
+                settings.telegram_token,
+                settings.telegram_chat_id,
+                api_base=settings.telegram_api_base,
+            ))
         elif nombre == "email":
             if not (settings.smtp_host and settings.smtp_recipients()):
                 log.warning("sink.not_configured", extra={"sink": "email", "falta": "ALERTBUS_SMTP_HOST / _SMTP_TO"})

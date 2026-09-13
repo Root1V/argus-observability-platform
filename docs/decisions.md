@@ -1266,3 +1266,46 @@ que Axonium está en cambio.
 `gen_ai.*` son cero. Su span `inference.request` lleva `model`, `client_id` y
 `user_id`, pero ni tokens, ni proveedor, ni TTFT, ni motivo de finalización.
 Nada de eso se reconstruye desde fuera.
+
+---
+
+## D-053 · El canal del piloto es Telegram, y resulta ser el mejor de los tres
+
+**Contexto**. Google bloqueó los dos caminos: los webhooks entrantes de Chat son
+una función de Workspace (D-044), y las contraseñas de aplicación siguen sin
+estar disponibles en la cuenta incluso con la verificación en dos pasos activada
+— «La opción de configuración que buscas no está disponible para tu cuenta».
+Perseguir la tercera variante de Google habría sido perseverar en lo que ya
+había fallado dos veces.
+
+**Decisión**. Telegram. Un bot con BotFather, sin proveedor de identidad de por
+medio, sin aprobación de nadie.
+
+**Y no es solo un apaño**: es el único de los tres que permite **editar un
+mensaje ya enviado**. Eso hace que la divulgación progresiva (D-015) sea UN
+mensaje que se actualiza —el aviso se convierte en el informe del agente— en
+vez de dos correos en un hilo, que es el techo del correo. Verificado contra un
+servidor que imita la API: `sendMessage` y después `editMessageText` sobre el
+mismo `message_id`.
+
+Admite además botones, así que es el sitio natural para la aprobación humana de
+remediaciones (F6-06), que con el correo habría necesitado enlaces firmados.
+
+**Consecuencias y límites**.
+- El token viaja **en la URL**, así que el sink nunca registra la URL en el log:
+  solo el método y el error. Hay una prueba que lo fija.
+- Se usa HTML y no `MarkdownV2`: este último exige escapar dieciocho caracteres
+  —`.`, `-` y `!` incluidos— y un descuido devuelve 400 y pierde el aviso. HTML
+  necesita tres.
+- Límite de 4096 caracteres: un informe largo se recorta, y se dice que se
+  recortó. El correo no tiene ese límite, así que los dos juntos son mejores que
+  cualquiera solo: Telegram avisa, el correo guarda el informe entero.
+- El bot no puede escribir a nadie que no le haya dado a **Iniciar** primero.
+  Es una protección de Telegram, y es la causa más probable de que no llegue
+  nada la primera vez.
+
+**Lo que encontró probarlo**: el emoji de severidad salía **dos veces**
+(`🔴 🔴 [app/componente]`). `titular()` ya lo incluye y el sink lo añadía otra
+vez. El formato vive en `render.py` precisamente para que los canales no
+discrepen entre sí, y un canal que se añade adornos por su cuenta rompe esa
+propiedad. Hay una prueba que lo fija.

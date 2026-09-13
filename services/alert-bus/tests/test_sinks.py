@@ -386,3 +386,154 @@ def test_email_la_actualizacion_lleva_su_propio_message_id(
     assert actualizacion["Message-ID"], "toda actualización necesita su propio identificador"
     assert actualizacion["Message-ID"] != inicial["Message-ID"]
     assert actualizacion["In-Reply-To"] == inicial["Message-ID"], "y debe enhebrarse con el inicial"
+
+
+# --- Telegram ----------------------------------------------------------------
+
+
+class _CapturaTelegram(BaseHTTPRequestHandler):
+    recibidas: ClassVar[list[dict]] = []
+    # La API de Telegram devuelve el `message_id`, que es lo que permite editar
+    # despues. Se incrementa para que un segundo envio se distinga del primero.
+    siguiente_id: ClassVar[int] = 100
+    fallar_edicion: ClassVar[bool] = False
+
+    def do_POST(self) -> None:
+        largo = int(self.headers.get("Content-Length", 0))
+        payload = json.loads(self.rfile.read(largo))
+        metodo = self.path.rsplit("/", 1)[-1]
+        type(self).recibidas.append({"metodo": metodo, "path": self.path, "payload": payload})
+
+        if metodo == "editMessageText" and type(self).fallar_edicion:
+            self.send_response(400)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        if metodo == "sendMessage":
+            type(self).siguiente_id += 1
+            resultado = {"message_id": type(self).siguiente_id}
+        else:
+            resultado = {"message_id": payload.get("message_id")}
+
+        cuerpo_r = json.dumps({"ok": True, "result": resultado}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(cuerpo_r)))
+        self.end_headers()
+        self.wfile.write(cuerpo_r)
+
+    def log_message(self, *args) -> None:
+        pass
+
+
+@pytest.fixture
+def servidor_telegram():
+    _CapturaTelegram.recibidas = []
+    _CapturaTelegram.siguiente_id = 100
+    _CapturaTelegram.fallar_edicion = False
+    servidor = HTTPServer(("127.0.0.1", 0), _CapturaTelegram)
+    hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
+    hilo.start()
+    yield f"http://127.0.0.1:{servidor.server_port}", _CapturaTelegram
+    servidor.shutdown()
+
+
+def _telegram(base: str):
+    from alert_bus.sinks import TelegramSink
+    return TelegramSink("EL-TOKEN", "-100123", api_base=base)
+
+
+def test_telegram_actualiza_el_mensaje_en_vez_de_mandar_otro(
+    servidor_telegram, incidente: Incident, incidente_investigado: Incident
+) -> None:
+    """Es la razón por la que este canal es mejor que el correo.
+
+    El correo puede enhebrar, pero manda dos mensajes. Telegram EDITA el
+    primero, así que el aviso se convierte en el informe y nunca hay dos
+    notificaciones del mismo incidente (D-015).
+    """
+    base, captura = servidor_telegram
+    sink = _telegram(base)
+
+    sink.send(incidente, update=False)
+    sink.send(incidente_investigado, update=True)
+
+    metodos = [p["metodo"] for p in captura.recibidas]
+    assert metodos == ["sendMessage", "editMessageText"]
+    # El id editado es el que devolvió el primer envío.
+    assert captura.recibidas[1]["payload"]["message_id"] == 101
+
+
+def test_telegram_si_no_puede_editar_manda_uno_nuevo(
+    servidor_telegram, incidente: Incident, incidente_investigado: Incident
+) -> None:
+    """Perder el informe del agente sería peor que mandar un mensaje de más."""
+    base, captura = servidor_telegram
+    sink = _telegram(base)
+
+    sink.send(incidente, update=False)
+    captura.fallar_edicion = True
+    sink.send(incidente_investigado, update=True)
+
+    metodos = [p["metodo"] for p in captura.recibidas]
+    assert metodos == ["sendMessage", "editMessageText", "sendMessage"]
+
+
+def test_telegram_escapa_el_html(servidor_telegram, incidente: Incident) -> None:
+    """Un `<` sin escapar devuelve 400 y pierde el aviso entero."""
+    base, captura = servidor_telegram
+    incidente.title = "fallo en <script>alert(1)</script> & cía"
+    _telegram(base).send(incidente, update=False)
+
+    texto = captura.recibidas[0]["payload"]["text"]
+    assert "&lt;script&gt;" in texto
+    assert "&amp;" in texto
+    assert "<script>" not in texto
+    # Las etiquetas NUESTRAS sí pasan: son las que dan el formato.
+    assert "<b>" in texto
+
+
+def test_telegram_recorta_lo_que_pasa_del_limite(
+    servidor_telegram, incidente_investigado: Incident
+) -> None:
+    """La API rechaza más de 4096 caracteres.
+
+    Perder el aviso por pasarse de largo sería absurdo, y recortar en silencio
+    haría creer que ese era todo el informe.
+    """
+    base, captura = servidor_telegram
+    # La causa raíz entra entera en el cuerpo, así que es por donde se desborda.
+    incidente_investigado.root_cause = "causa muy larga. " * 400
+    _telegram(base).send(incidente_investigado, update=False)
+
+    texto = captura.recibidas[0]["payload"]["text"]
+    assert len(texto) < 4096
+    assert "recortado" in texto
+
+
+def test_telegram_no_pone_el_token_en_el_log(caplog, incidente: Incident) -> None:
+    """El token va en la URL, así que un log de la URL es una fuga de credencial."""
+    from alert_bus.sinks import TelegramSink
+
+    sink = TelegramSink("TOKEN-SECRETO", "-100", api_base="http://127.0.0.1:1")
+    with caplog.at_level("ERROR"), pytest.raises(Exception):
+        sink.send(incidente, update=False)
+
+    assert "TOKEN-SECRETO" not in caplog.text
+
+
+def test_telegram_no_duplica_el_icono_de_severidad(
+    servidor_telegram, incidente: Incident
+) -> None:
+    """`titular()` ya trae el icono; añadirle otro da «🔴 🔴 [app/componente]».
+
+    El formato vive en `render.py` precisamente para que los canales no
+    discrepen, y un canal que se lo añade por su cuenta rompe esa propiedad.
+    """
+    base, captura = servidor_telegram
+    _telegram(base).send(incidente, update=False)
+
+    texto = captura.recibidas[0]["payload"]["text"]
+    assert texto.count("🔴") == 1
+    assert texto.startswith("<b>")
