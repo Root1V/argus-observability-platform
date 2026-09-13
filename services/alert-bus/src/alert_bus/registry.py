@@ -101,6 +101,29 @@ class Registry:
 
     # --- Carga ---------------------------------------------------------------
 
+    def reload_if_changed(self) -> bool:
+        """Recarga si el fichero cambio. Devuelve si hubo recarga.
+
+        El registro es datos, no codigo: anadir una aplicacion o marcar una como
+        activa no debe exigir reiniciar el servicio que detecta incidentes. Se
+        compara el mtime en vez de releer, para no pagar el fichero en cada
+        consulta.
+
+        Lo descubrio el piloto: marcar `edge-ai-inference` como activo no tuvo
+        ningun efecto hasta reiniciar, pese a que la documentacion prometia lo
+        contrario.
+        """
+        if not self._path:
+            return False
+        try:
+            mtime = self._path.stat().st_mtime
+        except OSError:
+            return False
+        if mtime <= self._mtime:
+            return False
+        self.load()
+        return True
+
     def load(self) -> None:
         if not self._path or not self._path.exists():
             log.warning("registry.missing", extra={"path": str(self._path)})
@@ -135,7 +158,17 @@ class Registry:
             apps[app.id] = app
 
         with self._lock:
+            # Los descubrimientos provisionales sobreviven a la recarga: si no,
+            # cada edicion del fichero volveria a avisar de "servicio no
+            # registrado", que es ruido por construccion.
+            for app_id, provisional in self._apps.items():
+                if app_id not in apps and provisional.state == "provisional":
+                    apps[app_id] = provisional
             self._apps = apps
+        try:
+            self._mtime = self._path.stat().st_mtime
+        except OSError:
+            pass
         log.info("registry.loaded", extra={"apps": len(apps)})
 
     # --- Consulta ------------------------------------------------------------
@@ -232,6 +265,9 @@ class Registry:
                 "criticidad": a.criticality,
                 "componentes": sorted(a.components),
                 "depende_de": a.depends_on,
+                # El enrutamiento es parte del estado consultable: sin el no se
+                # puede comprobar desde fuera a donde iria un aviso.
+                "canales": dict(a.channels),
             }
             for a in self.apps.values()
         ]

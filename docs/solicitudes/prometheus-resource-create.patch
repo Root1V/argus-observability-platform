@@ -1,0 +1,90 @@
+diff --git a/telemetry/src/prometheus_telemetry/tracing.py b/telemetry/src/prometheus_telemetry/tracing.py
+index a2e6ad2..dc789e5 100644
+--- a/telemetry/src/prometheus_telemetry/tracing.py
++++ b/telemetry/src/prometheus_telemetry/tracing.py
+@@ -67,11 +67,23 @@ def configure_tracing(
+         return
+ 
+     # Build Resource (service.name + optional extras)
++    #
++    # Resource.create() — NOT Resource(attributes=...).
++    #
++    # The direct constructor silently skips both the SDK's resource detectors
++    # and the standard OTEL_RESOURCE_ATTRIBUTES environment variable. That
++    # variable is how deployment injects service.namespace, service.version and
++    # deployment.environment.name without touching code — so with the direct
++    # constructor those attributes just never appear, and nothing errors.
++    #
++    # Symptom when this is wrong: traces arrive, but every service shows up
++    # without its application grouping, so you cannot tell which app a
++    # component belongs to.
+     service_name = os.environ.get("OTEL_SERVICE_NAME", service)
+     attrs: dict[str, Any] = {"service.name": service_name}
+     if resource_attributes:
+         attrs.update(resource_attributes)
+-    resource = Resource(attributes=attrs)
++    resource = Resource.create(attrs)
+ 
+     # Build OTLP/HTTP exporter
+     _endpoint = endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or _DEFAULT_ENDPOINT
+diff --git a/telemetry/tests/test_tracing.py b/telemetry/tests/test_tracing.py
+index 1a3e168..d03ed86 100644
+--- a/telemetry/tests/test_tracing.py
++++ b/telemetry/tests/test_tracing.py
+@@ -270,3 +270,56 @@ def test_configure_tracing_resource_attributes() -> None:
+     resource_attrs = provider.resource.attributes
+     assert resource_attrs.get("tui.session_id") == "abc123"
+     assert resource_attrs.get("service.name") == "manager"
++
++
++# ── OTEL_RESOURCE_ATTRIBUTES is honoured ─────────────────────────────────────
++
++
++def test_configure_tracing_honours_otel_resource_attributes(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """The standard OTEL_RESOURCE_ATTRIBUTES variable reaches the Resource.
++
++    This is how deployment injects service.namespace, service.version and
++    deployment.environment.name without touching application code.
++
++    Regression guard: building the Resource with the direct constructor
++    (``Resource(attributes=...)``) instead of ``Resource.create(...)`` silently
++    drops this variable — and drops the SDK's detectors with it. Nothing raises;
++    the attributes simply never appear, and every service shows up without its
++    application grouping.
++    """
++    monkeypatch.setenv(
++        "OTEL_RESOURCE_ATTRIBUTES",
++        "service.namespace=edge-ai-inference,deployment.environment.name=ci",
++    )
++
++    _tracing._CONFIGURED = False
++    _tracing._TRACING_ACTIVE = False
++    configure_tracing(service="auth-service")
++
++    provider = trace.get_tracer_provider()
++    assert isinstance(provider, TracerProvider)
++    attrs = provider.resource.attributes
++
++    assert attrs.get("service.namespace") == "edge-ai-inference"
++    assert attrs.get("deployment.environment.name") == "ci"
++    assert attrs.get("service.name") == "auth-service"
++
++
++def test_configure_tracing_explicit_attributes_win_over_env(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Explicit resource_attributes override the environment variable."""
++    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=from-env")
++
++    _tracing._CONFIGURED = False
++    _tracing._TRACING_ACTIVE = False
++    configure_tracing(
++        service="auth-service",
++        resource_attributes={"service.namespace": "explicit"},
++    )
++
++    provider = trace.get_tracer_provider()
++    assert isinstance(provider, TracerProvider)
++    assert provider.resource.attributes.get("service.namespace") == "explicit"

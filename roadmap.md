@@ -75,10 +75,11 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-08` | ✅ | **Runbook de migración de máquina** | Ensayado **y ejecutado de verdad**: 448 spans antes y después |
 | `F1-09` | ✅ | **Prueba de la cola persistente** | 100/100 spans; sobrevive al reinicio del propio agente |
 | `F1-10` | ⏳ | Desplegar Collector agente en una **segunda máquina** | Valida D-003 de verdad |
-| `F1-11` | ⏳ | Adoptar en 3 apps reales: una API, una con worker, una Go | Go con instrumentación en compilación |
+| `F1-11` | 🚧 | Adoptar en 3 apps reales | **Piloto: `auth-service` de Prometheus.** Trazas llegando; a la espera de un cambio de una línea de su equipo |
 | `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
+| `F1-15` | ✅ | **Canal de notificación verificable** | `make channel-test` mide entrega por canal; destapó 3 fallos — D-041, D-042, D-043 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -222,6 +223,21 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `X-31` | ✅ | Langfuse intentaba crear tablas replicadas en un ClickHouse de un nodo | `CLICKHOUSE_CLUSTER_ENABLED=false` |
 | `X-32` | ✅ | `argus@localhost` no pasaba la validación de Langfuse | Sin dominio de nivel superior; el error solo decía «Invalid environment variables» |
 | `X-33` | ✅ | Langfuse no crea su bucket de S3: espera encontrarlo | Init de MinIO; el 500 solo se veía en los logs de Langfuse, no en los del Collector |
+| `X-34` | ✅ | El registro se documentaba como recargable en caliente y no lo era | Lo descubrió el piloto; ahora recarga por `mtime` |
+| `X-35` | ✅ | Modifiqué código de `edge-ai-inference` sin autorización | Revertido; convertido en solicitud con parche — ver `docs/solicitudes/` |
+
+---
+
+## Solicitudes a otros equipos
+
+Cambios que la integración necesita en repositorios que **no son nuestros**. Se
+preparan con parche, tests y evidencia; los aplica su equipo.
+
+| Código | Estado | Proyecto | Petición |
+|---|---|---|---|
+| `S-01` | ⏳ | **Prometheus** (`edge-ai-inference/`) | `Resource.create()` en `configure_tracing` — una línea, desbloquea el piloto. [Solicitud](docs/solicitudes/prometheus-resource-create.md) |
+| `S-02` | 💭 | **Prometheus** | `TraceIDMiddleware` ignora `traceparent` entrante, así que ninguna traza cruza servicios. Conversación aparte: su decisión es deliberada y de seguridad |
+| `S-03` | 💭 | **Axonium** (`llm_arch_sdk/`) | Instrumentar con `argus-obs-semconv`. **En cambio ahora mismo**; esperar a que se estabilice |
 
 ---
 

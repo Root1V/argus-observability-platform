@@ -253,6 +253,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             "incidentes_abiertos": len(engine.open_incidents()),
             "canales": [s.name for s in engine._sinks],
             "despacho": dict(dispatcher.stats) if dispatcher else {},
+            # Desglose por canal: es lo unico que responde "¿entrego el canal
+            # que mira una persona?". El total no distingue consola de chat.
+            "despacho_por_canal": (
+                {k: dict(v) for k, v in dispatcher.por_canal.items()} if dispatcher else {}
+            ),
         }
 
     return app
@@ -275,10 +280,18 @@ def _process(engine: Engine, signals: list[Any]) -> None:
 
 
 async def _ticker(engine: Engine, every_s: int) -> None:
-    """Cierra ventanas de agrupacion y resuelve incidentes inactivos."""
+    """Cierra ventanas de agrupacion, resuelve inactivos y recarga el registro.
+
+    La recarga vive aqui y no en cada consulta a proposito: el registro cambia
+    a ritmo humano —se anade una aplicacion, se cambia un canal— y pagar un
+    `stat()` por cada senal ingerida seria pagarlo en el camino caliente, que
+    es justo donde no sobra tiempo.
+    """
     while True:
         try:
             await asyncio.sleep(every_s)
+            if engine._registry.reload_if_changed():
+                log.info("registry.reloaded", extra={"apps": len(engine._registry.apps)})
             engine.flush_grouped()
             engine.sweep()
         except asyncio.CancelledError:

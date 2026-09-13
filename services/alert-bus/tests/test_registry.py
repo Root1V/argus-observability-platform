@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from alert_bus.registry import Registry
 from argus_schemas import Severity
 
@@ -78,3 +80,120 @@ def test_un_registro_corrupto_no_tumba_el_alert_bus(tmp_path) -> None:
 def test_un_registro_ausente_tampoco(tmp_path) -> None:
     registro = Registry(tmp_path / "no-existe.yaml")
     assert registro.apps == {}
+
+
+# --- Recarga en caliente -----------------------------------------------------
+# Lo descubrió el piloto: marcar `edge-ai-inference` como activo no tuvo ningún
+# efecto hasta reiniciar, pese a que la documentación prometía lo contrario.
+
+
+def test_el_registro_se_recarga_cuando_cambia_el_fichero(tmp_path) -> None:
+    import time
+
+    import yaml
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([
+        {"id": "mi-app", "estado": "planificado", "criticidad": "media",
+         "componentes": [{"id": "api", "rol": "api"}]},
+    ]), encoding="utf-8")
+
+    registro = Registry(ruta)
+    assert registro.get("mi-app").state == "planificado"
+    assert registro.reload_if_changed() is False, "recargó sin que cambiara nada"
+
+    time.sleep(0.01)
+    ruta.write_text(yaml.safe_dump([
+        {"id": "mi-app", "estado": "activo", "criticidad": "alta",
+         "componentes": [{"id": "api", "rol": "api"}, {"id": "worker", "rol": "worker"}]},
+    ]), encoding="utf-8")
+
+    assert registro.reload_if_changed() is True
+    app = registro.get("mi-app")
+    assert app.state == "activo"
+    assert app.criticality == "alta"
+    assert "worker" in app.components
+
+
+def test_la_recarga_conserva_los_descubrimientos_provisionales(tmp_path) -> None:
+    """Un servicio descubierto no puede desaparecer porque se editara el fichero.
+
+    Si desapareciera, volvería a avisarse de «servicio no registrado» en cada
+    edición del registro, que es ruido por construcción.
+    """
+    import time
+
+    import yaml
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([{"id": "declarada", "estado": "activo",
+                                     "componentes": [{"id": "api"}]}]), encoding="utf-8")
+    registro = Registry(ruta)
+
+    _, nueva = registro.resolve("descubierta", "su-api")
+    assert nueva is True
+
+    time.sleep(0.01)
+    ruta.write_text(yaml.safe_dump([
+        {"id": "declarada", "estado": "activo", "componentes": [{"id": "api"}]},
+        {"id": "otra", "estado": "activo", "componentes": [{"id": "api"}]},
+    ]), encoding="utf-8")
+    registro.reload_if_changed()
+
+    assert registro.get("descubierta") is not None
+    assert registro.get("otra") is not None
+
+
+def test_un_fichero_que_desaparece_no_borra_el_registro(tmp_path) -> None:
+    import yaml
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([{"id": "a", "estado": "activo",
+                                     "componentes": [{"id": "api"}]}]), encoding="utf-8")
+    registro = Registry(ruta)
+    ruta.unlink()
+
+    registro.reload_if_changed()
+    assert registro.get("a") is not None, "quedarse sin registro por un fichero borrado sería peor"
+
+
+async def test_el_ticker_recarga_el_registro(tmp_path) -> None:
+    """El metodo de recarga existia pero nadie lo llamaba.
+
+    Cambiar un canal en el fichero no tenia efecto hasta reiniciar, que es
+    justo lo que la recarga en caliente promete evitar. Esta prueba fija el
+    CABLEADO, no el metodo: un metodo correcto que nadie invoca es un bug.
+    """
+    import asyncio
+
+    import yaml
+
+    from alert_bus.app import _ticker
+    from alert_bus.engine import Engine
+
+    ruta = tmp_path / "apps.yaml"
+    ruta.write_text(yaml.safe_dump([
+        {"id": "a", "estado": "activo", "componentes": [{"id": "api"}],
+         "canales": {"page": ["console"]}},
+    ]), encoding="utf-8")
+
+    registro = Registry(ruta)
+    motor = Engine(registro, [])
+    assert registro.channels_for("a", Severity.PAGE) == ["console"]
+
+    tarea = asyncio.create_task(_ticker(motor, 0))
+    try:
+        time.sleep(0.01)
+        ruta.write_text(yaml.safe_dump([
+            {"id": "a", "estado": "activo", "componentes": [{"id": "api"}],
+             "canales": {"page": ["gchat"]}},
+        ]), encoding="utf-8")
+        for _ in range(50):
+            await asyncio.sleep(0.02)
+            if registro.channels_for("a", Severity.PAGE) == ["gchat"]:
+                break
+    finally:
+        tarea.cancel()
+
+    assert registro.channels_for("a", Severity.PAGE) == ["gchat"], \
+        "el registro es datos: cambiar un canal no debe exigir reiniciar"

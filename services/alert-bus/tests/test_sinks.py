@@ -317,3 +317,42 @@ def test_la_cola_esta_acotada_y_cuenta_los_descartes(incidente: Incident) -> Non
         despachador.submit([MemorySink()], incidente, update=False)
 
     assert despachador.stats["descartados"] == 15
+
+
+def test_el_despacho_cuenta_por_canal(incidente: Incident) -> None:
+    """El total no distingue consola de chat.
+
+    "2 enviados" con tres sinks cargados no dice si el que mira una persona
+    fue uno de los dos. Sin el desglose, la prueba de canales daba verde con el
+    aviso saliendo solo por consola.
+    """
+    from alert_bus.sinks import FailingSink, InlineDispatcher, MemorySink
+
+    bueno, malo = MemorySink(), FailingSink()
+    despacho = InlineDispatcher()
+
+    despacho.submit([bueno, malo], incidente, update=False)
+
+    assert despacho.por_canal[bueno.name]["enviados"] == 1
+    assert despacho.por_canal[malo.name]["fallidos"] == 1
+    assert despacho.por_canal[bueno.name]["fallidos"] == 0
+
+
+def test_gchat_conserva_las_credenciales_al_editar() -> None:
+    """`key` y `token` son las credenciales del webhook, y van en la query.
+
+    Perderlas al construir la URL de edicion da un 401, la edicion degrada a
+    publicar en el hilo, y la divulgacion progresiva se convierte en un mensaje
+    por actualizacion. Como el fallo esta capturado, solo se ve mirando el chat.
+    """
+    from alert_bus.sinks import GoogleChatSink
+
+    sink = GoogleChatSink(
+        "https://chat.googleapis.com/v1/spaces/AAA/messages?key=KKK&token=TTT"
+    )
+    url = sink._url_de_edicion("spaces/AAA/messages/MMM")
+
+    assert url.startswith("https://chat.googleapis.com/v1/spaces/AAA/messages/MMM?")
+    assert "key=KKK" in url
+    assert "token=TTT" in url
+    assert "updateMask=cardsV2" in url
