@@ -1147,3 +1147,41 @@ de silencio.
 planificado, sin que planificar cueste alertas. Alertar de que calla algo que
 nunca ha hablado es como se le enseña a la guardia a ignorar al canario, y la
 fatiga de alertas es el problema dominante de 2026 (§2.12 del plan).
+
+---
+
+## D-049 · La sonda de silencio mide crecimiento, no presencia de puntos
+
+**Contexto**. Al activar Prometheus (D-046) comprobamos la sonda contra el
+estado real y dijo que `auth-service` estaba sano. Llevaba **tres horas sin
+emitir una sola traza**.
+
+La sonda contaba puntos de métrica: 1.080 en quince minutos. Todos eran la misma
+serie, `traces.span.metrics.calls`, del connector `spanmetrics` — que es
+**acumulativa** y por definicion reexporta su valor en cada intervalo aunque no
+haya ocurrido nada. La suma llevaba congelada en 1.200 desde las 13:38.
+
+**Un servicio muerto parecia sano, que es exactamente el fallo que esta sonda
+existe para impedir.**
+
+**Decisión**. Actividad = el contador **creció** durante la ventana, y la
+fórmula depende de la temporalidad:
+
+- **Delta** (`AggregationTemporality = 1`): cada punto es lo ocurrido en su
+  intervalo; la suma sirve tal cual.
+- **Acumulativa** (`= 2`): `max(total) - min(total)` sobre la ventana. Un
+  reinicio pone el contador a cero y también cuenta como actividad, que es
+  correcto: reiniciar es actividad.
+
+**Consecuencias**. Verificado contra el estado real: `auth-service` da 0 y los
+servicios vivos dan valores positivos. Desplegado, el canario confirmó el
+silencio en el segundo ciclo y abrió un incidente `page`, que es el bucle
+entero funcionando por primera vez sobre un silencio de verdad.
+
+**Por qué la suite no lo vio**. Las pruebas devolvían `"1247"` o `"0"` desde un
+ClickHouse falso: verificaban que la sonda **interpreta** la respuesta, nunca
+que **pregunta lo correcto**. Ahora hay una prueba que fija la forma de la
+consulta, porque el fallo estaba ahí y `count()` no puede volver.
+
+**El límite que sigue en pie**: la sonda detecta que un servicio **deja** de
+emitir, no que **nunca** empezó (D-046).

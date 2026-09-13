@@ -122,6 +122,9 @@ class SondaSilencio:
     Las metricas se derivan de todas las trazas ANTES de muestrear —es una
     propiedad deliberada del pipeline del gateway—, asi que son la unica fuente
     que responde "¿ha estado activo?" sin sesgo.
+
+    Y mide CRECIMIENTO, no presencia de puntos: las series acumulativas se
+    reexportan para siempre aunque el servicio este muerto. Ver `_crecimiento`.
     """
 
     def __init__(
@@ -149,14 +152,11 @@ class SondaSilencio:
         # Se miran las dos tablas de metricas: un servicio puede emitir solo
         # contadores o solo histogramas segun lo que haga.
         consulta = (
-            "SELECT ("
-            "  (SELECT count() FROM otel.otel_metrics_sum "
-            f"   WHERE ResourceAttributes['service.name'] = '{componente}' "
-            f"   AND TimeUnix > now() - INTERVAL {ventana} SECOND)"
-            " + (SELECT count() FROM otel.otel_metrics_histogram "
-            f"   WHERE ResourceAttributes['service.name'] = '{componente}' "
-            f"   AND TimeUnix > now() - INTERVAL {ventana} SECOND)"
-            ") AS actividad"
+            "SELECT "
+            + self._crecimiento("otel.otel_metrics_sum", "Value", componente, ventana)
+            + " + "
+            + self._crecimiento("otel.otel_metrics_histogram", "Count", componente, ventana)
+            + " AS actividad"
         )
         base = {
             "objetivo": f"{self.app}/{self.component}",
@@ -174,20 +174,52 @@ class SondaSilencio:
                     },
                 )
             respuesta.raise_for_status()
-            actividad = int(respuesta.text.strip() or 0)
+            actividad = float(respuesta.text.strip() or 0)
         except Exception as exc:  # noqa: BLE001
             # No poder consultar no significa que la app este callada: significa
             # que no lo sabemos. Decir "esta caida" seria inventarse un
             # incidente, que es peor que no detectarlo.
             return Medicion(**base, resultado=Resultado.OK, detalle=f"almacen inaccesible: {exc}")
 
-        if actividad == 0:
+        if actividad <= 0:
             return Medicion(
                 **base,
                 resultado=Resultado.SILENCIO,
                 detalle=f"sin telemetría en {self.ventana_s // 60} min",
             )
-        return Medicion(**base, resultado=Resultado.OK, detalle=f"{actividad} puntos de métrica")
+        return Medicion(**base, resultado=Resultado.OK, detalle=f"actividad {actividad:g}")
+
+    @staticmethod
+    def _crecimiento(tabla: str, columna: str, componente: str, ventana: int) -> str:
+        """Actividad = el contador CRECIO, no «hay puntos».
+
+        Contar puntos no sirve y el piloto lo demostro: `auth-service` llevaba
+        tres horas muerto y la sonda veia 1.080 puntos en quince minutos. Eran
+        la misma serie del connector `spanmetrics`, que es ACUMULATIVA y
+        reexporta su valor en cada intervalo aunque no haya pasado nada. Un
+        servicio muerto parecia sano, que es justo el fallo que esta sonda
+        existe para impedir.
+
+        Por eso la formula depende de la temporalidad:
+
+        - **Delta** (`AggregationTemporality = 1`): cada punto es lo ocurrido en
+          su intervalo, asi que la suma sirve tal cual.
+        - **Acumulativa** (`= 2`): el valor solo sube, y estar vivo significa que
+          el total de FINAL de ventana supera al de principio. Un reinicio pone
+          el contador a cero y tambien cuenta como actividad, que es correcto.
+
+        El `toFloat64` no es decorativo: `Count` es `UInt64` y `Value` es
+        `Float64`, y ClickHouse se niega a restar enteros con signo de enteros
+        sin signo.
+        """
+        return (
+            "(SELECT if(any(temp) = 1, sum(v), max(v) - min(v)) FROM ("
+            f"  SELECT TimeUnix, any(AggregationTemporality) AS temp, sum(toFloat64({columna})) AS v"
+            f"  FROM {tabla}"
+            f"  WHERE ResourceAttributes['service.name'] = '{componente}'"
+            f"  AND TimeUnix > now() - INTERVAL {ventana} SECOND"
+            "  GROUP BY TimeUnix))"
+        )
 
 
 def _escapar(valor: str) -> str:
