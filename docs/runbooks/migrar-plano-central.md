@@ -91,7 +91,7 @@ razón: lleva el token del gateway y las credenciales de los canales.
 
 ```bash
 # DESTINO
-git clone <repo> app_monitoring_explainability
+git clone $(git config --get remote.origin.url) app_monitoring_explainability
 cd app_monitoring_explainability
 # copia aquí platform/.env desde el canal seguro
 make migrate-restore SRC=~/argus-backup

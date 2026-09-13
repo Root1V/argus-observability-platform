@@ -90,31 +90,45 @@ es reproducible, funciona dentro de contenedores y no necesita infraestructura.
 make release V=1.0.0a2
 ```
 
-El propio comando imprime al final las dos formas de instalarla, con la ruta y
-la versión ya rellenadas. Cópialas de ahí en vez de escribirlas a mano.
-
-**Desde la etiqueta de git** — es lo que usarás si la app vive en otra máquina:
+Y luego, para saber **qué teclear exactamente** en el repo de tu aplicación:
 
 ```bash
-uv pip install "argus-obs-sdk[asgi,client,sql] @ git+<repo>@v1.0.0a2#subdirectory=libs/argus-sdk"
+make install-cmd
 ```
 
-**Desde las ruedas locales** — más rápido para iterar en la misma máquina:
+Imprime el comando con la ruta absoluta y la versión ya rellenadas. **Cópialo
+de ahí**, no de esta guía: una ruta escrita a mano es la forma más tonta de
+perder media hora.
 
-```bash
-make wheels
-uv pip install --find-links /ruta/a/app_monitoring_explainability/dist \
+Sale algo así:
+
+```
+uv pip install --find-links /Users/tu-usuario/…/app_monitoring_explainability/dist \
   'argus-obs-sdk[asgi,client,sql]==1.0.0a2'
 ```
+
+Los extras, según lo que use tu app:
+
+| Extra | Para |
+|---|---|
+| `asgi` | FastAPI, Starlette |
+| `client` | httpx, requests |
+| `sql` | SQLAlchemy, asyncpg |
+| `celery` | Colas Celery |
+| `kafka` | Kafka, Redpanda |
+| `genai` | LangChain, LangGraph, Ollama, vLLM… (activa OpenLIT) |
 
 > **La versión va explícita, y no es opcional.** Con un prelanzamiento
 > (`1.0.0aN`), `uv pip install argus-obs-sdk` a secas falla con
 > *«pre-releases weren't enabled»*, que no apunta a la causa. Poner `==1.0.0a2`
-> lo resuelve. Es la contrapartida de que un `pip install` normal nunca se lleve
-> un prelanzamiento por accidente.
+> lo resuelve. Es la contrapartida —deseada— de que un `pip install` normal
+> nunca se lleve un prelanzamiento por accidente (D-038).
 
-Cuando ajustemos algo del SDK: `make release V=1.0.0a3` y tu app sube la
-versión.
+Si la aplicación vive en **otra máquina**, `make install-cmd` imprime también la
+variante desde etiqueta de git, que no necesita acceso al directorio `dist`.
+
+Cuando ajustemos algo del SDK: `make release V=1.0.0a3`, y tu app sube la
+versión en su comando de instalación.
 
 > **No usamos TestPyPI**, aunque parezca hecho para esto: sus dependencias no
 > están ahí de forma fiable, así que haría falta apuntar también a PyPI real —

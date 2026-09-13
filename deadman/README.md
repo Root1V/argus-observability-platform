@@ -36,10 +36,15 @@ python3 deadman/deadman.py --config deadman/deadman.json --test
 En macOS, para que corra solo cada 5 minutos:
 
 ```bash
-$EDITOR deadman/com.argus.deadman.plist      # ajusta las rutas absolutas
-cp deadman/com.argus.deadman.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.argus.deadman.plist
-launchctl list | grep argus
+make deadman-setup
+```
+
+Genera la tarea de launchd **con las rutas reales ya rellenadas** y te dice los
+dos pasos siguientes. Rellenar rutas absolutas a mano en un XML es la forma más
+fácil de instalar un vigilante que no vigila nada.
+
+```bash
+launchctl list | grep argus     # comprobar que sigue activo
 ```
 
 En Linux, una línea de cron:

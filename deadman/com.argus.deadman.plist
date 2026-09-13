@@ -5,12 +5,11 @@
   Corre FUERA de Docker a proposito: un vigilante dentro del contenedor que
   vigila se cae con el.
 
-  Instalacion:
-    1. Ajusta las rutas absolutas de abajo.
-    2. cp deadman/com.argus.deadman.plist ~/Library/LaunchAgents/
-    3. launchctl load ~/Library/LaunchAgents/com.argus.deadman.plist
-    4. Comprueba que puede avisarte:
-         python3 deadman/deadman.py --config deadman/deadman.json --test
+  NO edites este fichero a mano: `make deadman-setup` genera una copia con las
+  rutas reales ya rellenadas y te dice que hacer con ella.
+
+  Rellenar rutas absolutas a mano en un XML es la forma mas facil de acabar con
+  un vigilante instalado que no vigila nada, y ademas en silencio.
 
   Comprobar que sigue activo:
     launchctl list | grep argus

@@ -347,9 +347,11 @@ export ARGUS_ENVIRONMENT=mac-dev
 Para que resuelva `argus` mientras no haya índice privado (B-10):
 
 ```bash
-uv pip install -e /ruta/a/app_monitoring_explainability/libs/argus-semconv
-uv pip install -e /ruta/a/app_monitoring_explainability/libs/argus-sdk
+make wheels && make install-cmd
 ```
+
+Imprime el comando con la ruta absoluta y la versión ya rellenadas: cópialo de
+ahí y pégalo en el repo de tu aplicación.
 
 Lanza tu app, hazle unas peticiones, y consulta:
 

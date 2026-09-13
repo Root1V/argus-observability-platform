@@ -69,6 +69,42 @@ demo-traffic:  ## Genera trafico de una app simulada, para ver los dashboards co
 	@set -a; . platform/.env; set +a; \
 	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/trafico_demo.py --minutos $${M:-2}
 
+install-cmd:  ## Imprime el comando EXACTO para instalar el SDK en otra app
+	@test -d dist || { echo "No hay ruedas. Ejecuta primero: make wheels"; exit 1; }
+	@V=$$(ls dist/argus_obs_sdk-*.whl | head -1 | sed 's/.*argus_obs_sdk-//; s/-py3.*//'); \
+	echo; \
+	echo "  Copia y pega esto en el repo de tu aplicacion:"; \
+	echo; \
+	echo "  uv pip install --find-links $(PWD)/dist 'argus-obs-sdk[asgi,client,sql]==$$V'"; \
+	echo; \
+	echo "  Extras segun lo que use tu app:"; \
+	echo "    asgi    FastAPI / Starlette      celery  colas Celery"; \
+	echo "    client  httpx / requests         kafka   Kafka / Redpanda"; \
+	echo "    sql     SQLAlchemy / asyncpg     genai   LangChain, Ollama, vLLM…"; \
+	echo; \
+	R=$$(git config --get remote.origin.url 2>/dev/null); \
+	if [ -n "$$R" ]; then \
+	  echo "  Si la app esta en OTRA maquina, desde la etiqueta de git:"; \
+	  echo; \
+	  echo "  uv pip install \"argus-obs-sdk[asgi,client,sql] @ git+$$R@v$$V#subdirectory=libs/argus-sdk\""; \
+	  echo; \
+	fi
+
+deadman-setup:  ## Genera la tarea de launchd del dead man's switch con rutas reales
+	@test -f deadman/deadman.json || { \
+	  cp deadman/deadman.json.example deadman/deadman.json; \
+	  echo "  deadman/deadman.json creado desde el ejemplo: rellena al menos un canal"; }
+	@sed -e "s|/RUTA/ABSOLUTA/A/app_monitoring_explainability|$(PWD)|g" \
+	  deadman/com.argus.deadman.plist > /tmp/com.argus.deadman.plist
+	@echo "  Generado con rutas reales en /tmp/com.argus.deadman.plist"
+	@echo
+	@echo "  1. Comprueba que puede avisarte ANTES de confiar en el:"
+	@echo "     python3 $(PWD)/deadman/deadman.py --config $(PWD)/deadman/deadman.json --test"
+	@echo
+	@echo "  2. Instalalo:"
+	@echo "     cp /tmp/com.argus.deadman.plist ~/Library/LaunchAgents/"
+	@echo "     launchctl load ~/Library/LaunchAgents/com.argus.deadman.plist"
+
 release:  ## Etiqueta y construye una version:  make release V=1.0.0a1
 	@./scripts/release.sh $(V)
 
@@ -114,4 +150,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
+.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 wheels dash demo-traffic install-cmd deadman-setup release pilot-check queue-test migrate-rehearse migrate-dump migrate-restore verify check test demo query semconv
