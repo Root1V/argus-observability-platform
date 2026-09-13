@@ -708,6 +708,39 @@ integración. Ahora hay un test con el payload literal que vmalert emite.
 
 ---
 
+## D-035 · Los paquetes se llaman `argus-obs-*`, y el import sigue siendo `argus`
+
+**Estado**: ✅ Vigente · **descubierta preparando el piloto**
+
+**Contexto**. Al comprobar si una aplicación fuera del workspace podía instalar
+la librería, `uv pip install argus-sdk` **funcionó** — y trajo un paquete
+ajeno: `argus-sdk` 0.2.1, de otra persona, que requiere `anthropic`, `click` y
+`httpx`.
+
+**El riesgo tiene nombre: confusión de dependencias.** Si el índice privado está
+caído o mal configurado, el instalador cae a PyPI y se trae código de un
+desconocido **en silencio**. No es hipotético: es una clase de ataque de cadena
+de suministro conocida.
+
+**Decisión**:
+
+| | Nombre | Por qué |
+|---|---|---|
+| Distribución | `argus-obs-sdk`, `argus-obs-semconv`, `argus-obs-schemas` | **No existen en PyPI**, así que un fallo del índice privado falla ruidosamente en vez de instalar a un desconocido |
+| Import | `argus`, `argus_semconv`, `argus_schemas` | Ergonomía; `import argus` se escribe muchas veces |
+
+**Sobre conservar `argus` como import**: existe un paquete `argus` en PyPI, pero
+es una librería de calibración de cámaras — nada que ninguna de tus aplicaciones
+vaya a instalar. El riesgo es real pero remoto, y el coste de renombrar crece
+con cada aplicación conectada. Si algún día una app necesita ese paquete, se
+renombra entonces.
+
+**Verificado en una instalación limpia**, no solo en tests: `argus-obs-semconv`
+trae exactamente **una** dependencia, `opentelemetry-api`. Es D-002 comprobado a
+nivel de distribución.
+
+---
+
 ## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
 
 **Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código

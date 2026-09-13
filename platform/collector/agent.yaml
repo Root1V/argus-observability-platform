@@ -194,7 +194,11 @@ service:
         - pull:
             exporter:
               prometheus:
-                host: 127.0.0.1
+                # 0.0.0.0 y no 127.0.0.1, por el mismo motivo que los
+                # receptores: dentro de un contenedor, el loopback es el del
+                # contenedor y el mapeo de puertos no le llega. Quien restringe
+                # la exposicion es el mapeo del host.
+                host: 0.0.0.0
                 port: 8888
     logs:
       level: info

@@ -3,15 +3,18 @@
 Plataforma de observabilidad, AIOps agéntico y explicabilidad para un
 portafolio de aplicaciones que crece.
 
-> **Estado**: Fase 0 completa, Fase 1 en curso. Ver [roadmap.md](roadmap.md).
+> **Estado**: F0 y F2 completas, F1 casi. **A un paso de poder pilotar con una
+> aplicación real** — ver [docs/piloto.md](docs/piloto.md) y `make pilot-check`.
 
-## Los cuatro documentos
+## Los documentos
 
 | Documento | Para qué |
 |---|---|
+| [docs/piloto.md](docs/piloto.md) | **Conectar la primera aplicación real**, paso a paso |
 | [roadmap.md](roadmap.md) | Qué está hecho, qué falta, y el backlog. Todo con código estable |
-| [docs/decisions.md](docs/decisions.md) | Por qué está hecho así. 24 decisiones con su coste |
-| [docs/como-probarlo.md](docs/como-probarlo.md) | Cómo verificarlo tú mismo, paso a paso |
+| [docs/decisions.md](docs/decisions.md) | Por qué está hecho así. 35 decisiones con su coste |
+| [docs/como-probarlo.md](docs/como-probarlo.md) | Cómo verificarlo tú mismo |
+| [docs/runbooks/migrar-plano-central.md](docs/runbooks/migrar-plano-central.md) | Mover el plano central a otra máquina |
 | [docs/PLAN.md](docs/PLAN.md) | El plan completo con la investigación que lo respalda |
 
 ---
@@ -19,11 +22,18 @@ portafolio de aplicaciones que crece.
 ## Arranque rápido
 
 ```bash
-make setup   # dependencias + secretos locales
-make check   # verificación rápida, sin Docker (~1 min)
-make up      # plano central en modo ligero (4 contenedores)
-make verify  # verificación completa contra el stack real
-make demo    # la demostración más corta: apalancamiento de librerías
+make setup        # dependencias + secretos locales
+make up           # plano central en modo ligero
+make agent        # Collector agente de esta máquina
+make pilot-check  # ¿listo para conectar una app real? Dice qué falta
+```
+
+Para verificarlo todo:
+
+```bash
+make check    # rápido, sin Docker (~1 min)
+make verify   # completo, contra el stack real
+make demo     # la demostración más corta: apalancamiento de librerías
 ```
 
 `make help` lista todo. La guía detallada está en

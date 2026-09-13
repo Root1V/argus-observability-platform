@@ -10,10 +10,10 @@ resolution-markers = [
 [manifest]
 members = [
     "alert-bus",
+    "argus-obs-schemas",
+    "argus-obs-sdk",
+    "argus-obs-semconv",
     "argus-platform",
-    "argus-schemas",
-    "argus-sdk",
-    "argus-semconv",
     "canary",
 ]
 
@@ -22,8 +22,8 @@ name = "alert-bus"
 version = "0.1.0"
 source = { editable = "services/alert-bus" }
 dependencies = [
-    { name = "argus-schemas" },
-    { name = "argus-sdk" },
+    { name = "argus-obs-schemas" },
+    { name = "argus-obs-sdk" },
     { name = "fastapi" },
     { name = "opentelemetry-proto" },
     { name = "pydantic-settings" },
@@ -33,8 +33,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "argus-schemas", editable = "libs/argus-schemas" },
-    { name = "argus-sdk", editable = "libs/argus-sdk" },
+    { name = "argus-obs-schemas", editable = "libs/argus-schemas" },
+    { name = "argus-obs-sdk", editable = "libs/argus-sdk" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "opentelemetry-proto", specifier = ">=1.30,<2" },
     { name = "pydantic-settings", specifier = ">=2.6" },
@@ -93,69 +93,26 @@ wheels = [
 ]
 
 [[package]]
-name = "argus-platform"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "alert-bus" },
-    { name = "argus-schemas" },
-    { name = "argus-sdk" },
-    { name = "argus-semconv" },
-    { name = "canary" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-sdk" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pyyaml" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alert-bus", editable = "services/alert-bus" },
-    { name = "argus-schemas", editable = "libs/argus-schemas" },
-    { name = "argus-sdk", editable = "libs/argus-sdk" },
-    { name = "argus-semconv", editable = "libs/argus-semconv" },
-    { name = "canary", editable = "services/canary" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30,<2" },
-    { name = "opentelemetry-sdk", specifier = ">=1.30,<2" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
-name = "argus-schemas"
+name = "argus-obs-schemas"
 version = "1.0.0"
 source = { editable = "libs/argus-schemas" }
 dependencies = [
-    { name = "argus-semconv" },
+    { name = "argus-obs-semconv" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "argus-semconv", editable = "libs/argus-semconv" },
+    { name = "argus-obs-semconv", editable = "libs/argus-semconv" },
     { name = "pydantic", specifier = ">=2.9" },
 ]
 
 [[package]]
-name = "argus-sdk"
+name = "argus-obs-sdk"
 version = "1.0.0"
 source = { editable = "libs/argus-sdk" }
 dependencies = [
-    { name = "argus-semconv" },
+    { name = "argus-obs-semconv" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
 ]
@@ -214,8 +171,8 @@ sql = [
 
 [package.metadata]
 requires-dist = [
-    { name = "argus-sdk", extras = ["http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging"], marker = "extra == 'all'", editable = "libs/argus-sdk" },
-    { name = "argus-semconv", editable = "libs/argus-semconv" },
+    { name = "argus-obs-sdk", extras = ["http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging"], marker = "extra == 'all'", editable = "libs/argus-sdk" },
+    { name = "argus-obs-semconv", editable = "libs/argus-semconv" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "openlit", marker = "extra == 'genai'", specifier = ">=1.34" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30,<2" },
@@ -239,7 +196,7 @@ requires-dist = [
 provides-extras = ["http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging", "genai", "all", "dev"]
 
 [[package]]
-name = "argus-semconv"
+name = "argus-obs-semconv"
 version = "1.0.0"
 source = { editable = "libs/argus-semconv" }
 dependencies = [
@@ -263,6 +220,49 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "argus-platform"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "alert-bus" },
+    { name = "argus-obs-schemas" },
+    { name = "argus-obs-sdk" },
+    { name = "argus-obs-semconv" },
+    { name = "canary" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-sdk" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pyyaml" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alert-bus", editable = "services/alert-bus" },
+    { name = "argus-obs-schemas", editable = "libs/argus-schemas" },
+    { name = "argus-obs-sdk", editable = "libs/argus-sdk" },
+    { name = "argus-obs-semconv", editable = "libs/argus-semconv" },
+    { name = "canary", editable = "services/canary" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30,<2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.30,<2" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "ruff", specifier = ">=0.6" },
+]
 
 [[package]]
 name = "asgiref"
@@ -306,8 +306,8 @@ name = "canary"
 version = "0.1.0"
 source = { editable = "services/canary" }
 dependencies = [
-    { name = "argus-schemas" },
-    { name = "argus-sdk" },
+    { name = "argus-obs-schemas" },
+    { name = "argus-obs-sdk" },
     { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
@@ -315,8 +315,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "argus-schemas", editable = "libs/argus-schemas" },
-    { name = "argus-sdk", editable = "libs/argus-sdk" },
+    { name = "argus-obs-schemas", editable = "libs/argus-schemas" },
+    { name = "argus-obs-sdk", editable = "libs/argus-sdk" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyyaml", specifier = ">=6" },

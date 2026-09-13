@@ -1,5 +1,5 @@
 [project]
-name = "argus-semconv"
+name = "argus-obs-semconv"
 version = "1.0.0"
 description = "Convenciones semanticas de Argus. Para LIBRERIAS: depende solo de la API de OpenTelemetry."
 readme = "README.md"

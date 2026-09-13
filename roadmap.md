@@ -29,7 +29,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | Fase | Título | Estado | Avance |
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
-| **F1** | Librerías y primeras apps | 🚧 | 7/12 |
+| **F1** | Librerías y primeras apps | 🚧 | 10/13 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
@@ -72,11 +72,12 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-05` | ✅ | Propagación fuera de HTTP: Kafka, Celery, colas, CLI | `argus/propagate.py` |
 | `F1-06` | ✅ | Middleware ASGI con modos de confianza | D-010 |
 | `F1-07` | ✅ | Prueba de humo end-to-end contra el stack real | `scripts/e2e_smoke.py` — 7/7 |
-| `F1-08` | ⏳ | **Runbook de migración de máquina, ensayado en frío** | Requisito de F0 que quedó pendiente; ver `X-01` |
-| `F1-09` | ⏳ | **Prueba de la cola persistente**: parar el central, generar tráfico, arrancar, no perder nada | Valida D-004 |
+| `F1-08` | ✅ | **Runbook de migración de máquina** | Ensayado **y ejecutado de verdad**: 448 spans antes y después |
+| `F1-09` | ✅ | **Prueba de la cola persistente** | 100/100 spans; sobrevive al reinicio del propio agente |
 | `F1-10` | ⏳ | Desplegar Collector agente en una **segunda máquina** | Valida D-003 de verdad |
 | `F1-11` | ⏳ | Adoptar en 3 apps reales: una API, una con worker, una Go | Go con instrumentación en compilación |
-| `F1-12` | ⏳ | Perfil `genai`: Langfuse arrancado y verificado | Configurado, sin probar |
+| `F1-12` | ⏳ | Perfil `genai`: Langfuse arrancado y verificado | Solo hace falta si la app piloto usa LLM |
+| `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels`; nombres `argus-obs-*` por colisión en PyPI — D-035 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -187,11 +188,11 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `X-01` | ⏳ | El runbook de migración se planificó en F0 y no se hizo | Se ensaya **en frío**, antes de necesitarlo |
+| `X-01` | ✅ | El runbook de migración se planificó en F0 y no se hizo | Hecho y ejecutado de verdad en `F1-08` |
 | `X-02` | ⏳ | Sin CI: los tests y la validación se corren a mano | `scripts/verify.sh` es el contenido del pipeline |
 | `X-03` | ⏳ | El perfil `genai` está configurado pero nunca arrancado | `F1-12` lo cubre |
 | `X-04` | ⏳ | El perfil `agents` está configurado pero nunca arrancado | `F3-01` lo cubre |
-| `X-05` | 🧪 | La cola persistente no se ha probado con un corte real | `F1-09` |
+| `X-05` | ✅ | La cola persistente no se había probado con un corte real | Probada en `F1-09`, incluido reinicio del agente |
 | `X-06` | ✅ | El regex de teléfono enmascaraba `service.namespace` | D-018, corregido con tests |
 | `X-07` | ✅ | La rama de Langfuse reintentaba contra un host inexistente | D-019, extraída a overlay |
 | `X-08` | ✅ | Healthcheck del Collector fallaba: imagen distroless | D-020 |
@@ -210,6 +211,9 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `X-21` | ✅ | El `alert-bus` no se trazaba a sí mismo | Le faltaba el middleware ASGI |
 | `X-22` | ✅ | vmalert fallaba con 422 mientras los tests pasaban | D-034: manda array pelado, no `{"alerts": [...]}` |
 | `X-23` | ✅ | La detección de bucles sin `args` daba falsos positivos | Sin argumentos no se puede saber si dos llamadas son iguales |
+| `X-24` | ✅ | Las métricas del agente escuchaban en `127.0.0.1` dentro del contenedor | Mismo fallo que `X-12`, en otro sitio |
+| `X-25` | ✅ | `pip install argus-sdk` traía un paquete ajeno de PyPI | D-035: confusión de dependencias |
+| `X-26` | ⏳ | **Ningún canal de notificación real configurado** | Único bloqueante del piloto; necesita una credencial tuya |
 
 ---
 
@@ -228,7 +232,7 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-07` | 💭 | HyperDX o Grafana como UI de exploración | Hoy se consulta por SQL |
 | `B-08` | 💭 | Vistas materializadas de ClickHouse para burn-rate | Camino templado, si vmalert se queda corto |
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
-| `B-10` | 💭 | Índice PyPI privado (`devpi`) en el plano central | Hoy se resuelve por workspace |
+| `B-10` | 💭 | Índice PyPI privado (`devpi`) en el plano central | Hoy `make wheels` + `--find-links`; **necesario antes del rollout** |
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |
