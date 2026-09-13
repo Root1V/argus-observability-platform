@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-schemas"
-version = "1.0.0"
+version = "1.0.0a1"
 description = "Esquemas compartidos de Argus: senal, incidente, severidad."
 readme = "README.md"
 requires-python = ">=3.11"

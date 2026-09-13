@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-sdk"
-version = "1.0.0"
+version = "1.0.0a1"
 description = "SDK de observabilidad de Argus. Para APLICACIONES: configura trazas, metricas y logs con una linea."
 readme = "README.md"
 requires-python = ">=3.11"
