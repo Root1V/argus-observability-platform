@@ -48,9 +48,16 @@ enseña con menos riesgo:
 | Que falle de vez en cuando | Sin errores no ves la mitad del sistema |
 | **No** la más crítica | Si algo va mal, que no sea la que no puede fallar |
 
-De tu portafolio, `intelligent_document_platform` encaja bien: tiene API,
-worker y un componente de OCR, usa LLM, y ya tiene OpenTelemetry (así que el
-primer paso es gratis).
+**El piloto en curso es `auth-service`, de Prometheus** —la plataforma de
+inferencia local, cuyo repositorio está en `edge-ai-inference/`—. Encaja bien:
+2.067 líneas frente a las 9.510 del gateway, usa el paquete de telemetría
+compartido de la plataforma (así que lo aprendido sirve para los demás módulos),
+y es dependencia del gateway, con lo que además ejercita el grafo de
+correlación.
+
+> **Ojo con el nombre**: *Prometheus* aquí es el proyecto de inferencia de tu
+> portafolio, no el TSDB. En Argus conviven los dos, así que conviene
+> desambiguar al escribir.
 
 ---
 

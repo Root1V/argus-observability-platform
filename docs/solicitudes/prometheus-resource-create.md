@@ -1,10 +1,11 @@
-# Solicitud a Prometheus (edge-ai-inference)
+# Solicitud al equipo de Prometheus
 
-**Para**: equipo de `edge-ai-inference`
-**De**: plataforma Argus
+**Para**: equipo de **Prometheus** — plataforma de inferencia local de nivel
+empresarial (repositorio en `edge-ai-inference/`)
+**De**: Argus — plataforma de observabilidad
 **Fecha**: 13 de septiembre de 2026
 **Impacto**: una línea · **Urgencia**: bloquea el piloto de observabilidad
-**Parche listo**: [`edge-ai-inference-resource-create.patch`](edge-ai-inference-resource-create.patch)
+**Parche listo**: [`prometheus-resource-create.patch`](prometheus-resource-create.patch)
 
 ---
 
@@ -46,7 +47,7 @@ pasan — que siguen ganando. **El comportamiento actual se conserva**: lo que
 `service.namespace`, `service.version` y `deployment.environment.name` **sin
 tocar código**. Sin ella:
 
-- Los servicios de Prometheus aparecen sueltos, sin quedar agrupados bajo su
+- Los servicios de Prometheus aparecen sueltos, sin quedar agrupados bajo la
   plataforma. No se puede responder *«¿cómo va Prometheus?»*, solo *«¿cómo va
   auth-service?»*.
 - El enrutamiento de avisos no encuentra al equipo responsable.
@@ -86,7 +87,7 @@ Su suite completa pasa con el cambio: **32 tests, cobertura 97 %**.
 ```bash
 cd edge-ai-inference
 git checkout -b fix/otel-resource-create
-git apply /ruta/a/edge-ai-inference-resource-create.patch
+git apply /ruta/a/prometheus-resource-create.patch
 uv run --directory telemetry python -m pytest -q
 ```
 

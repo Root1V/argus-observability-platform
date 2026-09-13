@@ -54,8 +54,15 @@
   depende_de: [postgres-main, minio-main]
   tipo_ia: [llm-api, ocr, extraccion-estructurada]
 
+# OJO con el nombre: el proyecto se llama **Prometheus** (plataforma de
+# inferencia local de nivel empresarial) y `edge-ai-inference` es solo su
+# carpeta. No tiene NADA que ver con Prometheus-el-TSDB, que aparece por otro
+# lado en esta plataforma (PromQL, prometheusremotewrite, VictoriaMetrics).
+# El `id` conserva el nombre del directorio porque es lo que emiten sus
+# servicios hoy en `service.namespace`; cambiarlo seria cambiar su
+# configuracion, y eso es suyo.
 - id: edge-ai-inference
-  nombre_visible: Inferencia local (Prometheus)
+  nombre_visible: Prometheus (inferencia local)
   # APLICACION PILOTO, a la espera de su equipo.
   #
   # `auth-service` ya emite trazas hacia nuestro Collector con solo variables de
