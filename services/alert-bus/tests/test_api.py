@@ -152,3 +152,33 @@ def test_healthz_y_stats(client) -> None:
 def test_expone_el_registro(client) -> None:
     apps = client.get("/registry").json()
     assert any(a["id"] == "intelligent-document-platform" for a in apps)
+
+
+def test_todo_ajuste_llega_al_contenedor() -> None:
+    """Un ajuste que el contenedor no puede recibir es un boton que no hace nada.
+
+    `ALERTBUS_SMTP_TLS` existia en la configuracion, estaba documentado, y
+    compose no lo pasaba: ponerlo en el .env no tenia ningun efecto y el fallo
+    aparecia como un error de STARTTLS, que no se parece en nada a la causa.
+
+    `host` y `port` quedan fuera a proposito: los fija la imagen, y exponerlos
+    solo permitiria que el servicio dejara de escuchar donde compose publica.
+    """
+    import re
+    from pathlib import Path
+
+    from alert_bus.config import Settings
+
+    raiz = Path(__file__).resolve().parents[3]
+    compose = (raiz / "platform" / "compose.yaml").read_text(encoding="utf-8")
+
+    FIJADOS_POR_LA_IMAGEN = {"host", "port", "registry_path"}
+
+    ausentes = [
+        f"ALERTBUS_{campo.upper()}"
+        for campo in Settings.model_fields
+        if campo not in FIJADOS_POR_LA_IMAGEN
+        and not re.search(rf"^\s*ALERTBUS_{campo.upper()}:", compose, re.M)
+    ]
+
+    assert not ausentes, f"ajustes inalcanzables desde el .env: {ausentes}"

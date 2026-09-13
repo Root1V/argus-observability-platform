@@ -356,3 +356,33 @@ def test_gchat_conserva_las_credenciales_al_editar() -> None:
     assert "key=KKK" in url
     assert "token=TTT" in url
     assert "updateMask=cardsV2" in url
+
+
+def test_email_la_actualizacion_lleva_su_propio_message_id(
+    incidente_investigado: Incident, monkeypatch
+) -> None:
+    """Un correo sin `Message-ID` lo rechazan algunos MTA.
+
+    El hilo lo hacen `In-Reply-To` y `References`, no la ausencia de
+    identificador propio.
+    """
+    enviados = []
+
+    class SMTPFalso:
+        def __init__(self, *a, **k): ...
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self): ...
+        def login(self, *a): ...
+        def send_message(self, mensaje): enviados.append(mensaje)
+
+    monkeypatch.setattr("smtplib.SMTP", SMTPFalso)
+    sink = EmailSink(host="smtp.test", recipients=["a@b.c"])
+
+    sink.send(incidente_investigado, update=False)
+    sink.send(incidente_investigado, update=True)
+
+    inicial, actualizacion = enviados
+    assert actualizacion["Message-ID"], "toda actualización necesita su propio identificador"
+    assert actualizacion["Message-ID"] != inicial["Message-ID"]
+    assert actualizacion["In-Reply-To"] == inicial["Message-ID"], "y debe enhebrarse con el inicial"

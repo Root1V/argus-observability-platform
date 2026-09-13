@@ -61,12 +61,16 @@ class EmailSink:
         # Estas dos cabeceras son lo que hace que el cliente de correo agrupe
         # el aviso inicial y el informe del agente en la MISMA conversacion.
         # Sin ellas, la divulgacion progresiva produce dos correos sueltos.
-        identificador = f"<{incident.fingerprint}@argus>"
+        hilo = f"<{incident.fingerprint}@argus>"
         if update:
-            mensaje["In-Reply-To"] = identificador
-            mensaje["References"] = identificador
+            # Cada correo lleva su PROPIO Message-ID —hay MTA que rechazan los
+            # que no lo traen— y apunta al del aviso inicial para enhebrarse.
+            marca = incident.updated_at.timestamp()
+            mensaje["Message-ID"] = f"<{incident.fingerprint}.{marca}@argus>"
+            mensaje["In-Reply-To"] = hilo
+            mensaje["References"] = hilo
         else:
-            mensaje["Message-ID"] = identificador
+            mensaje["Message-ID"] = hilo
 
         mensaje.set_content(texto_plano(incident))
         mensaje.add_alternative(self._html(incident), subtype="html")

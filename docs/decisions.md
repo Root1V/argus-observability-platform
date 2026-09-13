@@ -1040,3 +1040,44 @@ espera el cambio.
 **Consecuencias**. El registro cambia a ritmo humano, así que un `stat()` cada
 `tick_s` es gratis; hacerlo en cada consulta lo pondría en el camino caliente,
 donde no sobra tiempo.
+
+---
+
+## D-044 · Los webhooks de Google Chat son de Workspace; el canal del piloto es el correo
+
+**Contexto**. El plan designaba Google Chat como canal principal por ser el de
+menor fricción (§9.3). Al configurarlo, «Agregar webhooks» aparece en gris: los
+webhooks entrantes son una función de **Google Workspace**, y la cuenta es una
+`@gmail.com` personal. La sección existe en la interfaz, lo que hace que parezca
+un permiso ajustable cuando no lo es.
+
+**Decisión**. El canal del piloto es el **correo por SMTP**. Google Chat sigue
+implementado y probado; se activa el día que haya un Workspace detrás.
+
+**Consecuencias**.
+- La divulgación progresiva por correo va por cabeceras (`Message-ID`,
+  `In-Reply-To`, `References`) en vez de por edición de mensaje: dos correos en
+  una conversación en lugar de un mensaje que se reescribe. Es peor, y es lo
+  que hay sin API de edición.
+- Se pierden los **botones**, así que la aprobación humana de L5 (F6-06)
+  necesitará otro camino —un enlace firmado en el correo— mientras no haya
+  Workspace.
+- El registro lista `[gchat, email, console]`: cambiar de canal es editar el
+  `.env`, sin tocar el registro.
+
+---
+
+## D-045 · Todo ajuste de la configuración debe llegar al contenedor, y hay un test que lo fija
+
+**Contexto**. `ALERTBUS_SMTP_TLS` existía en `Settings`, estaba documentado, y
+`compose.yaml` no lo pasaba. Ponerlo en el `.env` no hacía nada, y el síntoma
+—«STARTTLS extension not supported by server»— no se parece en nada a la causa.
+Había siete ajustes más en la misma situación.
+
+**Decisión**. Un test compara los campos de `Settings` con las variables que
+compose declara, con una lista explícita de los que la imagen fija a propósito
+(`host`, `port`, `registry_path`).
+
+**Consecuencias**. Añadir un ajuste sin exponerlo rompe la suite. Es la clase de
+fallo que solo aparece al usar la documentación al pie de la letra, porque el
+código está bien y la suite pasa.

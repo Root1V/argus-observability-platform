@@ -41,8 +41,13 @@ remediaciones sin salir del chat.
    https://chat.googleapis.com/v1/spaces/AAAA.../messages?key=...&token=...
    ```
 
-> Si no ves *Apps e integraciones*, tu administrador de Workspace tiene los
-> webhooks desactivados. En ese caso, salta al correo.
+> **Si «Agregar webhooks» aparece en gris**, no es un permiso que puedas
+> cambiar: los webhooks entrantes son una función de **Google Workspace**. Una
+> cuenta personal `@gmail.com` muestra la sección y no deja crear ninguno, y un
+> Workspace puede tenerlos desactivados por su administrador.
+>
+> No hay rodeo: **salta al correo**, que funciona igual de bien para el piloto y
+> se enhebra en una sola conversación.
 
 ### 2. Ponerlo en la configuración
 
@@ -82,7 +87,7 @@ Necesitas una **contraseña de aplicación**, no tu contraseña normal:
 En `platform/.env`:
 
 ```bash
-ALERTBUS_SINKS=console,json,gchat,email
+ALERTBUS_SINKS=console,json,email
 ALERTBUS_SMTP_HOST=smtp.gmail.com
 ALERTBUS_SMTP_PORT=587
 ALERTBUS_SMTP_USER=tu@gmail.com
@@ -92,6 +97,20 @@ ALERTBUS_SMTP_TO=tu@gmail.com
 ```
 
 `ALERTBUS_SMTP_TO` admite varios separados por coma.
+
+Luego:
+
+```bash
+make up && make channel-test
+```
+
+Verás **dos correos en la misma conversación**: el aviso y, debajo, el informe.
+Eso es la divulgación progresiva por correo — las cabeceras `Message-ID` e
+`In-Reply-To` son las que hacen que Gmail los agrupe en vez de mostrarlos
+sueltos.
+
+> `ALERTBUS_SMTP_TLS=false` existe para un SMTP local de pruebas. Contra Gmail
+> déjalo en `true` (es el valor por defecto): sin STARTTLS rechaza la conexión.
 
 ---
 
