@@ -179,6 +179,38 @@ class Registry:
         app = self.get(app_id)
         return list(app.depends_on) if app else []
 
+    def upstream_of(self, app_id: str, *, max_depth: int = 3) -> list[str]:
+        """Cierre transitivo de dependencias, de mas cercana a mas lejana.
+
+        Transitivo porque las cadenas reales lo son: la IDP depende de MinIO, y
+        si MinIO depende del almacenamiento, un fallo de disco explica los dos.
+
+        Con profundidad ACOTADA: mas alla de tres saltos, "A depende de B" deja
+        de ser una explicacion util y se convierte en "todo depende de todo".
+
+        El orden importa: al correlacionar se prefiere la causa mas CERCANA,
+        porque es la mas accionable. Si Postgres esta caido, el aviso util es
+        el de Postgres, no el del disco que lo aloja.
+        """
+        visto: set[str] = {app_id}
+        resultado: list[str] = []
+        frontera = [app_id]
+
+        for _ in range(max_depth):
+            siguiente: list[str] = []
+            for actual in frontera:
+                for dep in self.dependencies_of(actual):
+                    if dep in visto:
+                        continue
+                    visto.add(dep)
+                    resultado.append(dep)
+                    siguiente.append(dep)
+            if not siguiente:
+                break
+            frontera = siguiente
+
+        return resultado
+
     def channels_for(self, app_id: str, severity: Severity) -> list[str]:
         """A donde va el aviso. Es una REGLA, no un juicio (D-014)."""
         app = self.get(app_id)

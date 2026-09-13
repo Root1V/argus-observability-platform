@@ -218,6 +218,108 @@ falla, la plataforma manda spam y la gente deja de mirarla.
 
 ---
 
+## 4c. Correlación: que el aviso útil no quede enterrado
+
+```bash
+make e2e-f2
+```
+
+Comprueba los cuatro comportamientos que definen *"detección sin ruido"*:
+
+```
+OK  Una alerta abre un incidente
+OK  Veinte alertas idénticas son UN incidente
+OK  El síntoma se suprime cuando hay causa aguas arriba
+OK  La causa registra a qué está afectando
+OK  La investigación enriquece el MISMO incidente
+OK  Y no abre uno nuevo
+
+  señales entrantes:    23
+  notificaciones:       2
+```
+
+**23 señales → 2 notificaciones.** Ese cociente es toda la Fase 2 en un número.
+
+La correlación usa el grafo `depende_de` del registro: cuando falla Postgres,
+el incidente de la IDP se marca como síntoma y no avisa, porque el aviso útil
+—el de Postgres— ya salió. Sin esto, una caída de Postgres genera un aviso por
+cada aplicación que lo usa y el que importa queda sepultado.
+
+Hay un matiz que merece la pena conocer, porque es el fallo **peligroso** de la
+correlación: si la causa se resuelve pero el síntoma sigue fallando, el síntoma
+se **promueve** y avisa. Sin eso, "esto tiene explicación" se convertiría en
+"esto no hace falta mirarlo".
+
+---
+
+## 4d. Los canales de notificación
+
+Por defecto sale todo por consola. Para activar Google Chat, en `platform/.env`:
+
+```bash
+ALERTBUS_SINKS=console,json,gchat
+ALERTBUS_GCHAT_WEBHOOK=https://chat.googleapis.com/v1/spaces/XXX/messages?key=...&token=...
+```
+
+Y para correo:
+
+```bash
+ALERTBUS_SINKS=console,json,gchat,email
+ALERTBUS_SMTP_HOST=smtp.gmail.com
+ALERTBUS_SMTP_USER=tu@correo.com
+ALERTBUS_SMTP_PASSWORD=una-contraseña-de-aplicación
+ALERTBUS_SMTP_TO=ops@tu-dominio.com
+```
+
+Un canal sin credenciales **se omite con un aviso**, no se construye a medias:
+un *sink* que falla en cada envío llena el log y da la falsa impresión de que
+la plataforma está avisando.
+
+Comprueba qué canales están activos:
+
+```bash
+curl -s http://127.0.0.1:8080/stats | python3 -m json.tool
+```
+
+**Sobre WhatsApp**: úsalo solo para crítico fuera de horario. Cuesta por
+mensaje, exige una plantilla preaprobada —clasifícala como *utility*, no
+*marketing*—, y desde el 1 de octubre de 2026 ni las respuestas dentro de la
+ventana de 24 h son gratuitas. Por eso ese canal manda solo el titular y un
+enlace: el informe completo va por correo y por Chat, que no cuestan por
+mensaje.
+
+---
+
+## 4e. El canario: que el silencio no parezca salud
+
+```bash
+docker compose -f platform/compose.yaml logs canary --tail 20
+```
+
+Dos tipos de sonda:
+
+- **HTTP** (declaradas en `platform/registry/probes.yaml`): comprueban que un
+  endpoint responde y en cuánto tiempo. Sirven para apps sin instrumentar.
+- **De silencio** (derivadas solas del registro): comprueban que una app
+  **sigue emitiendo**. Cierran el punto ciego que ningún sistema basado solo en
+  lo que llega puede ver.
+
+Pruébalo tirando algo:
+
+```bash
+docker compose -f platform/compose.yaml stop victoriametrics
+# espera dos rondas del canario (CANARY_INTERVALO_S, 300 s por defecto)
+make incidents
+docker compose -f platform/compose.yaml start victoriametrics
+```
+
+Hacen falta **dos** fallos consecutivos antes de que alerte. Cambia tiempo de
+detección por precisión, que en un canario es la moneda correcta: uno que grita
+por cada microcorte de red acaba silenciado, y un canario silenciado no vale
+nada el día que grite por algo real.
+
+---
+
 ## 5. Instrumentar una app tuya de verdad
 
 Es la prueba que más te va a decir. Coge una app pequeña con FastAPI:

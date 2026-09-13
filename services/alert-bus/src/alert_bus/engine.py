@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from argus_schemas import Incident, IncidentState, Severity, Signal, SignalKind
 
 from .registry import Registry
-from .sinks import Sink
+from .sinks import InlineDispatcher, Sink
 
 log = logging.getLogger("alert_bus.engine")
 
@@ -51,12 +51,22 @@ class Engine:
         group_window_s: int = 60,
         resolve_after_s: int = 900,
         max_incidents: int = 5_000,
+        correlation_window_s: int = 300,
+        dispatcher: object | None = None,
     ) -> None:
         self._registry = registry
         self._sinks = list(sinks)
+        # Sin despachador explicito se envia en el acto. El de hilos se inyecta
+        # en produccion para que un webhook lento no bloquee la deteccion.
+        self._dispatcher = dispatcher or InlineDispatcher()
         self._group_window = timedelta(seconds=group_window_s)
         self._resolve_after = timedelta(seconds=resolve_after_s)
         self._max = max_incidents
+        # Solo se suprime contra causas RECIENTES. Un incidente aguas arriba
+        # abierto desde hace horas no puede seguir explicando lo que pasa
+        # ahora: a partir de cierto punto, "hay algo roto arriba" deja de ser
+        # una explicacion y pasa a ser una excusa para no avisar.
+        self._correlation_window = timedelta(seconds=correlation_window_s)
 
         self._incidents: dict[str, Incident] = {}   # huella -> incidente abierto
         self._order: deque[str] = deque()           # para acotar la memoria
@@ -68,6 +78,8 @@ class Engine:
             "signals_deduplicated": 0,
             "notifications_sent": 0,
             "unregistered_apps": 0,
+            "symptoms_suppressed": 0,
+            "symptoms_promoted": 0,
         }
 
     # --- Entrada -------------------------------------------------------------
@@ -110,11 +122,51 @@ class Engine:
 
             incident = Incident.from_signal(signal, severity, uuid.uuid4().hex[:12])
             incident.thread_key = f"argus-{huella}"
+
+            # Correlacion por topologia, ANTES de decidir si se notifica.
+            causa = self._find_upstream_cause(signal.app)
+            if causa is not None:
+                incident.suppressed_by = causa.id
+                causa.symptoms.append(incident.id)
+                causa.updated_at = _now()
+                self.stats["symptoms_suppressed"] += 1
+
             self._incidents[huella] = incident
             self._order.append(huella)
             self.stats["incidents_opened"] += 1
             self._evict_if_needed()
             return incident, True
+
+    def _find_upstream_cause(self, app_id: str) -> Incident | None:
+        """Busca un incidente abierto en algo de lo que esta app depende.
+
+        Se llama con el lock TOMADO.
+
+        Devuelve la causa mas CERCANA en el grafo, no la mas antigua ni la mas
+        grave: es la mas accionable. Si Postgres esta caido, el aviso util es el
+        de Postgres, no el del disco que lo aloja.
+        """
+        upstream = self._registry.upstream_of(app_id)
+        if not upstream:
+            return None
+
+        ahora = _now()
+        por_app: dict[str, Incident] = {}
+        for incidente in self._incidents.values():
+            if incidente.state is IncidentState.RESOLVED or incidente.is_symptom:
+                continue
+            if ahora - incidente.opened_at > self._correlation_window:
+                continue
+            # Si hay varios en la misma app aguas arriba, el mas grave.
+            previo = por_app.get(incidente.app)
+            if previo is None or incidente.severity.rank > previo.severity.rank:
+                por_app[incidente.app] = incidente
+
+        # `upstream` viene ordenado de mas cercano a mas lejano.
+        for dependencia in upstream:
+            if (candidato := por_app.get(dependencia)) is not None:
+                return candidato
+        return None
 
     def _severity_for(self, signal: Signal, ceiling: Severity) -> Severity:
         """Severidad base por tipo de senal, acotada por la criticidad de la app.
@@ -138,16 +190,20 @@ class Engine:
     # --- Salida --------------------------------------------------------------
 
     def _notify(self, incident: Incident, *, update: bool) -> None:
-        channels = self._registry.channels_for(incident.app, incident.severity)
-        for sink in self._sinks:
-            if sink.name not in channels and "console" not in channels:
-                continue
-            try:
-                sink.send(incident, update=update)
-            except Exception as exc:  # noqa: BLE001
-                # Un sink caido no puede impedir que los demas reciban. Perder
-                # un canal es malo; perder la alerta entera es peor.
-                log.error("sink.failed", extra={"sink": sink.name, "error": str(exc)})
+        canales = set(self._registry.channels_for(incident.app, incident.severity))
+        destinos = [s for s in self._sinks if s.name in canales]
+
+        if not destinos:
+            # Un incidente cuyo canal no existe no puede desaparecer en
+            # silencio: acabaria con la plataforma creyendo que avisa cuando no.
+            log.warning(
+                "notify.no_sink",
+                extra={"incident": incident.id, "app": incident.app, "channels": sorted(canales)},
+            )
+
+        # El envio sale del camino de ingesta: un canal lento no puede retrasar
+        # la deteccion del siguiente incidente (D-029).
+        self._dispatcher.submit(destinos, incident, update=update)
 
         if not update:
             incident.notified_at = _now()
@@ -198,13 +254,20 @@ class Engine:
     # --- Mantenimiento -------------------------------------------------------
 
     def sweep(self) -> int:
-        """Cierra los incidentes que llevan rato sin senales nuevas.
+        """Cierra los incidentes inactivos y promueve sintomas huerfanos.
 
-        Sin esto, un incidente resuelto seguiria absorbiendo senales meses
+        Sin el cierre, un incidente resuelto seguiria absorbiendo senales meses
         despues y el mismo problema dos semanas mas tarde no generaria aviso.
+
+        Y sin la promocion, un sintoma cuya causa se resolvio pero que SIGUE
+        fallando se quedaria callado para siempre. Ese es el fallo peligroso de
+        la correlacion: convertir "esto tiene explicacion" en "esto no hace
+        falta mirarlo".
         """
         ahora = _now()
         cerrados = 0
+        vivos: set[str] = set()
+
         with self._lock:
             for huella, incident in list(self._incidents.items()):
                 if incident.state is IncidentState.RESOLVED:
@@ -214,6 +277,25 @@ class Engine:
                     incident.resolved_at = ahora
                     cerrados += 1
                     del self._incidents[huella]
+                else:
+                    vivos.add(incident.id)
+
+            # Sintomas cuya causa ya no esta abierta: dejan de estar suprimidos.
+            huerfanos = [
+                i for i in self._incidents.values()
+                if i.is_symptom and i.suppressed_by not in vivos
+            ]
+            for sintoma in huerfanos:
+                sintoma.suppressed_by = None
+                sintoma.updated_at = ahora
+                self.stats["symptoms_promoted"] += 1
+
+        # Los que ahora merecen aviso, lo reciben. Fuera del lock: notificar
+        # puede tardar y no queremos bloquear la ingesta mientras tanto.
+        for sintoma in huerfanos:
+            if sintoma.needs_notification:
+                self._notify(sintoma, update=False)
+
         return cerrados
 
     def _evict_if_needed(self) -> None:

@@ -23,6 +23,32 @@ REGISTRO = [
         ],
         "depende_de": ["postgres-main", "minio-main"],
     },
+    # Las dependencias tienen que estar DECLARADAS para que la correlacion
+    # tenga grafo. Un servicio auto-descubierto entra con criticidad media, asi
+    # que ni siquiera podria paginar, y los tests de correlacion medirian otra
+    # cosa.
+    {
+        "id": "postgres-main",
+        "estado": "activo",
+        "criticidad": "alta",
+        "canales": {"page": ["memory"], "ticket": ["memory"]},
+        "componentes": [{"id": "postgres-main", "rol": "model-server"}],
+    },
+    {
+        "id": "minio-main",
+        "estado": "activo",
+        "criticidad": "media",
+        "canales": {"page": ["memory"], "ticket": ["memory"]},
+        "componentes": [{"id": "minio-main", "rol": "model-server"}],
+    },
+    {
+        "id": "aeon-ai",
+        "estado": "activo",
+        "criticidad": "alta",
+        "canales": {"page": ["memory"], "ticket": ["memory"]},
+        "componentes": [{"id": "control-plane", "rol": "api"}],
+        "depende_de": ["postgres-main"],
+    },
     {
         "id": "llm-benchmark",
         "estado": "activo",

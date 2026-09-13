@@ -49,6 +49,9 @@ latency:  ## Mide el presupuesto del camino caliente (F2-09)
 	OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer $$ARGUS_GATEWAY_TOKEN" \
 	uv run --with 'opentelemetry-exporter-otlp-proto-http' python scripts/measure_latency.py --n $${N:-10}
 
+e2e-f2:  ## Verificacion end-to-end de la Fase 2 (deteccion sin ruido)
+	@set -a; . platform/.env; set +a; uv run python scripts/e2e_f2.py
+
 incidents:  ## Incidentes abiertos en el alert-bus
 	@curl -s http://127.0.0.1:8080/incidents | python3 -m json.tool
 
@@ -72,4 +75,4 @@ query:  ## Consulta ClickHouse:  make query SQL="SELECT ..."
 semconv:  ## Regenera las constantes desde argus.yaml
 	uv run python tools/gen_semconv.py
 
-.PHONY: help setup up down clean ps logs agent latency incidents verify check test demo query semconv
+.PHONY: help setup up down clean ps logs agent latency incidents e2e-f2 verify check test demo query semconv

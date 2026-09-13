@@ -137,6 +137,14 @@ class Incident(BaseModel):
     trace_ids: list[str] = Field(default_factory=list)
     components_affected: set[str] = Field(default_factory=set)
 
+    # --- Correlacion por topologia -------------------------------------------
+    # Cuando falla una dependencia, TODO lo que depende de ella falla tambien.
+    # Sin esto, una caida de Postgres genera un aviso por cada aplicacion que lo
+    # usa, y el aviso que importa —el de Postgres— queda enterrado entre los
+    # sintomas.
+    suppressed_by: str | None = None      # id del incidente causa, si es sintoma
+    symptoms: list[str] = Field(default_factory=list)   # ids de los sintomas que causa
+
     # --- Divulgacion progresiva (D-015) -------------------------------------
     # `thread_key` es lo que permite que el segundo evento ACTUALICE el mensaje
     # en vez de mandar uno nuevo. Sin esto, tiempo real significa spam.
@@ -186,13 +194,22 @@ class Incident(BaseModel):
             self.trace_ids.append(signal.trace_id)
 
     @property
+    def is_symptom(self) -> bool:
+        return self.suppressed_by is not None
+
+    @property
     def needs_notification(self) -> bool:
         """Si hay que mandar algo ahora mismo.
 
         Un `page` se notifica en cuanto nace: esperar a agrupar mata el tiempo
         real. Las severidades menores esperan su ventana, porque ahi la rapidez
         no compra nada.
+
+        Un SINTOMA no se notifica nunca por su cuenta: su causa ya lo hizo, y
+        avisar de los dos es el ruido que la correlacion existe para evitar.
         """
+        if self.is_symptom:
+            return False
         return self.notified_at is None and self.severity is Severity.PAGE
 
     @property
