@@ -282,13 +282,23 @@ Si algo de eso no pasa, es mejor descubrirlo ahora que el día que importe.
 ## Paso 6 — Si la app usa LLM
 
 ```bash
-docker compose -f platform/compose.yaml -f platform/compose.genai.yaml \
-  --profile genai up -d
+make genai          # arranca Langfuse y te da la credencial
+make genai-check    # verifica que las trazas de prompts llegan
 ```
 
-Crea un proyecto en Langfuse (`http://localhost:3000`), copia sus claves y
-ponlas en `platform/.env` como `ARGUS_LANGFUSE_AUTH` (base64 de
-`public:secret`). Reinicia el Collector.
+**No hay que crear el proyecto ni copiar claves**: la organización, el proyecto
+y las claves de API se provisionan desde el `.env`, y `ARGUS_LANGFUSE_AUTH` se
+calcula solo (D-039). La primera vez tarda un poco, porque Langfuse migra sus
+tablas de ClickHouse.
+
+Lo que verás cuando funcione: **la misma traza en los dos sitios**. ClickHouse
+tiene el árbol completo —la petición HTTP, la cola, el worker, la llamada al
+modelo—; Langfuse tiene solo el subárbol GenAI, pero con los prompts, el coste y
+la evaluación. Comparten `trace_id`, así que saltar de uno a otro es seguir un
+identificador.
+
+Y el contenido de los prompts vive **solo** en Langfuse: en ClickHouse se borra,
+donde serían decenas de KB por span sin ninguna consulta que los use.
 
 Para instrumentar las llamadas: si la app usa **Axonium**, instrumentar Axonium
 una vez da trazas GenAI a **todas** las apps que lo usen, sin tocarlas

@@ -260,7 +260,10 @@ services:
   langfuse-minio:
     <<: *restart
     profiles: [genai, agents, full]
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Desde quay.io y no Docker Hub: MinIO retiro sus imagenes de alli, y un
+    # `pull access denied` sobre una imagen que existio no dice eso en ningun
+    # sitio. Version fijada, como todas.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_USER:-argus}
@@ -270,6 +273,21 @@ services:
     ports:
       - "127.0.0.1:9011:9001"   # consola de MinIO; 9001 suele estar ocupado
 
+  # Langfuse NO crea su bucket: espera encontrarlo. Sin esto, la ingesta OTLP
+  # devuelve 500 y el error solo aparece en los logs de langfuse-web, no en los
+  # del Collector, que se limita a reportar "HTTP 500".
+  langfuse-minio-init:
+    profiles: [genai, agents, full]
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    depends_on: [langfuse-minio]
+    entrypoint: >
+      sh -c "
+      until mc alias set argus http://langfuse-minio:9000 '${MINIO_USER:-argus}' '${MINIO_PASSWORD}' 2>/dev/null; do sleep 2; done;
+      mc mb --ignore-existing argus/langfuse;
+      echo 'bucket langfuse listo'
+      "
+    restart: "no"
+
   langfuse-web:
     <<: *restart
     profiles: [genai, agents, full]
@@ -277,6 +295,7 @@ services:
     depends_on:
       langfuse-postgres: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
+      langfuse-minio-init: { condition: service_completed_successfully }
     environment:
       DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-postgres:5432/langfuse
       # Base `default`, SEPARADA de la `otel` del Collector: compartirla
@@ -285,6 +304,10 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      # Un solo nodo: sin esto Langfuse intenta crear tablas
+      # replicadas, que exigen ZooKeeper/Keeper, y falla con un
+      # error que habla de la base de datos y no de la replicacion.
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
       REDIS_CONNECTION_STRING: redis://:${LANGFUSE_REDIS_PASSWORD}@langfuse-redis:6379
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
       LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
@@ -297,6 +320,17 @@ services:
       SALT: ${LANGFUSE_SALT:?define LANGFUSE_SALT en .env}
       ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?define LANGFUSE_ENCRYPTION_KEY en .env}
       TELEMETRY_ENABLED: "false"
+      # Provisionado sin pasar por la UI. Las claves salen del .env, asi que el
+      # Collector puede autenticarse desde el primer arranque.
+      LANGFUSE_INIT_ORG_ID: argus
+      LANGFUSE_INIT_ORG_NAME: Argus
+      LANGFUSE_INIT_PROJECT_ID: argus-portafolio
+      LANGFUSE_INIT_PROJECT_NAME: Portafolio
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?define LANGFUSE_PUBLIC_KEY en .env}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?define LANGFUSE_SECRET_KEY en .env}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_EMAIL:-argus@argus.local}
+      LANGFUSE_INIT_USER_NAME: Argus
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_PASSWORD:?define LANGFUSE_INIT_PASSWORD en .env}
     ports:
       - "127.0.0.1:3000:3000"
 
@@ -313,6 +347,10 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      # Un solo nodo: sin esto Langfuse intenta crear tablas
+      # replicadas, que exigen ZooKeeper/Keeper, y falla con un
+      # error que habla de la base de datos y no de la replicacion.
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
       REDIS_CONNECTION_STRING: redis://:${LANGFUSE_REDIS_PASSWORD}@langfuse-redis:6379
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
       LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
