@@ -157,9 +157,15 @@ class Engine:
                 continue
             if ahora - incidente.opened_at > self._correlation_window:
                 continue
-            # Si hay varios en la misma app aguas arriba, el mas grave.
+            # Si hay varios abiertos en la misma app aguas arriba: el mas
+            # grave, y en empate el mas RECIENTE.
+            #
+            # La recencia importa porque la correlacion es temporal: de dos
+            # incidentes igual de graves en Postgres, el que empezo hace
+            # treinta segundos explica mejor lo que esta pasando ahora que uno
+            # que lleva abierto diez minutos.
             previo = por_app.get(incidente.app)
-            if previo is None or incidente.severity.rank > previo.severity.rank:
+            if previo is None or incidente.severity.rank > previo.severity.rank or (incidente.severity.rank == previo.severity.rank and incidente.opened_at > previo.opened_at):
                 por_app[incidente.app] = incidente
 
         # `upstream` viene ordenado de mas cercano a mas lejano.

@@ -627,6 +627,87 @@ su propia degradación es invisible.
 
 ---
 
+## D-032 · Los guardarraíles de agentes viven en el SDK, no en el backend
+
+**Estado**: ✅ Vigente
+
+**Contexto**. Un agente puede entrar en bucle, llamar a la herramienta
+equivocada o alucinar, y devolver un 200 con latencia normal. El APM tradicional
+no ve nada de eso.
+
+**Decisión**. Los presupuestos **absolutos** —máximo de llamadas, coste, tokens,
+repeticiones idénticas— viven en `argus-semconv`, dentro de `agent()` y
+`tool()`. Los **estadísticos** —P99 de llamadas, coste sobre la mediana
+histórica— viven en vmalert.
+
+**Por qué la división**. En el SDK **se puede parar el bucle**. Detectarlo desde
+el backend llega tarde: para cuando la telemetría ha viajado, el agente lleva
+veinte llamadas más, y un agente descontrolado cuesta dinero cada segundo. Lo
+estadístico, en cambio, necesita histórico y no puede vivir en proceso.
+
+**Dos decisiones dentro de la decisión**:
+
+- **Por defecto marca, no para.** Parar una ejecución es una decisión del
+  producto, no de la librería de observabilidad. Un guardarraíl que corta
+  producción sin que nadie lo haya pedido es peor que el bucle.
+- **Sin `args`, no se detectan bucles.** Tratar las llamadas sin argumentos como
+  idénticas entre sí produciría falsos positivos: un agente que llama diez veces
+  a la misma herramienta con argumentos que no nos ha dicho está trabajando, no
+  atascado. Y un falso positivo en algo que puede **parar producción** es mucho
+  peor que un bucle no detectado.
+
+**La señal que sí es inequívoca**: la misma herramienta con los **mismos
+argumentos** varias veces. Muchas llamadas pueden ser trabajo legítimo; repetir
+idéntico no lo es nunca.
+
+---
+
+## D-033 · El *dead man's switch* no puede compartir nada con lo que vigila
+
+**Estado**: ✅ Vigente · verificado tirando el `alert-bus` de verdad
+
+**Contexto**. Es el único problema que la plataforma no puede resolverse a sí
+misma: si Argus cae, deja de avisar, y su silencio es indistinguible de que todo
+va bien.
+
+**Decisión**. `deadman/deadman.py`: un fichero, **cero dependencias externas**,
+fuera del compose, ejecutado por launchd o cron.
+
+**Por qué cada restricción**:
+- **Sin dependencias**: si dependiera de algo que se instala, compartiría modos
+  de fallo con lo que vigila. Verificado con un test que inspecciona sus
+  imports.
+- **Fuera del compose**: un vigilante dentro del contenedor que vigila se cae
+  con él.
+- **Idealmente en otra máquina**: en la misma detecta que el servicio murió; en
+  otra detecta además que la máquina murió, que es cuando más falta hace.
+
+**Avisa por todos los canales, no por el primero que funcione.** Si la
+plataforma está caída no se sabe cuál sigue en pie. Duplicar un aviso es
+molesto; no recibirlo es el fallo que existe para evitar.
+
+---
+
+## D-034 · El endpoint de alertas acepta las dos formas de Alertmanager
+
+**Estado**: ✅ Vigente · **descubierta durante la implementación**
+
+**Contexto**. vmalert llevaba un rato fallando al entregar sus alertas con un
+**422**, y los tests pasaban.
+
+**Causa**. vmalert manda un **array JSON pelado** `[{...}]`, que es el formato
+de la **API v2** de Alertmanager. Mi endpoint esperaba `{"alerts": [...]}`, que
+es el formato de **webhook**. Son dos cosas distintas con el mismo nombre.
+
+**Decisión**. Aceptar ambas.
+
+**La lección, que vale más que el arreglo**: los tests hablaban **mi** formato
+en vez del suyo, así que pasaban mientras la integración real estaba rota. Un
+test que inventa el formato del otro extremo no prueba nada sobre la
+integración. Ahora hay un test con el payload literal que vmalert emite.
+
+---
+
 ## D-025 · `alert-bus` propio, con Keep como posible consumidor aguas abajo
 
 **Estado**: ✅ Vigente · evaluación exigida por `F2-01` antes de escribir código

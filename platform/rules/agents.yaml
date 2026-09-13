@@ -1,0 +1,71 @@
+# Detectores estadisticos de comportamiento de agentes. (F2-07)
+#
+# Aqui viven solo los que NECESITAN HISTORICO. Los presupuestos absolutos
+# —maximo de llamadas, coste, repeticiones identicas— viven en el SDK, porque
+# alli se puede PARAR el bucle antes de que cueste dinero; detectarlo desde el
+# almacen llega tarde.
+#
+# AVISO: estas reglas necesitan varias semanas de datos para que los cuantiles
+# signifiquen algo. Antes de eso producen ruido. Se activan en la Fase 5, junto
+# con las bandas de anomalia, por el mismo motivo.
+
+groups:
+  - name: argus.agentes
+    interval: 30s
+    rules:
+      # --- Linea base de llamadas por ejecucion ------------------------------
+      - record: argus:agent_tool_calls:p99
+        expr: |
+          quantile_over_time(0.99,
+            traces_span_metrics_duration_milliseconds_count{gen_ai_operation_name="execute_tool"}[7d]
+          )
+
+      - alert: ArgusAgenteConDemasiadasLlamadas
+        # Muchas llamadas pueden ser trabajo legitimo. Lo sospechoso es salirse
+        # del comportamiento propio de ESE agente, no de un umbral universal.
+        expr: |
+          sum by (service_namespace, service_name, gen_ai_agent_name) (
+            rate(traces_span_metrics_duration_milliseconds_count{gen_ai_operation_name="execute_tool"}[5m])
+          )
+          > 3 * sum by (service_namespace, service_name, gen_ai_agent_name) (
+            rate(traces_span_metrics_duration_milliseconds_count{gen_ai_operation_name="execute_tool"}[7d] offset 5m)
+          )
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.gen_ai_agent_name }} llama a herramientas 3x por encima de su línea base"
+
+      # --- Fuga de coste ------------------------------------------------------
+      # Los precios por token caen y las facturas suben, porque lo agentico
+      # multiplica las llamadas por tarea mas rapido de lo que bajan los
+      # precios. Lo que hay que vigilar no es el precio unitario, es el coste
+      # POR EJECUCION.
+      - alert: ArgusFugaDeCoste
+        expr: |
+          sum by (argus_app, argus_feature, gen_ai_request_model) (rate(argus_cost_usd_total[15m]))
+          > 3 * sum by (argus_app, argus_feature, gen_ai_request_model) (rate(argus_cost_usd_total[7d] offset 15m))
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.argus_app }}/{{ $labels.argus_feature }}: coste 3x sobre su mediana histórica"
+
+      # --- Salud de las herramientas -----------------------------------------
+      # Con linea base POR HERRAMIENTA: una que falla el 5% puede ser normal
+      # (un scraper) y otra al 1% ser alarmante (una consulta a la base).
+      - alert: ArgusHerramientaFallando
+        expr: |
+          sum by (service_namespace, gen_ai_tool_name) (
+            rate(traces_span_metrics_calls_total{gen_ai_operation_name="execute_tool", status_code="STATUS_CODE_ERROR"}[10m])
+          )
+          /
+          clamp_min(sum by (service_namespace, gen_ai_tool_name) (
+            rate(traces_span_metrics_calls_total{gen_ai_operation_name="execute_tool"}[10m])
+          ), 0.001)
+          > 0.25
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "La herramienta {{ $labels.gen_ai_tool_name }} falla más de 1 de cada 4 veces"

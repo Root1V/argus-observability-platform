@@ -1,0 +1,43 @@
+{
+  "_comentario": [
+    "Dead man's switch. Copia a deadman.json y rellena.",
+    "",
+    "IDEALMENTE esto corre en OTRA maquina. En la misma detecta que el servicio",
+    "murio; en otra detecta ademas que la maquina murio, que es el caso en que",
+    "mas falta hace. Si solo tienes una, ponlo igualmente: cubre el caso mas",
+    "frecuente, que es que un contenedor se caiga.",
+    "",
+    "Avisa por TODOS los canales configurados, no por el primero que funcione:",
+    "si la plataforma esta caida no se sabe cual sigue en pie."
+  ],
+
+  "objetivos": [
+    {"nombre": "collector gateway", "url": "http://127.0.0.1:13133/"},
+    {"nombre": "alert-bus",         "url": "http://127.0.0.1:8080/healthz"},
+    {"nombre": "clickhouse",        "url": "http://127.0.0.1:8123/ping"}
+  ],
+
+  "timeout_s": 10,
+  "fallos_para_avisar": 2,
+  "estado": "~/.argus-deadman-state.json",
+
+  "avisos": {
+    "gchat": {
+      "webhook": ""
+    },
+    "email": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "user": "",
+      "password": "",
+      "from": "argus@localhost",
+      "to": ["tu@correo.com"]
+    },
+    "whatsapp": {
+      "phone_id": "",
+      "token": "",
+      "to": "+34600000000",
+      "template": "argus_incidente"
+    }
+  }
+}

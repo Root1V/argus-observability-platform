@@ -30,7 +30,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 |---|---|---|---|
 | **F0** | Plano central | ✅ | 7/7 |
 | **F1** | Librerías y primeras apps | 🚧 | 7/12 |
-| **F2** | Detección en tiempo real y alertas | 🚧 | 8/10 |
+| **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 0/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
@@ -92,10 +92,11 @@ trazas GenAI sin tocar nada.
 
 ---
 
-## F2 · Detección en tiempo real y alertas ⏳
+## F2 · Detección en tiempo real y alertas ✅
 
-**El punto de mayor retorno por esfuerzo de todo el plan.** Al terminar esta
-fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
+**El punto de mayor retorno por esfuerzo de todo el plan.** Ya te enteras
+cuando algo se rompe, agrupado y sin ruido: **23 señales entrantes producen 2
+notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
@@ -105,10 +106,10 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `F2-04` | ✅ | Canales: Google Chat (Cards V2) + SMTP + WhatsApp | *Sinks* en proceso con cola, no servicio aparte — D-029 |
 | `F2-05` | ✅ | **Divulgación progresiva**: un hilo que se actualiza | D-015 · `POST /incidents/{huella}/enrich` |
 | `F2-06` | ✅ | Canario sintético | Sondas HTTP + de silencio, con confirmación |
-| `F2-07` | ⏳ | Detectores de bucle de agente y fuga de coste | `tool_calls_per_run > P99` |
+| `F2-07` | ✅ | Detectores de bucle de agente y fuga de coste | Absolutos en el SDK, estadísticos en vmalert — D-032 |
 | `F2-08` | ✅ | Registro de aplicaciones con auto-descubrimiento | 11 apps · provisional + aviso |
 | `F2-09` | ✅ | **Medir el presupuesto de latencia**: error → aviso | **p95 = 120 ms** contra 2 s de presupuesto · `scripts/measure_latency.py` |
-| `F2-10` | ⏳ | *Dead man's switch* externo | Sin esto, un fallo de la plataforma parece silencio |
+| `F2-10` | ✅ | *Dead man's switch* externo | Cero dependencias, fuera del compose — D-033 |
 
 ---
 
@@ -152,7 +153,7 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `F5-05` | ⏳ | NannyML: rendimiento **sin etiquetas de verdad** | En scoring la verdad llega semanas después |
 | `F5-06` | ⏳ | Agente de **FinOps**: atribución por app/funcionalidad/entorno | Las facturas suben aunque bajen los precios |
 | `F5-07` | ⏳ | Agente de **poda de alertas**, semanal | Para este punto la fatiga ya duele |
-| `F5-08` | ⏳ | Bandas de anomalía estadística | **No antes de 8 semanas de histórico** |
+| `F5-08` | ⏳ | Bandas de anomalía estadística **y activar `platform/rules/agents.yaml`** | **No antes de 8 semanas de histórico** |
 
 ---
 
@@ -207,6 +208,8 @@ fase ya te enteras cuando algo se rompe, agrupado y sin ruido.
 | `X-19` | ✅ | El registro marcaba como activas apps aún no instrumentadas | D-030: el canario las reportaba como silenciosas |
 | `X-20` | ✅ | La sonda de silencio consultaba trazas, que están muestreadas | D-031: ahora consulta métricas, que no lo están |
 | `X-21` | ✅ | El `alert-bus` no se trazaba a sí mismo | Le faltaba el middleware ASGI |
+| `X-22` | ✅ | vmalert fallaba con 422 mientras los tests pasaban | D-034: manda array pelado, no `{"alerts": [...]}` |
+| `X-23` | ✅ | La detección de bucles sin `args` daba falsos positivos | Sin argumentos no se puede saber si dos llamadas son iguales |
 
 ---
 

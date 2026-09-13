@@ -192,10 +192,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     @app.post("/api/v2/alerts")
     async def receive_alerts(
-        payload: dict[str, Any],
+        payload: list[dict[str, Any]] | dict[str, Any],
         background: BackgroundTasks,
         authorization: str | None = Header(default=None),
     ) -> dict[str, str]:
+        """Camino templado: burn-rate y anomalias, que necesitan una ventana.
+
+        El tipo de `payload` admite las dos formas a proposito: vmalert manda un
+        ARRAY pelado (API v2 de Alertmanager) y los scripts suelen mandar
+        `{"alerts": [...]}` (formato de webhook). Aceptar solo una deja la
+        integracion real rota sin que los tests se enteren.
+        """
         _check_token(authorization)
         background.add_task(_process, engine, list(normalize.signals_from_alertmanager(payload)))
         return {"status": "accepted"}

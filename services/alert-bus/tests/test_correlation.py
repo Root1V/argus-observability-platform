@@ -179,3 +179,29 @@ def test_un_ciclo_en_el_grafo_no_cuelga(registry) -> None:
     registry._apps["ciclo"] = type(app)(id="ciclo", depends_on=["intelligent-document-platform"])
 
     assert registry.upstream_of("intelligent-document-platform") == ["ciclo"]
+
+
+def test_entre_dos_causas_igual_de_graves_gana_la_mas_reciente(engine: Engine, sink: MemorySink) -> None:
+    """La correlación es temporal.
+
+    De dos incidentes igual de graves en Postgres, el que empezó hace treinta
+    segundos explica mejor lo que pasa AHORA que uno que lleva diez minutos
+    abierto. Lo descubrió la prueba end-to-end: un incidente de una ejecución
+    anterior seguía abierto y era el que suprimía.
+    """
+    engine.ingest([senal("postgres-main", "postgres-main", "disco-lleno")])
+    antigua = engine.open_incidents()[0]
+    antigua.opened_at -= timedelta(seconds=120)
+
+    engine.ingest([senal("postgres-main", "postgres-main", "conexiones-agotadas")])
+    reciente = next(
+        i for i in engine.open_incidents()
+        if i.app == "postgres-main" and i.signature == "conexiones-agotadas"
+    )
+
+    engine.ingest([senal("intelligent-document-platform", "idp-api")])
+    sintoma = next(i for i in engine.open_incidents() if i.app == "intelligent-document-platform")
+
+    assert sintoma.suppressed_by == reciente.id
+    assert sintoma.id in reciente.symptoms
+    assert sintoma.id not in antigua.symptoms
