@@ -130,6 +130,21 @@ processors:
   # --- Privacidad, capa 3 ----------------------------------------------------
   # Pseudonimizacion. El agente puede agrupar "el mismo usuario" sin saber
   # quien es.
+  # Seudonimizacion: el identificador de persona se HASHEA, no se borra.
+  #
+  # La diferencia importa. Borrarlo hace imposible preguntar "¿le pasa a un
+  # usuario o a todos?", que es de las primeras preguntas de cualquier
+  # investigacion. Hashearlo con sal conserva la agrupacion —el mismo usuario
+  # da el mismo hash— sin que el almacen sepa quien es.
+  #
+  # La sal vive en el entorno del gateway y NO en el repositorio: sin ella el
+  # hash de un UUID conocido seria comprobable por fuerza bruta.
+  #
+  # Se cubren las dos grafias a proposito. Las convenciones de OTel usan puntos
+  # (`user.id`), pero el trafico real trae guiones bajos: Prometheus manda
+  # `user_id` y `jwt.subject`, y ambos llegaban EN CRUDO a ClickHouse hasta que
+  # esto existio. Una regla que solo cubre la grafia canonica protege de la
+  # telemetria que escribes tu y no de la que recibes.
   transform/pseudonymize:
     error_mode: ignore
     trace_statements:
@@ -137,10 +152,19 @@ processors:
         statements:
           - delete_key(attributes, "http.request.header.authorization")
           - delete_key(attributes, "url.query")
+          - set(attributes["user.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
+          - set(attributes["user_id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil
+          - set(attributes["enduser.id"], SHA256(Concat([attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["enduser.id"] != nil
+          - set(attributes["jwt.subject"], SHA256(Concat([attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["jwt.subject"] != nil
+          - set(attributes["session.id"], SHA256(Concat([attributes["session.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["session.id"] != nil
+          - delete_key(attributes, "user.email")
+          - delete_key(attributes, "user_email")
     log_statements:
       - context: log
         statements:
           - delete_key(attributes, "http.request.header.authorization")
+          - set(attributes["user.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
+          - set(attributes["user_id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil
 
   # --- Muestreo --------------------------------------------------------------
   # AVISO: el tail sampling exige que TODOS los spans de una traza lleguen a la

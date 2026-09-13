@@ -169,11 +169,35 @@ class Runner:
             # fallar en silencio: esto sale por el log, que el Collector recoge.
             log.error("canary.report_failed", extra={"error": str(exc), "senales": len(senales)})
 
-    async def bucle(self) -> None:
+    def recargar(self, sondas: list[Sonda]) -> None:
+        """Sustituye el juego de sondas conservando el estado de fallos.
+
+        Conservarlo importa: si se reiniciara el contador en cada recarga, un
+        registro que se edita a menudo haria que ningun fallo llegara nunca a
+        dos consecutivos, y el canario dejaria de alertar sin dejar rastro.
+        """
+        vivos = {f"{s.app}/{s.component}" for s in sondas}
+        self._sondas = sondas
+        for objetivo in list(self._consecutivos):
+            if objetivo not in vivos:
+                del self._consecutivos[objetivo]
+        self._alertados &= vivos
+
+    async def bucle(self, settings=None) -> None:
         """Corre indefinidamente."""
         import argus
 
+        from .build import cargar, firma
+
+        anterior = firma(settings) if settings is not None else None
+
         while True:
+            if settings is not None:
+                actual = firma(settings)
+                if actual != anterior:
+                    anterior = actual
+                    self.recargar(cargar(settings))
+                    log.info("canary.probes_reloaded", extra={"total": len(self._sondas)})
             # El canario se observa a si mismo: si deja de emitir este span,
             # su propio silencio es detectable.
             with argus.step("canary.round") as paso:

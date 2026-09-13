@@ -83,6 +83,8 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-16` | ✅ | **Canal del piloto: correo** | Chat pide Workspace; correo enhebrado verificado con SMTP local — D-044, D-045 |
 | `F1-17` | ✅ | **Renombrado sin corte: Prometheus activo** | Alias en el registro, identidad normalizada en la huella, componentes sin conectar exentos — D-046, D-047 |
 | `F1-18` | ✅ | **La sonda de silencio funciona de verdad** | Medía puntos y las series acumulativas se reexportan: un muerto parecía sano. Ahora mide crecimiento — D-049 |
+| `F1-19` | ✅ | **Seudonimización implementada** | Estaba diseñada y no existía: UUIDs de usuario en crudo. Hasheados con sal, verificado — D-050 |
+| `F1-20` | ✅ | **Canal de coordinación con Prometheus** | Fichero compartido; 5 respuestas y 8 entradas nuevas, incluido un incidente real suyo — D-052 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -241,7 +243,10 @@ preparan con parche, tests y evidencia; los aplica su equipo.
 | `S-01` | ✅ | **Prometheus** | `Resource.create()` **aplicado** el 13/09. Retiraron además su pila propia: somos el único destino — [respuesta](docs/solicitudes/prometheus-respuesta.md) |
 | `S-02` | ⏳ | **Prometheus** | `traceparent`: nos piden dirigirlo. Proponemos `ARGUS_PROPAGATE=trusted` solo en `gateway`, **midiendo antes** si rinde |
 | `S-04` | ⏳ | **Prometheus** | Retirar el alias `edge-ai-inference` cuando redesplieguen con el nombre nuevo |
-| `S-05` | 💭 | **Prometheus** | Atributos prompt/completion: nos los piden. Respuesta dada (`argus-obs-semconv`); esperan nuestro «cómo instalarlo» |
+| `S-05` | ⏳ | **Prometheus** | Rueda de `argus-obs-semconv` entregada; atributos del gateway pedidos en A-10 |
+| `S-06` | ⏳ | **Prometheus** | `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`: usan las convenciones HTTP antiguas (A-11) |
+| `S-07` | ⏳ | **Prometheus** | `service.version` y `service.instance.id` (A-12) |
+| `S-08` | ⏳ | **Prometheus** | Sus spans de servidor no llevan atributos; probablemente el mismo middleware que S-02 (A-14) |
 | `S-03` | 💭 | **Axonium** (`llm_arch_sdk/`) | Instrumentar con `argus-obs-semconv`. **En cambio ahora mismo**; esperar a que se estabilice |
 
 ---

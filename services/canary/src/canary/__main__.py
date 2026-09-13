@@ -27,7 +27,7 @@ async def main_async() -> None:
         intervalo_s=settings.intervalo_s,
         fallos_para_alertar=settings.fallos_para_alertar,
     )
-    await runner.bucle()
+    await runner.bucle(settings)
 
 
 def main() -> None:

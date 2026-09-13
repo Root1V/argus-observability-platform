@@ -1185,3 +1185,84 @@ consulta, porque el fallo estaba ahí y `count()` no puede volver.
 
 **El límite que sigue en pie**: la sonda detecta que un servicio **deja** de
 emitir, no que **nunca** empezó (D-046).
+
+---
+
+## D-050 · La seudonimización estaba diseñada y nunca implementada
+
+**Contexto**. Al revisar el tráfico real de Prometheus encontramos `user_id` y
+`jwt.subject` —el mismo UUID de 36 caracteres— **en crudo** en ClickHouse. El
+plan decía «`user.id` y `client.id` hasheados con sal» (§7.2) y el procesador
+`transform/pseudonymize` solo borraba la cabecera `authorization` y `url.query`.
+El nombre del procesador prometía algo que no hacía.
+
+**Decisión**. Los identificadores de persona se **hashean** con SHA256 y una sal
+del entorno; los correos se borran. Se cubren las dos grafías: la canónica de
+OTel (`user.id`) y la de guiones bajos (`user_id`), que es la que trae el
+tráfico real.
+
+**Hashear y no borrar** es deliberado: el mismo usuario da siempre el mismo
+hash, así que «¿le pasa a uno o a todos?» —de las primeras preguntas de
+cualquier investigación— se sigue pudiendo responder sin que el almacén sepa
+quién es.
+
+**Desviación consciente del plan**: `client_id` NO se hashea. La evidencia
+mandó: los valores reales son 2 distintos de 9 caracteres, o sea la aplicación
+OAuth y no una persona. Hashearlo destruiría una agrupación útil sin proteger a
+nadie.
+
+**Consecuencias**. `ARGUS_PSEUDONYM_SALT` es obligatoria y el gateway no arranca
+sin ella. Cambiarla reescribe todos los hashes futuros y rompe la agrupación con
+lo ya almacenado: es una decisión, no un ajuste.
+
+**La lección**: una regla de privacidad escrita solo para la grafía canónica
+protege de la telemetría que escribes tú, no de la que recibes. Y un procesador
+con nombre de hacer algo no prueba que lo haga — esto llevaba semanas activo en
+la tubería.
+
+---
+
+## D-051 · El canario recarga su registro; un método sin llamar es un bug
+
+**Contexto**. El canario derivaba sus sondas del registro **solo al arrancar**.
+Al pasar `gateway` y `manager-api` a `activo` no se vigilaban, y lo peor es
+cómo falla: `docker compose up -d` sin cambios **no reinicia el contenedor**,
+así que editar el registro y redesplegar parece funcionar y no hace nada.
+
+Es el mismo fallo que D-043 en otro servicio, lo que lo convierte en un patrón
+y no en un descuido.
+
+**Decisión**. El bucle compara el `mtime` del registro y de las sondas HTTP, y
+reconstruye. La recarga **conserva el contador de fallos consecutivos** de los
+objetivos que siguen vigilados: si se reiniciara en cada recarga, un registro
+que se edita a menudo haría que ningún fallo llegara nunca a dos consecutivos y
+el canario dejaría de alertar sin dejar rastro.
+
+**Consecuencias**. Verificado en vivo además de con pruebas: tocar el fichero
+produjo `canary.probes_reloaded` en el ciclo siguiente. **Las pruebas fijan el
+cableado, no el método** — es la segunda vez hoy que un método correcto que
+nadie invocaba pasa la suite entera.
+
+---
+
+## D-052 · El dato de inferencia se emite donde nace: el gateway, no el cliente
+
+**Contexto**. Recomendamos instrumentar Axonium porque «sabe el modelo servido,
+el backend, el TTFT, si hubo fallback». El equipo de Prometheus nos corrigió:
+esos datos los produce **su gateway** y se los entrega a Axonium. Axonium es un
+cliente SDK.
+
+**Decisión**. El dato se emite donde nace. El gateway emite las convenciones
+GenAI; Axonium instrumenta solo lo que únicamente el cliente ve — que la llamada
+se intentó, la latencia de punta a punta desde el llamante, y los errores que
+nunca llegan al servidor (timeout del cliente, DNS, conexión rechazada).
+
+**Consecuencias**. No cambia el principio de apalancamiento —instrumentar una
+pieza compartida en vez de quince aplicaciones—, cambia **cuál** es la pieza. Y
+esta divide mejor: el gateway es de un equipo con el que ya hablamos, mientras
+que Axonium está en cambio.
+
+**La evidencia que lo cierra**: en tres horas de su tráfico, los atributos
+`gen_ai.*` son cero. Su span `inference.request` lleva `model`, `client_id` y
+`user_id`, pero ni tokens, ni proveedor, ni TTFT, ni motivo de finalización.
+Nada de eso se reconstruye desde fuera.

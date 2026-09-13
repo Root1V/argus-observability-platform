@@ -40,6 +40,23 @@ def cargar(settings: Settings) -> list[Sonda]:
     return sondas
 
 
+def firma(settings: Settings) -> tuple[float, float]:
+    """Marca de tiempo de los ficheros de los que dependen las sondas.
+
+    El canario deriva sus sondas del registro, asi que un componente que pasa a
+    `activo` no se vigila hasta que se recargan. Antes eso exigia reiniciar el
+    contenedor —y `up -d` sin cambios no reinicia nada, asi que el registro
+    editado se quedaba sin efecto sin que nadie lo notara.
+    """
+    def mtime(ruta: Path) -> float:
+        try:
+            return ruta.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    return mtime(settings.registry_path), mtime(settings.probes_path)
+
+
 def _sondas_http(settings: Settings) -> list[SondaHTTP]:
     ruta: Path = settings.probes_path
     if not ruta.exists():
