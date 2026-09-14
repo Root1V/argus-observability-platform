@@ -86,6 +86,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-19` | ✅ | **Seudonimización implementada** | Estaba diseñada y no existía: UUIDs de usuario en crudo. Hasheados con sal, verificado — D-050 |
 | `F1-20` | ✅ | **Canal de coordinación con Prometheus** | Fichero compartido; 5 respuestas y 8 entradas nuevas, incluido un incidente real suyo — D-052 |
 | `F1-21` | ✅ | **Canal Telegram** | Google bloqueó Chat y las contraseñas de aplicación. Telegram edita mensajes: divulgación progresiva real — D-053 |
+| `F1-22` | ✅ | **Sesgo del muestreo, escrito en el dato** | Concluimos mal sobre el tráfico de Prometheus; su equipo nos corrigió. `argus.sampling.baseline_pct` — D-054 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -267,7 +268,7 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-07` | ✅ | Grafana con dashboards provisionados | Dos: una aplicación y la plataforma — D-037 |
 | `B-08` | 💭 | Vistas materializadas de ClickHouse para burn-rate | Camino templado, si vmalert se queda corto |
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
-| `B-10` | 💭 | Índice PyPI privado (`devpi`) en el plano central | Hoy etiquetas de git; **necesario antes del rollout** — D-036 |
+| `B-10` | ⏳ | **Índice PyPI privado (`devpi`)** | **Prioridad alta**: Prometheus rechaza —con razón— instalar una rueda suelta por SHA. Bloquea su adopción del paquete — D-036, D-054 |
 | `B-14` | 💭 | **Registrar `argus-obs-*` en PyPI defensivamente** | La protección de D-035 depende de que sigan libres |
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
