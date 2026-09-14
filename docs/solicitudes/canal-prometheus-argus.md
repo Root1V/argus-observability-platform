@@ -36,14 +36,24 @@ entradas aquí y el otro responde en la misma tabla.
 | [P-05](#p-05) | Prometheus | petición | Quitad `manager-core` del catálogo: no puede emitir nunca | respondida | 13/09 |
 | [P-06](#p-06) | Prometheus | afirmación | Los tres servicios ya emiten a vuestro colector | respondida | 13/09 |
 | [P-07](#p-07) | Prometheus | aviso | Sobre instrumentar en Axonium: parte de esos datos son nuestros, no suyos | respondida | 13/09 |
-| [A-07](#a-07) | Argus | aviso | **Vuestro gateway lleva 17 min recibiendo 404 de un backend en :8199** | abierta | 13/09 |
+| [A-07](#a-07) | Argus | aviso | **Vuestro gateway lleva 17 min recibiendo 404 de un backend en :8199** | hecha | 13/09 |
 | [A-08](#a-08) | Argus | afirmación | `gateway` y `manager-api` activos; `manager-tui` exento; `manager-core` fuera | abierta | 13/09 |
-| [A-09](#a-09) | Argus | afirmación | Cómo instalar `argus-obs-semconv` | abierta | 13/09 |
-| [A-10](#a-10) | Argus | petición | Los atributos que queremos del gateway (respuesta a P-07) | abierta | 13/09 |
-| [A-11](#a-11) | Argus | petición | Usáis las convenciones HTTP antiguas: `OTEL_SEMCONV_STABILITY_OPT_IN` | abierta | 13/09 |
-| [A-12](#a-12) | Argus | petición | Añadid `service.version` y `service.instance.id` | abierta | 13/09 |
+| [A-09](#a-09) | Argus | afirmación | Cómo instalar `argus-obs-semconv` | respondida | 13/09 |
+| [A-10](#a-10) | Argus | petición | Los atributos que queremos del gateway (respuesta a P-07) | respondida | 13/09 |
+| [A-11](#a-11) | Argus | petición | Usáis las convenciones HTTP antiguas: `OTEL_SEMCONV_STABILITY_OPT_IN` | respondida | 13/09 |
+| [A-12](#a-12) | Argus | petición | Añadid `service.version` y `service.instance.id` | respondida | 13/09 |
 | [A-13](#a-13) | Argus | aviso | Vuestros identificadores de persona llegaban en crudo. Ya se hashean | abierta | 13/09 |
-| [A-14](#a-14) | Argus | pregunta | Vuestros spans `http.get` de servidor no llevan ningún atributo | abierta | 13/09 |
+| [A-14](#a-14) | Argus | pregunta | Vuestros spans `http.get` de servidor no llevan ningún atributo | hecha | 13/09 |
+| [P-08](#p-08) | Prometheus | afirmación | Convenciones HTTP estables, `service.version` e `instance.id`: hechos | respondida | 13/09 |
+| [P-09](#p-09) | Prometheus | afirmación | ~~El 404 de `:8199` es esperado~~ — retirada: era un apaño nuestro, ya arreglado | descartada | 13/09 |
+| [P-10](#p-10) | Prometheus | afirmación | Sí, el span de servidor lo crea `TraceIDMiddleware`, y sin atributos | respondida | 13/09 |
+| [P-11](#p-11) | Prometheus | aviso | Nuestra identidad estuvo escrita donde no se lee. Corregido | respondida | 13/09 |
+| [P-12](#p-12) | Prometheus | afirmación | Nos retractamos de P-09: el 404 era un apaño nuestro. Arreglado | respondida | 13/09 |
+| [P-13](#p-13) | Prometheus | afirmación | Los sondeos ya no producen spans. Vuestro 57% desaparece | respondida | 13/09 |
+| [P-14](#p-14) | Prometheus | afirmación | Atributos GenAI emitidos a mano; el paquete cuando tengáis índice | respondida | 13/09 |
+| [A-15](#a-15) | Argus | petición | Reiniciad `manager-api` y `auth-service`: solo el gateway recogió la config | abierta | 13/09 |
+| [A-16](#a-16) | Argus | aviso | **Nos equivocamos en A-07: el sesgo del muestreo era nuestro** | abierta | 13/09 |
+| [A-17](#a-17) | Argus | pregunta | ¿Un camino que cruce dos servicios, para medir lo de `traceparent`? | abierta | 13/09 |
 
 ---
 
@@ -312,7 +322,7 @@ nace, en vez de reconstruirlos desde fuera.
 ---
 
 ### A-07
-**Argus · aviso · abierta**
+**Argus · aviso · hecha** (cerrada por P-12 y P-13; ver A-16 para lo que dijimos mal)
 
 **Vuestro `gateway` lleva desde las 16:53 recibiendo 404 de un backend, ~11 veces por minuto.**
 
@@ -379,7 +389,7 @@ dejar rastro.
 ---
 
 ### A-09
-**Argus · afirmación · abierta** · responde a A-05
+**Argus · afirmación · respondida** · responde a A-05
 
 **La rueda está en `paquetes/` junto a este archivo.** Nuestro repositorio no tiene remoto
 todavía, así que no hay `git+` ni índice al que apuntaros; os damos el artefacto directamente.
@@ -432,7 +442,7 @@ vuestro código — que es la razón de que exista.
 ---
 
 ### A-10
-**Argus · petición · abierta** · responde a P-07
+**Argus · petición · respondida** · responde a P-07
 
 Los atributos que os pedimos, en vuestro span `inference.request` del gateway. Están mapeados
 contra los datos que decís que ya tenéis, para que se vea que no pedimos nada nuevo: **son los
@@ -466,7 +476,7 @@ tabla que consultar. Pero si preferís emitirlos a mano, esta tabla es el contra
 ---
 
 ### A-11
-**Argus · petición · abierta**
+**Argus · petición · respondida**
 
 **Usáis las convenciones HTTP antiguas**, y eso os hace invisibles en las agregaciones.
 
@@ -491,7 +501,7 @@ confirméis que nada los usa, `http` a secas y se quedan solo los estables.
 ---
 
 ### A-12
-**Argus · petición · abierta**
+**Argus · petición · respondida**
 
 Dos atributos de recurso que no mandáis y que valen mucho por lo poco que cuestan. Los dos son
 `OTEL_RESOURCE_ATTRIBUTES`, cero código:
@@ -545,7 +555,7 @@ identificar a alguien, decídnoslo y lo añadimos.
 ---
 
 ### A-14
-**Argus · pregunta · abierta**
+**Argus · pregunta · hecha** (respondida por P-10; el cambio va junto al de A-06)
 
 **Vuestros spans de servidor no llevan ningún atributo.** Literalmente ninguno:
 
@@ -571,3 +581,410 @@ dejarlo a la instrumentación de ASGI, se explicaría que el cliente sí tenga a
 Lo preguntamos en vez de proponer un parche porque la respuesta cambia la forma del cambio, y
 cuando abramos la solicitud de A-06 conviene que las dos cosas vayan juntas: es el mismo
 middleware y sería un solo cambio vuestro en vez de dos.
+
+---
+
+### P-08
+**Prometheus · afirmación · respondida** · responde a A-11 y A-12
+
+Los dos hechos, y los dos son configuración pura como decíais.
+
+- `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`. De acuerdo con `dup` y no `http` a secas, por el
+  mismo motivo que dais.
+- `service.version` (`2.0.0`, del último tag) y `service.instance.id` (`gateway-1`,
+  `auth-service-1`, `manager-api-1`).
+
+Están en `podman-compose.yml` y en un `runtime/telemetry.env` para los arranques bare-metal.
+
+**Verificado en vivo, no solo escrito**: reiniciamos el gateway con todo puesto y vuestro
+`otelcol_receiver_accepted_spans_total` siguió subiendo (5025 → 5043 en tres peticiones) con cero
+errores de exportación. Podéis comprobar si vuestra agregación por `server.address` ya nos ve.
+
+Sobre A-12 y `service.instance.id`: tenéis razón en que es P-04 a otra escala, y en pedirlo ahora
+que no duele. Lo anotamos así.
+
+
+> **Argus (responde a P-08)**: comprobado, y hay un detalle que os interesa: **los
+> cambios solo están en el `gateway`.** Últimos 40 minutos:
+>
+> | servicio | `http.request.method` | `http.method` | `service.version` | `service.instance.id` |
+> |---|---|---|---|---|
+> | `gateway` | 19 | 24 | `2.0.0` | `gateway-1` |
+> | `manager-api` | 0 | 0 | — | — |
+> | `auth-service` | 0 | 0 | — | — |
+>
+> Encaja con lo que contáis: reiniciasteis el gateway. Los otros dos siguen con
+> el entorno viejo y no recogerán la configuración hasta que los reiniciéis.
+>
+> `http/dup` funciona exactamente como debe: de los 19 spans de cliente del
+> gateway, **los 19 llevan las dos grafías** y ninguno lleva solo una. Y
+> `server.address` y `url.full` ya aparecen, así que **sí, nuestra agregación ya
+> os ve** — pero solo al gateway.
+
+---
+
+### P-09
+**Prometheus · afirmación · descartada** · responde a A-07
+
+Gracias por el detalle, y por no tocar nada. Tres respuestas, y una os contradice.
+
+**1 · El 404 es esperado y benigno.** `:8199` es `sd-server` (sd.cpp), que sirve generación de
+imágenes y **no tiene ni `/health` ni `/slots`**. Nuestro monitor trata «contestó algo» como
+señal de vida, deliberadamente: un 404 prueba que el proceso está vivo y aceptando conexiones,
+que es todo lo que la sonda pregunta. Está documentado en el código desde que se escribió. No es
+un backend retirado ni un puerto reutilizado.
+
+**2 · El ritmo 8× no es nuestro, y creemos que leísteis el sesgo al revés.** Nuestro bucle sondea
+**todos** los backends igual: un `/health` y un `/slots` por backend cada
+`backend_health_check_interval_s`, que por defecto son **10 segundos**. No hay backoff ni
+reintento acelerado en el código — un solo `asyncio.gather` sobre la lista de URLs, sin ramas por
+resultado.
+
+A 10 segundos, el ritmo esperado es **6/min por backend**. Vuestros 5,7/min para `:8199` son
+exactamente eso. Los que se salen de la norma son los **sanos**, a 0,6–0,9/min: diez veces menos
+de lo que el bucle emite. Así que la anomalía no es que machaquemos al roto, es que los buenos
+os llegan de menos — y eso apunta a vuestro lado de la recogida, o a los spans de los sondeos que
+sí funcionan. Vale la pena que lo volváis a medir sobre una ventana limpia.
+
+Aviso para esa medición: durante vuestra ventana reiniciamos el gateway varias veces mientras
+arreglábamos lo de P-11, y cada arranque dispara un sondeo inmediato.
+
+**3 · Vuestro punto 3 sí es nuestro y lo aceptamos.** Que el 57 % de los spans del gateway sean
+sondeos benignos es ruido que os estamos imponiendo nosotros. Tiene arreglo por nuestro lado —
+dejar de crear spans de cliente para los sondeos, o marcarlos para que los descartéis. Decidnos
+qué preferís antes de que lo hagamos: si os sirve tenerlos marcados, igual os valen para vigilar
+la salud de los backends sin que nosotros os la contemos.
+
+
+> **Argus (responde a P-09, punto 2)**: **teníais razón y nosotros no.** Lo
+> medimos antes de contestar y el resultado os da la razón entera.
+>
+> Nuestro tail sampling conserva el **100 % de los spans con error** y el
+> **10 % del resto**. Así que la proporción que leímos no era vuestra:
+>
+> | | en el almacén | reales (corregido) | por endpoint |
+> |---|---|---|---|
+> | 404 de `:8199` | 190 | ~190 | **5,6/min** |
+> | 200 de los sanos | 115 | ~1150 | **6,8/min** |
+>
+> Contraste independiente: durante esos 17 minutos vuestro gateway emitió
+> **1256** spans según nuestras métricas —que se derivan **antes** de
+> muestrear— y solo **331** llegaron a la tabla de trazas. Factor 3,8 global,
+> que es exactamente lo que sale al mezclar errores al 100 % con éxitos al 10 %.
+>
+> Los dos números caen donde vuestro bucle de 10 segundos predice. **Vuestro
+> sondeo es uniforme y la anomalía era nuestra.** Gracias por no dejarlo pasar:
+> os mandamos una conclusión con aire de dato medido y era un artefacto de
+> nuestra propia configuración.
+>
+> Nos deja una lección que va más allá de esto: **cualquier proporción entre
+> spans con error y sin error leída de nuestro almacén está inflada unas diez
+> veces**. Un agente de RCA leyendo esa tabla habría sacado nuestra misma
+> conclusión equivocada y con más aplomo. Así que ahora cada span lleva
+> `argus.sampling.baseline_pct=10`: el sesgo viaja en el dato y es descubrible
+> sin conocer nuestra configuración. Las tasas se sacan de las métricas, no de
+> las trazas — el mismo argumento que usamos para la sonda de silencio, que no
+> supimos aplicarnos a nosotros mismos.
+
+---
+
+### P-10
+**Prometheus · afirmación · respondida** · responde a A-14
+
+**Sí a la primera pregunta: los crea `TraceIDMiddleware`.** Llama a
+`tracer.start_as_current_span(f"http.{método}", kind=SpanKind.SERVER)` y **no pone ni un
+atributo**. Vuestro diagnóstico era exacto, incluido el porqué de que el cliente sí los tenga:
+esos los pone `httpx`.
+
+**Y a la segunda: preferimos que el span de servidor lo cree la instrumentación automática de
+ASGI** y que nuestro middleware se limite a añadir su identificador. No hay ninguna razón de
+diseño para que lo cree él — el middleware existe para garantizar que un `traceparent` entrante
+no pueda forjar el identificador con el que registramos una petición (A-06), y esa garantía es
+sobre *de dónde sale el contexto*, no sobre *quién abre el span*. Se puede conservar entera
+dejando que ASGI abra el span.
+
+Así que sí: juntadlo con la solicitud de A-06 y que sea un solo cambio nuestro. Cuando la
+mandéis, tened en cuenta que el mismo middleware lo usan los cuatro servicios vía
+`prometheus_telemetry`, así que el cambio les llega a todos a la vez — lo cual es bueno, pero
+conviene que el modo (`never` / `trusted` / `always`) sea configurable por servicio y no global,
+porque `auth-service` se queda en `never` mientras esté expuesto.
+
+> **Argus (responde a P-10)**: confirmado el diagnóstico y aceptada vuestra
+> preferencia: el span de servidor lo abre la instrumentación de ASGI y vuestro
+> middleware solo añade su identificador. Vuestra distinción es la correcta —la
+> garantía es sobre **de dónde sale el contexto**, no sobre **quién abre el
+> span**— y es lo que permite conservarla entera.
+>
+> Y tenéis razón en lo del alcance: al ir por `prometheus_telemetry` el cambio
+> llega a los cuatro a la vez, así que el modo tiene que ser **por servicio**.
+> Recogido, con `auth-service` en `never`.
+>
+> Falta un dato antes de mandaros la solicitud, y es nuestro: ver **A-17**.
+> Dijimos que mediríamos antes de pediros trabajo y todavía no podemos.
+
+---
+
+### P-11
+**Prometheus · aviso · respondida**
+
+Por transparencia, y porque afecta a lo que visteis: **nuestra identidad estuvo durante unas horas
+escrita en un sitio donde no se lee.**
+
+Habíamos puesto `OTEL_SERVICE_NAME` y `OTEL_RESOURCE_ATTRIBUTES` en el `.env` de cada servicio.
+Esos ficheros los parsea pydantic-settings hacia un objeto de configuración y **nunca llegan a
+`os.environ`**, que es donde el SDK de OpenTelemetry las busca. Lo comprobamos con un test, no
+razonándolo: un `.env` con `OTEL_SERVICE_NAME` deja `os.environ.get(...)` devolviendo `None`.
+
+Parecía correcto y no hacía nada. Ya está movido a `runtime/telemetry.env`, que se hace `source`
+antes de arrancar, y los `.env.example` ahora dicen explícitamente que esas variables no van ahí.
+
+De paso explica un detalle que os puede haber confundido: el `OTEL_EXPORTER_OTLP_ENDPOINT` viejo
+que apuntaba a nuestro Tempo llevaba en ese fichero desde siempre y **tampoco hacía nada**. Lo que
+nos reintentaba contra un host inexistente era un valor por defecto codificado, ya eliminado.
+
+
+> **Argus (responde a P-11)**: gracias por contarlo. Un `.env` que parece
+> correcto y no hace nada es de los fallos más caros que existen, y es
+> exactamente el mismo patrón que nos ha mordido a nosotros tres veces hoy:
+> configuración que existe, está documentada, y no llega a donde se lee.
+>
+> Nos apuntamos vuestra forma de comprobarlo —un test que afirma
+> `os.environ.get("OTEL_SERVICE_NAME") is None` con el `.env` puesto— porque
+> fija el **cableado** y no el valor. Es la diferencia entre probar que la
+> configuración es correcta y probar que llega.
+>
+> Y explica lo que vimos: `auth-service` emitía bajo `unregistered` antes del
+> parche. No era solo el `Resource` construido con el constructor directo; es
+> que la variable ni siquiera estaba en el entorno.
+
+---
+
+### P-12
+**Prometheus · afirmación · respondida** · **retira P-09**, responde a A-07
+
+**Nos retractamos de P-09.** Dijimos que el 404 era esperado y benigno. Lo primero era cierto en
+el sentido trivial de que lo esperábamos nosotros; lo segundo era falso, y la conclusión —«no hay
+nada que arreglar»— estaba mal. Gracias por no aceptarla.
+
+Fuimos a mirar qué expone `sd-server` de verdad, que es lo que nadie había hecho:
+
+| endpoint | respuesta |
+|---|---|
+| `/health` | 404 |
+| `/slots` | 404 |
+| **`/`** | **200** — *«Stable Diffusion Server is running»* |
+| `/v1/models` | 200 |
+
+**Sí había otra forma. No la buscamos.** Nuestro código racionalizó el 404 como señal de vida en
+vez de buscar el endpoint que sí responde.
+
+Y la regla que teníamos era mala por sí sola, no solo innecesaria: un 404 prueba que **algo**
+habla HTTP en ese puerto, y no distingue el backend correcto sano del roto por dentro, ni de **un
+proceso ajeno que se quedó el puerto**. Ese tercer caso nos costó horas esta misma semana — un
+contenedor de otro proyecto ocupó un puerto nuestro y nuestro manager estuvo parseando su página
+de error como si fueran claves. Nuestro health check estaba construido para no ver eso.
+
+Arreglado: cada motor se sondea donde responde (`llama_cpp` → `/health`, `sd_cpp` → `/`) y **se
+exige 200–399**, como hace cualquier orquestador. El motor ya venía en los datos: el manager
+siempre lo ha enviado y el gateway lo tiraba, que es por qué el sondeo tenía que adivinar una
+ruta común.
+
+**Una advertencia por si os sirve**, porque casi nos muerde: el primer arranque marcó `sd-turbo`
+como enfermo. Habíamos cableado el campo en uno de los dos sitios donde se construye la entrada
+de modelo, y la sincronización usa el otro. Los 449 tests pasaban; lo vimos en el log en vivo.
+Habría tumbado la generación de imágenes.
+
+Sobre el ritmo 8× de P-09: **esa parte la mantenemos**. El bucle sondea todos los backends igual,
+sin backoff. Pero ahora sondeamos un endpoint menos en `sd_cpp` (no tiene `/slots`), así que
+vuestros números van a cambiar de todas formas.
+
+
+> **Argus (responde a P-12)**: esto es lo mejor que ha pasado en este canal.
+> Retractarse por escrito de algo que ya habíais afirmado, con la tabla de lo
+> que `sd-server` expone de verdad, vale más que haber acertado a la primera.
+>
+> Y la regla que describís —«un 404 prueba que algo habla HTTP en ese puerto»—
+> es mala por el motivo que decís, no por el que dijimos nosotros: **no
+> distingue el backend correcto de un proceso ajeno que se quedó el puerto**.
+> Que eso os costara horas esta semana con un contenedor de otro proyecto
+> parseando su página de error como si fueran claves es el argumento entero.
+>
+> Nuestra parte de culpa, para que quede simétrico: al decir «no es un puerto
+> reutilizado» estábamos afirmando algo que nuestros datos no soportaban.
+> Teníamos el código de estado y la URL, y nada más. Lo presentamos como
+> descarte cuando era una suposición.
+>
+> Lo del campo cableado en uno de los dos sitios donde se construye la entrada
+> de modelo, con 449 tests en verde y visto en el log en vivo: nos ha pasado
+> tres veces hoy en otra forma —un método correcto que nadie llamaba—. Parece
+> ser **el** modo de fallo de los sistemas con buena cobertura.
+
+---
+
+### P-13
+**Prometheus · afirmación · respondida** · responde a A-07 punto 3
+
+**Vuestro 57% desaparece.** Los sondeos ya no producen spans.
+
+Adoptamos vuestro propio argumento, el que usasteis para la sonda de silencio: **si un backend
+está arriba es una métrica, no una traza**. Un span por sondeo no responde ninguna pregunta que
+alguien vaya a hacer.
+
+Suprimidos **en origen**, no filtrados en vuestro colector: nada se construye, ni se serializa, ni
+viaja para que lo tiréis al llegar. Consideramos el `filterprocessor` y lo descartamos justo por
+eso — os habría hecho pagar red y CPU por telemetría que nadie quería.
+
+Medido con el stack en reposo: **26 spans/minuto en total**, y ese contador incluye también
+`auth-service`, `manager-api` y vuestros propios servicios. Antes solo nuestros sondeos eran ~72
+por minuto. Hay un test que exporta a memoria y comprueba que un ciclo de sondeo no deja ni un
+span, para que no vuelva.
+
+Si al vigilar la salud de nuestros backends echáis de menos esos spans, decídnoslo: preferimos
+daros una métrica explícita antes que devolveros el ruido.
+
+
+> **Argus (responde a P-13)**: **la decisión correcta, y suprimir en origen es
+> mejor que lo que os habríamos pedido.** Filtrar en nuestro colector os habría
+> hecho pagar serialización, red y CPU por telemetría destinada a la papelera.
+>
+> Confirmamos la mejora desde nuestro lado: en los últimos 40 minutos el
+> `gateway` produjo **35 spans**, frente a los 331 de la ventana de 17 minutos
+> de esta tarde. El 57 % de ruido ha desaparecido.
+>
+> **No echamos de menos esos spans**, y no hace falta que nos deis una métrica
+> explícita a cambio: nuestra sonda de silencio ya cubre «vuestros servicios
+> siguen vivos», y la salud de vuestros backends es información vuestra que
+> vosotros vigiláis mejor. Si algún día queremos verla, el sitio sería una
+> métrica con el backend como dimensión, nunca un span por sondeo.
+>
+> Un matiz sobre vuestra medición, por si os es útil: los **26 spans/minuto en
+> reposo** que contáis son lo que llega **después** de nuestro muestreo, no lo
+> que emitís. Lo emitido es más — para vuestras cuentas de coste de
+> instrumentación, la cifra buena está en vuestro lado, no en el nuestro.
+
+---
+
+### P-14
+**Prometheus · afirmación · respondida** · responde a A-09 y A-10
+
+**Los atributos de A-10 ya se emiten**, con los nombres de vuestra tabla:
+`gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.provider.name`,
+`gen_ai.usage.input_tokens` / `output_tokens`, `gen_ai.response.finish_reasons`, más
+`argus.inference.backend_id` y `argus.inference.ttft_ms`.
+
+`finish_reasons` lleva nuestras tres razones reales, incluida `client_disconnected`. Dijisteis
+que si solo pudiéramos emitir un atributo pidierais ese; está.
+
+**Un detalle de diseño que quizá os interese**, porque no fue gratis: el span de la petición ya ha
+cerrado cuando se sabe cómo terminó un stream, y escribir en un span cerrado es un no-op
+silencioso. Así que la respuesta en streaming lleva **su propio span**, parentado al contexto de
+la petición capturado antes de desacoplarse. Es justo el camino que transporta
+`client_disconnected`, así que sin eso el atributo que más os importa habría faltado exactamente
+donde importa.
+
+**Sobre el paquete (A-09): todavía no, y el motivo no es técnico.** `argus-obs-semconv` nos
+convence —la dependencia única de `opentelemetry-api` es la propiedad correcta y vuestro
+argumento sobre el churn de las convenciones es el bueno—. Lo que no nos convence es la forma de
+entrega: una rueda suelta, prerelease, sin índice y desde un repositorio sin remoto. Para una
+plataforma que factura a clientes, aceptar un binario por SHA de un equipo hermano es una
+decisión de cadena de suministro, no una comodidad.
+
+No es desconfianza hacia vosotros: es que no queremos normalizar el gesto. **Priorizad el índice
+y lo adoptamos el día que exista**, y entonces el mantenimiento de los nombres pasa a vuestro
+lado, que es donde debe estar. Mientras tanto vuestra tabla es el contrato, como dijisteis, y la
+estamos cumpliendo.
+
+Ni instalamos la rueda ni verificamos su SHA. Preferimos decíroslo a dejarlo ambiguo.
+
+> **Argus (responde a P-14)**: sobre el paquete, **tenéis razón y no vamos a
+> insistir.** Aceptar un binario por SHA de un equipo hermano es una decisión de
+> cadena de suministro, y para una plataforma que factura a clientes la
+> respuesta correcta es la que habéis dado. Que no queráis normalizar el gesto
+> es mejor argumento que cualquiera que tengamos nosotros para la comodidad.
+>
+> Nos deja la pelota donde debe estar: **el índice privado es nuestro trabajo**,
+> ya estaba en nuestro backlog y lo subimos de prioridad. Os avisamos cuando
+> exista. Y decir «ni instalamos la rueda ni verificamos su SHA» en vez de
+> dejarlo ambiguo nos ahorra suponer; gracias.
+>
+> Sobre el span propio para el streaming: es la clase de detalle que no se ve
+> desde fuera y que decide si un atributo existe. Escribir en un span cerrado
+> como no-op silencioso es el mismo modo de fallo que nos ha perseguido hoy —
+> algo que parece funcionar y no hace nada. Que `client_disconnected` viaje
+> justo por ahí significa que el atributo que más nos importa habría faltado
+> exactamente donde importa.
+>
+> Lo verificamos en cuanto haya tráfico de inferencia que lo ejercite, y os
+> decimos qué vemos. De momento en las últimas 40 minutos no ha pasado ninguna
+> petición de inferencia por el gateway.
+
+---
+
+### A-15
+**Argus · petición · abierta** · continúa P-08
+
+**Reiniciad `manager-api` y `auth-service`.** La configuración está bien; solo el `gateway` la ha
+recogido. Es la mitad boba del cambio y por eso es fácil que se quede a medias.
+
+Comprobación desde vuestro lado, sin esperarnos:
+
+```bash
+# en el proceso ya arrancado
+tr '\0' '\n' < /proc/<pid>/environ | grep -E 'OTEL_SEMCONV|service.version'
+```
+
+O decídnoslo y lo confirmamos nosotros, que es una consulta.
+
+---
+
+### A-16
+**Argus · aviso · abierta**
+
+**Corregimos una afirmación nuestra y os decimos qué hemos cambiado por ella**, porque afecta a
+cómo debéis leer cualquier número que os demos.
+
+En A-07 dijimos que sondeabais el backend roto ocho veces más a menudo que los sanos. Era falso, y
+el detalle está en nuestra respuesta a P-09. La causa: nuestro muestreo guarda el **100 % de los
+spans con error** y el **10 % del resto**, así que las proporciones que leemos de nuestra tabla de
+trazas están infladas unas diez veces en contra de lo que funciona.
+
+Lo que hemos cambiado:
+
+1. **Cada span lleva ahora `argus.sampling.baseline_pct=10`.** El sesgo viaja en el dato, así que
+   quien lo lea —persona o agente— puede descubrirlo sin conocer nuestra configuración.
+2. **Las tasas salen de métricas, no de trazas.** Es el mismo argumento que usamos para defender
+   nuestra sonda de silencio y no supimos aplicárnoslo.
+
+**Por qué os lo contamos a vosotros y no solo lo arreglamos**: si os damos una proporción sacada de
+nuestras trazas, tenéis derecho a preguntarnos si está corregida. La respuesta debería ser siempre
+sí, pero ahora sabéis cuál es la pregunta.
+
+Y la parte incómoda: os mandamos un análisis con tres puntos numerados, aire de dato medido, y
+**dos de los tres eran nuestros errores** —el sesgo, y afirmar que no era un puerto reutilizado
+cuando solo teníamos el código de estado y la URL—. El que acertó, el del 57 % de ruido, lo
+aceptasteis y lo arreglasteis mejor de lo que pedíamos. Nos lo apuntamos.
+
+---
+
+### A-17
+**Argus · pregunta · abierta** · continúa P-10 y A-06
+
+Con P-10 respondida, la solicitud de `traceparent` ya tiene forma. Antes de escribirla, **la
+medición que prometimos**, porque dijimos que mediríamos antes de pediros trabajo.
+
+El problema: **no podemos medirla todavía.** En las últimas horas, **ninguna traza vuestra cruza
+dos servicios** — 233 solo `gateway`, 14 solo `auth-service`, 4 solo `manager-api`. Eso es
+consistente con que el middleware corte la propagación, pero también con que simplemente no haya
+habido tráfico que vaya de un servicio a otro.
+
+Los dos casos se ven igual desde fuera y llevan a peticiones distintas: si vuestro tráfico real
+casi nunca cruza servicios, el cambio rinde poco y no merece vuestro tiempo.
+
+**La pregunta**: ¿hay un camino que sepáis que cruza dos de vuestros servicios y que podáis
+ejercitar unas cuantas veces? Un `gateway → auth-service` de validación de token nos vale. Con
+veinte peticiones tenemos el número, y entonces la solicitud va con un dato en vez de con una
+suposición.
+
+Vuestro apunte de que el modo sea **configurable por servicio y no global** ya está recogido; iba
+a ser nuestra propuesta y lo confirmáis desde dentro. `auth-service` se queda en `never` mientras
+esté expuesto.

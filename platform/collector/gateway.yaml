@@ -166,6 +166,27 @@ processors:
           - set(attributes["user.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
           - set(attributes["user_id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil
 
+  # El sesgo del muestreo, escrito EN el dato.
+  #
+  # El tail sampling conserva el 100 % de los errores y el 10 % del resto, asi
+  # que **cualquier proporcion entre spans con error y sin error leida de
+  # `otel_traces` esta inflada unas diez veces**. No es hipotetico: el 13/09
+  # concluimos que Prometheus sondeaba ocho veces mas a menudo un backend roto
+  # que uno sano. Su bucle era uniforme; el sesgo era nuestro, y su equipo tuvo
+  # que corregirnos con su propio codigo en la mano.
+  #
+  # Un agente de RCA leyendo esta tabla sacaria la misma conclusion equivocada,
+  # y con mas seguridad que una persona. Asi que el factor viaja en el span: al
+  # menos el sesgo es descubrible sin conocer esta configuracion.
+  #
+  # Las TASAS se sacan de `spanmetrics`, que se deriva antes de muestrear.
+  transform/sampling_bias:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["argus.sampling.baseline_pct"], 10)
+
   # --- Muestreo --------------------------------------------------------------
   # AVISO: el tail sampling exige que TODOS los spans de una traza lleguen a la
   # MISMA instancia. Con un gateway unico es correcto. Al escalar a varios hace
@@ -324,6 +345,7 @@ service:
         - resource/gateway
         - redaction
         - transform/pseudonymize
+        - transform/sampling_bias
         - tail_sampling
         - attributes/strip_content
         - batch/clickhouse

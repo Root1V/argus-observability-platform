@@ -1309,3 +1309,63 @@ remediaciones (F6-06), que con el correo habría necesitado enlaces firmados.
 vez. El formato vive en `render.py` precisamente para que los canales no
 discrepen entre sí, y un canal que se añade adornos por su cuenta rompe esa
 propiedad. Hay una prueba que lo fija.
+
+---
+
+## D-054 · El sesgo del muestreo viaja en el span
+
+**Contexto**. Analizando el tráfico de Prometheus concluimos que sondeaban un
+backend roto **ocho veces más a menudo** que los sanos, y se lo dijimos con
+aire de dato medido. Su equipo nos corrigió con su código en la mano: el bucle
+es uniforme, un sondeo cada 10 segundos por backend, sin backoff ni ramas por
+resultado.
+
+Tenían razón. Nuestro tail sampling conserva el **100 % de los spans con error**
+y el **10 % del resto**, así que la proporción que leímos estaba inflada diez
+veces en contra de lo que funciona. Corregido:
+
+| | almacenado | real | por endpoint |
+|---|---|---|---|
+| 404 del backend roto | 190 | ~190 | 5,6/min |
+| 200 de los sanos | 115 | ~1150 | 6,8/min |
+
+Contraste independiente: el gateway emitió 1256 spans según `spanmetrics`
+—derivado **antes** de muestrear— y solo 331 llegaron a `otel_traces`.
+
+**Decisión**. Cada span lleva `argus.sampling.baseline_pct`. Y la regla: **las
+tasas y las proporciones salen de métricas, nunca de la tabla de trazas**.
+
+**Por qué importa más de lo que parece**. Un agente de RCA leyendo `otel_traces`
+habría sacado exactamente nuestra conclusión, y con más aplomo que una persona.
+El sesgo no era descubrible desde el dato: había que conocer la configuración
+del colector. Ahora viaja con él.
+
+**Lo incómodo, que es lo instructivo**: defendimos que la sonda de silencio
+mirase métricas y no trazas «porque las trazas pasan por muestreo» (D-049), y
+horas después leímos proporciones de la tabla de trazas sin corregir. Saber una
+regla y aplicársela a uno mismo son dos cosas distintas.
+
+---
+
+## D-055 · Una rueda suelta no es un canal de distribución
+
+**Contexto**. Ofrecimos `argus-obs-semconv` como rueda con su SHA, porque
+nuestro repositorio no tiene remoto. Prometheus la rechazó: *«para una
+plataforma que factura a clientes, aceptar un binario por SHA de un equipo
+hermano es una decisión de cadena de suministro, no una comodidad»*. No
+instalaron nada y lo dijeron explícitamente en vez de dejarlo ambiguo.
+
+**Decisión**. Aceptado sin discusión, y `B-10` —el índice privado— sube a
+prioridad alta. Deja de ser higiene y pasa a ser lo que bloquea la adopción del
+paquete por el primer equipo externo.
+
+**Consecuencias**. Mientras tanto el contrato es la **tabla de atributos**
+(A-10), que ellos ya cumplen emitiéndolos a mano. Funciona, pero el
+mantenimiento de los nombres se queda de su lado, que es justo lo que el
+paquete existía para evitar: cuando las convenciones GenAI cambien —siguen
+siendo experimentales— habrá que avisar en vez de publicar una versión.
+
+**La lección**: un paquete con la arquitectura correcta y sin forma de
+entregarlo no está terminado. La dependencia única de `opentelemetry-api` les
+convenció en treinta segundos; lo que les frenó fue el `pip install` de un
+fichero.
