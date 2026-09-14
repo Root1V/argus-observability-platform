@@ -45,7 +45,7 @@
   criticidad: alta
   dueño: emeric
   canales:
-    page: [console]
+    page: [telegram, console]
     ticket: [console]
   componentes:
     - {id: idp-api, rol: api, slo: {p95_ms: 8000}}
@@ -78,7 +78,7 @@
   criticidad: alta
   dueño: emeric
   canales:
-    page: [gchat, email, console]
+    page: [telegram, gchat, email, console]
     ticket: [telegram, gchat, console]
   componentes:
     # Conectado. Un servicio de autenticacion tiene que ser rapido: si tarda,
@@ -111,7 +111,7 @@
   criticidad: media
   dueño: emeric
   canales:
-    page: [console]
+    page: [telegram, console]
     ticket: [console]
   componentes:
     - {id: control-plane, rol: api}
