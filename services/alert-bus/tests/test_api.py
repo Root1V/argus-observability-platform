@@ -182,3 +182,17 @@ def test_todo_ajuste_llega_al_contenedor() -> None:
     ]
 
     assert not ausentes, f"ajustes inalcanzables desde el .env: {ausentes}"
+
+
+def test_un_destino_de_pruebas_se_denuncia() -> None:
+    """Una base de API de pruebas que sobrevive al despliegue rompe el canal
+    en silencio: el sink está cargado, el registro enruta, y los avisos van a un
+    servidor que no existe. Pasó de verdad — un servidor falso quedó apuntado en
+    el contenedor desplegado y dos notificaciones reales se perdieron.
+    """
+    from alert_bus.app import _destinos_de_prueba
+    from alert_bus.config import Settings
+
+    assert _destinos_de_prueba(Settings()) == []
+    sospechoso = _destinos_de_prueba(Settings(telegram_api_base="http://192.168.1.5:9998"))
+    assert sospechoso and "telegram" in sospechoso[0]

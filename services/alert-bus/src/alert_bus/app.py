@@ -262,6 +262,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             **engine.stats,
             "incidentes_abiertos": len(engine.open_incidents()),
             "canales": [s.name for s in engine._sinks],
+            # Un destino de pruebas que sobrevive al despliegue rompe el canal
+            # EN SILENCIO: el sink esta cargado, enruta, y manda a un servidor
+            # que no existe. Se expone para que la prueba de canal lo vea.
+            "destinos_de_prueba": _destinos_de_prueba(settings),
             "despacho": dict(dispatcher.stats) if dispatcher else {},
             # Desglose por canal: es lo unico que responde "¿entrego el canal
             # que mira una persona?". El total no distingue consola de chat.
@@ -271,6 +275,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         }
 
     return app
+
+
+def _destinos_de_prueba(settings: Settings) -> list[str]:
+    """Canales apuntados a algo que no es el proveedor real."""
+    sospechosos = []
+    if settings.telegram_api_base.rstrip("/") != "https://api.telegram.org":
+        sospechosos.append(f"telegram → {settings.telegram_api_base}")
+    return sospechosos
 
 
 def _process(engine: Engine, signals: list[Any]) -> None:

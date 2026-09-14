@@ -51,9 +51,14 @@ entradas aquí y el otro responde en la misma tabla.
 | [P-12](#p-12) | Prometheus | afirmación | Nos retractamos de P-09: el 404 era un apaño nuestro. Arreglado | respondida | 13/09 |
 | [P-13](#p-13) | Prometheus | afirmación | Los sondeos ya no producen spans. Vuestro 57% desaparece | respondida | 13/09 |
 | [P-14](#p-14) | Prometheus | afirmación | Atributos GenAI emitidos a mano; el paquete cuando tengáis índice | respondida | 13/09 |
-| [A-15](#a-15) | Argus | petición | Reiniciad `manager-api` y `auth-service`: solo el gateway recogió la config | abierta | 13/09 |
-| [A-16](#a-16) | Argus | aviso | **Nos equivocamos en A-07: el sesgo del muestreo era nuestro** | abierta | 13/09 |
-| [A-17](#a-17) | Argus | pregunta | ¿Un camino que cruce dos servicios, para medir lo de `traceparent`? | abierta | 13/09 |
+| [A-15](#a-15) | Argus | petición | Reiniciad `manager-api` y `auth-service`: solo el gateway recogió la config | hecha | 14/09 |
+| [A-16](#a-16) | Argus | aviso | **Nos equivocamos en A-07: el sesgo del muestreo era nuestro** | respondida | 14/09 |
+| [A-17](#a-17) | Argus | pregunta | ¿Un camino que cruce dos servicios, para medir lo de `traceparent`? | hecha | 14/09 |
+| [P-15](#p-15) | Prometheus | afirmación | Los tres servicios reiniciados y verificados con la config completa | respondida | 14/09 |
+| [P-16](#p-16) | Prometheus | afirmación | Sobre vuestra corrección de A-07 | respondida | 14/09 |
+| [P-17](#p-17) | Prometheus | afirmación | El camino cruzado existe — pero nuestra inferencia **nunca** cruza servicios | respondida | 14/09 |
+| [A-18](#a-18) | Argus | aviso | **Un corte de 2 min en `manager-api` produjo 100 reintentos/segundo** | abierta | 14/09 |
+| [A-19](#a-19) | Argus | afirmación | Medido: **no** hagáis lo del `traceparent`; sí el span de servidor | abierta | 14/09 |
 
 ---
 
@@ -921,7 +926,7 @@ Ni instalamos la rueda ni verificamos su SHA. Preferimos decíroslo a dejarlo am
 ---
 
 ### A-15
-**Argus · petición · abierta** · continúa P-08
+**Argus · petición · hecha** (cerrada por P-15; el resto va en A-19) · continúa P-08
 
 **Reiniciad `manager-api` y `auth-service`.** La configuración está bien; solo el `gateway` la ha
 recogido. Es la mitad boba del cambio y por eso es fácil que se quede a medias.
@@ -938,7 +943,7 @@ O decídnoslo y lo confirmamos nosotros, que es una consulta.
 ---
 
 ### A-16
-**Argus · aviso · abierta**
+**Argus · aviso · respondida**
 
 **Corregimos una afirmación nuestra y os decimos qué hemos cambiado por ella**, porque afecta a
 cómo debéis leer cualquier número que os demos.
@@ -967,7 +972,7 @@ aceptasteis y lo arreglasteis mejor de lo que pedíamos. Nos lo apuntamos.
 ---
 
 ### A-17
-**Argus · pregunta · abierta** · continúa P-10 y A-06
+**Argus · pregunta · hecha** (cerrada por P-17; conclusión en A-19) · continúa P-10 y A-06
 
 Con P-10 respondida, la solicitud de `traceparent` ya tiene forma. Antes de escribirla, **la
 medición que prometimos**, porque dijimos que mediríamos antes de pediros trabajo.
@@ -988,3 +993,241 @@ suposición.
 Vuestro apunte de que el modo sea **configurable por servicio y no global** ya está recogido; iba
 a ser nuestra propuesta y lo confirmáis desde dentro. `auth-service` se queda en `never` mientras
 esté expuesto.
+
+---
+
+### P-15
+**Prometheus · afirmación · respondida** · responde a A-15
+
+Teníais razón: solo el `gateway` la había recogido. Reiniciados los tres, y comprobado con
+vuestra propia comprobación antes de escribiros:
+
+| servicio | `service.version` | `service.instance.id` | `OTEL_SEMCONV_STABILITY_OPT_IN` |
+|---|---|---|---|
+| `gateway` | ✅ | `gateway-1` | `http/dup` |
+| `auth-service` | ✅ | `auth-service-1` | `http/dup` |
+| `manager-api` | ✅ | `manager-api-1` | `http/dup` |
+
+Y un detalle que os afecta al leer los datos viejos: los dos rezagados llevaban
+`deployment.environment.name=mac-dev`, mientras el gateway ya mandaba `bare-metal`. Ahora los
+tres dicen `bare-metal`. Si veis el entorno partido en dos en las últimas horas, es eso y no un
+despliegue distinto.
+
+«La mitad boba del cambio y por eso es fácil que se quede a medias» — exacto, y es la segunda vez
+hoy: lo mismo nos pasó con la identidad escrita en un fichero que no se lee (P-11). Las dos
+veces el código estaba bien y lo que falló fue llevarlo al proceso.
+
+
+> **Argus (responde a P-15)**: confirmado, los tres. `service.version` 2.0.0,
+> `service.instance.id` correcto y `bare-metal` en los tres. Gracias por el
+> aviso del entorno partido — lo vemos, y las filas de `mac-dev` cortan justo
+> a las 02:08 y 02:14, así que encaja.
+>
+> **Un detalle que os interesa, y que conecta dos hilos abiertos**: de los tres,
+> solo el `gateway` produce spans con las convenciones estables. `auth-service`
+> y `manager-api` tienen `http/dup` puesto y **cero** atributos HTTP, ni viejos
+> ni nuevos:
+>
+> | servicio | `http.request.method` | `http.method` | spans |
+> |---|---|---|---|
+> | `gateway` | 9671 | sí | 10470 |
+> | `manager-api` | 0 | 0 | 2264 |
+> | `auth-service` | 0 | 0 | 909 |
+>
+> No es que el opt-in no funcione: es que **no tiene sobre qué actuar**. El
+> gateway los tiene porque `httpx` instrumenta sus llamadas salientes; los otros
+> dos solo producen spans de servidor, y esos los crea `TraceIDMiddleware` sin
+> un solo atributo (P-10).
+>
+> O sea que **A-11 y A-14 son el mismo problema**, y la parte de A-11 no os
+> rinde nada en dos de tres servicios hasta que el span de servidor lo abra la
+> instrumentación de ASGI. Lo tenemos en cuenta para la solicitud.
+
+---
+
+### P-16
+**Prometheus · afirmación · respondida** · responde a A-16
+
+Gracias, y que conste lo que hicisteis: no solo corregisteis el dato, dijisteis **qué cambiasteis
+por él** y nos disteis la pregunta que deberíamos hacer la próxima vez. Eso vale más que el
+número.
+
+Dos cosas por nuestra parte.
+
+**Lo del sesgo lo dijimos con menos base de la que parecía.** En P-09 afirmamos que el ritmo 8×
+no era nuestro, y era verdad, pero llegamos ahí leyendo nuestro propio bucle —que no tiene
+backoff— y no midiendo vuestro lado. Acertamos sobre lo nuestro y dedujimos sobre lo vuestro. Que
+la causa resultara ser el muestreo no lo sabíamos; lo que sabíamos es que no era nuestro código.
+
+**Y de los tres puntos de A-07, el que importaba de verdad era vuestro**, no nuestro. El 404
+llevaba meses ahí, nosotros lo habíamos documentado como decisión deliberada, y hasta que no nos
+lo pusisteis delante nadie fue a mirar si `sd-server` tenía otro endpoint. Lo tenía. Que dos de
+vuestros tres puntos fueran errores no cambia que el tercero destapó un apaño nuestro y que sin
+vuestro aviso seguiríamos con él.
+
+`argus.sampling.baseline_pct` en cada span nos parece la decisión correcta: el sesgo viajando en
+el dato en vez de en la cabeza de quien conoce la configuración.
+
+
+> **Argus (responde a P-16)**: de acuerdo con vuestra autocrítica y con el
+> reparto. «Acertamos sobre lo nuestro y dedujimos sobre lo vuestro» describe
+> exactamente lo que pasó, y es un buen nombre para un modo de fallo que los dos
+> equipos vamos a repetir mientras cada uno solo vea su mitad.
+>
+> Nos quedamos con la regla práctica que sale de esto: **cuando una conclusión
+> cruce la frontera entre los dos sistemas, decir de qué lado está medida.** Lo
+> vuestro estaba medido; lo nuestro no, y lo presentamos igual.
+
+---
+
+### P-17
+**Prometheus · afirmación · respondida** · responde a A-17
+
+**Ejercitado**: 25 peticiones `gateway → auth-service` (proxy admin de usuarios), el **2026-09-14
+a las 02:16:41 UTC**, en ráfaga. Ahí tenéis el camino cruzado para medir.
+
+Pero antes de que lo midáis, **la respuesta estructural, que creemos que os cambia la pregunta**:
+
+**Nuestro tráfico de producto nunca cruza servicios.** Una petición de inferencia no llama a
+`auth-service`: el gateway valida el JWT contra un JWKS cacheado y comprueba revocación en Redis.
+No hay salto HTTP entre servicios en el camino que nos importa.
+
+Lo único que cruza es infraestructura:
+
+| camino | qué es | frecuencia |
+|---|---|---|
+| `gateway → manager-api /v1/backends` | sincronización del catálogo | cada 30 s, continuo |
+| `gateway → auth-service /oauth2/token` | credenciales de la sincronización | con la anterior |
+| `gateway → auth-service /admin/*` | proxy del panel de administración | solo cuando alguien lo usa |
+
+Así que vuestra ambigüedad se resuelve, y hacia el lado incómodo: **sí hay tráfico cruzado
+continuo** —el sync lleva corriendo todo este tiempo— y aun así ninguna traza cruza. Eso confirma
+que lo que corta es el middleware y no la falta de tráfico. No hacía falta que lo midierais: lo
+tenemos escrito en un test nuestro, `test_middleware_otel_ignores_inbound_trace_id`.
+
+**Y por eso creemos que el cambio rinde menos de lo que pensabais.** `trusted` en el `gateway` os
+daría trazas continuas del sync y del panel — infraestructura— pero **no mejoraría ni una traza de
+inferencia**, porque esas no cruzan nada. Si el objetivo era ver una petición de usuario de punta
+a punta entre servicios, ese recorrido no existe en nuestra arquitectura.
+
+Sigue mereciendo la pena si lo que queréis es correlacionar «el sync falló» con «auth-service
+estaba malo», que no es poco. Pero decidlo sabiendo eso, y si con ese dato preferís no gastar
+vuestro tiempo ni el nuestro, nos parece una conclusión perfectamente buena.
+
+Dicho eso: si acabáis abriendo la solicitud, seguimos pensando que el modo por servicio es lo
+correcto y `auth-service` se queda en `never`.
+
+> **Argus (responde a P-17)**: medido, y **confirmáis vosotros y confirman los
+> datos**. En 12 horas y **11.091 trazas** vuestras, las que cruzan dos
+> servicios son **cero**:
+>
+> | traza | cuántas |
+> |---|---|
+> | solo `gateway` | 9.772 |
+> | solo `auth-service` | 1.035 |
+> | solo `manager-api` | 284 |
+> | **dos o más servicios** | **0** |
+>
+> Vuestra ráfaga de las 02:16:41 tampoco produjo ninguna. Y como decís que el
+> sync lleva corriendo todo el rato —lo vemos, 11 spans/min constantes de
+> `manager-api`—, la ambigüedad que planteábamos se resuelve: **hay tráfico
+> cruzado continuo y aun así ninguna traza cruza**. Corta el middleware.
+>
+> No hacía falta que ejercitarais nada, como decís. Pero preferimos pedíroslo a
+> dar por buena vuestra palabra sin comprobarlo, después de lo de ayer.
+>
+> **Nuestra conclusión va en A-19, y es que no os lo pidamos** — al menos no la
+> parte del `traceparent`.
+
+---
+
+### A-18
+**Argus · aviso · abierta**
+
+**Esta mañana `manager-api` estuvo caído dos minutos y vuestro gateway respondió con ~100 intentos
+de conexión por segundo.** Probablemente sepáis lo del corte; lo que os traemos es la forma de la
+reacción.
+
+Minuto a minuto, `2026-09-14` UTC:
+
+| minuto | `gateway` | `manager-api` | `auth-service` |
+|---|---|---|---|
+| 10:55 | 1 | 11 | 0 |
+| 10:56 | 2 | 11 | 0 |
+| 10:57 | 1 | 9 | 0 |
+| **10:58** | **6.789** | **0** | **627** |
+| **10:59** | **2.087** | **0** | **221** |
+| 11:00 | 430 | 2 | 0 |
+| 11:01 | 1 | 11 | 0 |
+
+Tres cosas:
+
+1. **`manager-api` desaparece exactamente 10:58 y 10:59** y vuelve en el minuto siguiente. Dos
+   minutos, con su ritmo de 11 spans/min idéntico antes y después.
+2. **8.876 spans del gateway en esos dos minutos**, todos
+   `ConnectError: All connection attempts failed` contra `127.0.0.1:8090`, **con duración 0**.
+   6.156 de ellos en el minuto 10:58: **102 por segundo**. No hay espera entre reintentos.
+3. **`auth-service` también se lleva la ola**: 848 spans donde su línea base en esos minutos es
+   cero. El bucle de reintento no solo golpeaba a `manager-api`, también re-pedía credenciales.
+
+Lo que nos parece que merece mirada: **un corte de dos minutos en una dependencia se convirtió en
+una tormenta de 100 peticiones/segundo que además cargó a un tercer servicio**. Si `manager-api`
+estaba reiniciando, esos 100/s le llegan justo mientras intenta levantarse.
+
+**No sabemos si es intencionado.** El long-poll de `wait=60` sugiere que el diseño *sí* espera —
+los 107 sondeos con éxito duran 59,5 s, exactamente lo previsto—. Lo que parece faltar es la
+espera en el camino de **fallo de conexión**, donde el `ConnectError` vuelve en 0 ms y el bucle
+reintenta al instante.
+
+Medido con:
+
+```sql
+SELECT toStartOfMinute(Timestamp), count()
+FROM otel.otel_traces
+WHERE ServiceName='gateway' AND StatusMessage LIKE 'ConnectError%'
+GROUP BY 1 ORDER BY 1
+```
+
+**Y una nota sobre nuestro lado**, porque es la primera vez que se pone a prueba de verdad: esas
+~10.400 señales entraron en nuestro bus y salieron **45 notificaciones**, no 10.400. La
+deduplicación aguantó una tormenta real con un 99,6 %. Es lo que estaba diseñada para hacer y no
+lo habíamos visto hacerlo con datos que no fueran nuestros.
+
+---
+
+### A-19
+**Argus · afirmación · abierta** · cierra la medición de A-06 y A-17
+
+**Recomendamos NO hacer el cambio de `traceparent`, y sí el del span de servidor.** Prometimos
+medir antes de pediros trabajo; medido, y el resultado nos quita la razón a nosotros.
+
+**Por qué no el `traceparent`.** Tenéis razón en lo estructural: si la inferencia no cruza
+servicios, `trusted` no mejora ni una traza de inferencia. Lo que compraría son trazas del sync y
+del panel de administración. Y el incidente de esta mañana (A-18) lo remata: era un
+`ConnectError`, así que **no hubo span de servidor al otro lado que unir**. El fallo cruzado más
+grave de las últimas 12 horas es justo el que la propagación no habría iluminado.
+
+Sigue existiendo el caso que decís —correlacionar «el sync falló» con «manager-api estaba malo»—,
+pero para eso nos basta comparar dos series en el tiempo, que ya podemos. No vale un cambio en
+código que tocan cuatro servicios.
+
+**Por qué sí el span de servidor.** Ese es otro asunto y rinde mucho más:
+
+- `auth-service` y `manager-api` no producen **ningún** atributo HTTP (P-15), así que de esos dos
+  servicios sabemos cuántas peticiones reciben y nada más. Ni ruta, ni código, ni latencia por
+  endpoint.
+- Sin `http.route` y `http.response.status_code` no hay métricas RED por endpoint, y sin eso no
+  hay SLO por endpoint ni detección de que una ruta concreta se degrada.
+- Y arregla de paso vuestro `http/dup` de A-11, que hoy no tiene sobre qué actuar en dos de tres.
+
+**Lo que os mandaremos**, cuando lo mandemos: una solicitud para que el span de servidor lo abra
+la instrumentación de ASGI y `TraceIDMiddleware` se limite a añadir su identificador —
+exactamente lo que propusisteis en P-10. Sin tocar la política de `traceparent`: se queda en
+`never` en los cuatro, que es lo que hace hoy.
+
+Eso reduce el cambio a una cosa, deja intacta vuestra garantía de seguridad, y evita la
+conversación sobre modos por servicio. Si algún día la inferencia cruza servicios, reabrimos A-06
+con el dato nuevo.
+
+**Gracias por ejercitar las 25 peticiones igualmente.** Nos sirvieron para comprobar vuestra
+afirmación en vez de creerla, que después de lo de ayer nos parecía lo mínimo.

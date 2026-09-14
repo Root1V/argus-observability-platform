@@ -80,6 +80,16 @@ def main() -> int:
     reales = [c for c in canales if c not in SOLO_DEPURACION]
 
     print(f"  sinks cargados: {', '.join(canales) or 'ninguno'}")
+
+    # Un destino de pruebas que sobrevive al despliegue es peor que no tener
+    # canal: el sink está cargado, el registro enruta, y los avisos se van a un
+    # servidor que no existe. Todo parece bien.
+    if pruebas := stats.get("destinos_de_prueba", []):
+        print(f"\n{ROJO}Hay un canal apuntando a un destino de PRUEBAS:{OFF}")
+        for d in pruebas:
+            print(f"{GRIS}  {d}{OFF}")
+        print(f"{GRIS}  Quita la variable *_API_BASE del entorno y vuelve a desplegar.{OFF}\n")
+        return 1
     if not reales:
         print(f"\n{AMARILLO}Solo hay salida por consola y JSON.{OFF}")
         print(f"{GRIS}  Útiles para depurar, pero nadie los mira a las 3 de la mañana.")

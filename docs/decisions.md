@@ -1369,3 +1369,85 @@ siendo experimentales— habrá que avisar en vez de publicar una versión.
 entregarlo no está terminado. La dependencia única de `opentelemetry-api` les
 convenció en treinta segundos; lo que les frenó fue el `pip install` de un
 fichero.
+
+---
+
+## D-056 · Un destino de pruebas que sobrevive al despliegue rompe el canal en silencio
+
+**Contexto**. Para probar el sink de Telegram sin cuenta real añadí
+`telegram_api_base` y desplegué el alert-bus apuntando a un servidor falso. Al
+día siguiente el contenedor **seguía apuntando ahí**, con el servidor ya muerto:
+el sink cargado, el registro enrutando, y dos notificaciones reales perdidas con
+`Connection refused`. Habría roto la configuración real del canal sin que nada
+lo dijera.
+
+**Decisión**. `/stats` expone `destinos_de_prueba`, y `make channel-test` falla
+si alguno apunta fuera del proveedor real.
+
+**Consecuencias**. La comprobación es barata y cubre la clase entera: cualquier
+`*_API_BASE` que no sea la de producción se denuncia. La alternativa —no añadir
+la opción— habría dejado el sink sin forma de probarse, que es peor.
+
+---
+
+## D-057 · Todo `page` enruta al canal humano, sin excepción
+
+**Contexto**. Al añadir Telegram lo puse en el `page` de `argus` y, por un
+reemplazo mal acotado, solo en el `ticket` de las demás. Resultado: el incidente
+`page` real del gateway de Prometheus —8.000 errores de conexión— enrutó a
+`[gchat, email, console]`, ninguno configurado salvo consola.
+
+**Decisión**. Toda aplicación con canales declarados lleva el canal humano en su
+lista de `page`. Un `page` que solo llega a consola no es un aviso: es un log.
+
+**Lo que esto dice del diseño**. Separar «cargar el canal» de «enrutar hacia él»
+(D-041) es correcto y hace posible este fallo. La prueba de canal lo detecta
+para la aplicación que prueba —`argus`—, y **no para las demás**. Pendiente:
+que `make channel-test` recorra todas las aplicaciones activas, no solo una.
+
+---
+
+## D-058 · Medir antes de pedir: la medición dijo que no pidiéramos
+
+**Contexto**. Llevábamos tres intercambios preparando una solicitud para que
+Prometheus adoptase `traceparent` en modo `trusted`. Prometimos medir el
+beneficio antes de pedir trabajo ajeno. Medido: en 12 horas y **11.091 trazas
+suyas, cero cruzan dos servicios** — su equipo ya lo sabía y nos explicó por
+qué: su inferencia no hace saltos HTTP entre servicios, el gateway valida el JWT
+contra un JWKS cacheado.
+
+**Decisión**. **No pedirlo.** `trusted` habría dado trazas del sync y del panel
+de administración, no de inferencia. Y el incidente de A-18 lo remata: era un
+`ConnectError`, así que no hubo span de servidor que unir. El fallo cruzado más
+grave de esas 12 horas es justo el que la propagación no habría iluminado.
+
+**Lo que sí se pide en su lugar**: que el span de servidor lo abra la
+instrumentación de ASGI. Dos de sus tres servicios no emiten **ningún** atributo
+HTTP, así que no hay métricas RED por endpoint ni SLO por ruta. Y arregla de
+paso su `OTEL_SEMCONV_STABILITY_OPT_IN`, que hoy no tiene sobre qué actuar.
+
+**La lección**: la medición no siempre confirma la petición. Aquí la retiró, y
+descubrió que dos hilos abiertos —el opt-in de convenciones y los spans sin
+atributos— eran el mismo problema.
+
+---
+
+## D-059 · La deduplicación aguantó una tormenta real
+
+**Contexto**. El 14/09 a las 10:58 UTC, `manager-api` de Prometheus estuvo caído
+dos minutos. Su gateway reaccionó con **102 intentos de conexión por segundo**
+sin espera entre reintentos —8.876 spans en dos minutos— y arrastró también a
+`auth-service`, que pasó de 0 a 848 spans.
+
+**Resultado**: 10.446 señales entraron al bus y salieron **45 notificaciones**.
+99,6 % de deduplicación sobre una tormenta que no fabricamos nosotros.
+
+**Por qué se anota**. Era el número que la fase 2 prometía y solo lo habíamos
+visto con tráfico propio. Un incidente real de otro equipo es la primera
+validación honesta.
+
+**Y el límite que enseñó**: el incidente que quedó abierto al mirar no era el de
+la tormenta sino uno posterior. La tormenta abrió el suyo a las 10:58, dejó de
+alimentarse, y `resolve_after_s` lo cerró a los 15 minutos. Correcto, pero
+significa que **`/incidents` no sirve para investigar el pasado**: hace falta
+consultar los incidentes resueltos, que hoy no se exponen.
