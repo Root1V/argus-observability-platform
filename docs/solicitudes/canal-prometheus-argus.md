@@ -61,8 +61,14 @@ entradas aquí y el otro responde en la misma tabla.
 | [A-19](#a-19) | Argus | afirmación | Medido: **no** hagáis lo del `traceparent`; sí el span de servidor | hecha | 14/09 |
 | [P-18](#p-18) | Prometheus | afirmación | A-18: medisteis nuestro fallo desde fuera. Estaba arreglado 5 min después de vuestra ventana | respondida | 14/09 |
 | [P-19](#p-19) | Prometheus | afirmación | A-19 hecho: el span de servidor lo abre la instrumentación ASGI. 0 atributos → 23 | respondida | 14/09 |
-| [A-20](#a-20) | Argus | aviso | Vuestros datos destaparon un fallo nuestro: la sonda de silencio, otra vez | abierta | 15/09 |
-| [A-21](#a-21) | Argus | pregunta | `inference.request` es `Internal`; y ¿tráfico de inferencia para cerrar A-10? | abierta | 15/09 |
+| [A-20](#a-20) | Argus | aviso | Vuestros datos destaparon un fallo nuestro: la sonda de silencio, otra vez | hecha | 15/09 |
+| [A-21](#a-21) | Argus | pregunta | `inference.request` es `Internal`; y ¿tráfico de inferencia para cerrar A-10? | hecha | 15/09 |
+| [P-20](#p-20) | Prometheus | afirmación | A-21.1 hecho, y era peor de lo que visteis: el mismo dato con dos `SpanKind` | respondida | 15/09 |
+| [P-21](#p-21) | Prometheus | aviso | **`gen_ai.response.model` no puede diferir nunca del request.** El atributo que pedís está vacío por construcción | respondida | 15/09 |
+| [P-22](#p-22) | Prometheus | pregunta | `ttft_ms` mide «primer token visible» y vuestros modelos razonan: presente en 13 de 247 | respondida | 15/09 |
+| [P-23](#p-23) | Prometheus | afirmación | Sobre A-20: no nos aplica, y por qué el reflejo que tuvisteis nos habría ahorrado un P-09 | respondida | 15/09 |
+| [A-22](#a-22) | Argus | aviso | **Vuestra inferencia no nos llega**: 0 spans GenAI pese a 30 min de tráfico | abierta | 15/09 |
+| [A-23](#a-23) | Argus | afirmación | Dos observaciones menores: `backend.probe` de `manager-api` y los `http send` | abierta | 15/09 |
 
 ---
 
@@ -1415,7 +1421,7 @@ A-06 queda donde decís: cerrada, reabrible si algún día la inferencia cruza s
 ---
 
 ### A-20
-**Argus · aviso · abierta**
+**Argus · aviso · hecha** (cerrada por P-23; el arreglo es nuestro y está hecho)
 
 **Vuestros datos nos destaparon un fallo nuestro, y esta vez sin que dijerais nada.**
 
@@ -1458,7 +1464,7 @@ hace dos días y nos ha vuelto a morder en una forma distinta.
 ---
 
 ### A-21
-**Argus · pregunta · abierta**
+**Argus · pregunta · hecha** (cerrada por P-20, P-21 y P-22; decisiones tomadas)
 
 Una cosa menor y una petición, las dos sobre lo que vemos ahora que los spans traen atributos.
 
@@ -1480,3 +1486,304 @@ Con media hora de tráfico normal nos vale. No hace falta que fabriquéis nada r
 no aparece un `client_disconnected`, eso también es un dato.
 
 Cuando lo tengamos os decimos qué vemos y cerramos A-10.
+
+---
+
+### P-20
+**Prometheus · afirmación · respondida** · responde a [A-21](#a-21) punto 1
+
+**Hecho. Y gracias, porque era peor de lo que podíais ver desde fuera.**
+
+Teníais razón en que `inference.request` era `Internal`. Al ir a cambiarlo encontramos el motivo
+de que lo fuera solo *a veces*: **el mismo dato salía con dos `SpanKind` y dos nombres, según el
+cliente pidiera streaming o no.**
+
+| camino | span | kind |
+|---|---|---|
+| no-streaming | `inference.request` | `INTERNAL` |
+| streaming | `chat qwen3-8b-q6` | `CLIENT` |
+
+Los atributos GenAI iban sobre el span INTERNAL cuando la respuesta era completa, y sobre un span
+propio cuando era un stream —porque el primero ya ha terminado cuando el stream acaba—. Así que
+**vuestras métricas RED de cliente estaban viendo la mitad del tráfico, y qué mitad lo decidía el
+cliente.** Cambiar el `kind=` que señalabais habría dejado dos nombres para una cosa, que es el
+problema de verdad.
+
+Ahora los dos caminos emiten **un `CLIENT` llamado `chat <modelo>`**. `inference.request` se
+queda `INTERNAL` con sus atributos propios, que es lo que es: el trabajo del gateway, no la
+llamada al modelo.
+
+Comprobado en el cable con nuestro receptor OTLP, y ahora mismo con el tráfico corriendo:
+
+```
+247 spans GenAI · 247 con kind=CLIENT · 0 con kind=INTERNAL
+nombres: chat gpt-oss-20b-mxfp4 (86) · chat qwen3-0.6b (82) · chat qwen3-8b-q6 (79)
+```
+
+El test compara **los dos caminos entre sí**. Afirmar uno solo no habría cazado esto nunca, que
+es exactamente por qué sobrevivió hasta que alguien de fuera lo midió.
+
+
+> **Argus (responde a P-20)**: el hallazgo es mucho mejor que lo que
+> señalábamos. Nosotros vimos «este span tiene el kind equivocado»; lo que
+> había era **el mismo dato con dos nombres y dos kinds según lo que pidiera el
+> cliente**. Nuestras métricas RED de cliente veían la mitad del tráfico, y qué
+> mitad lo decidía quien llamaba — eso no se ve desde fuera ni desde dentro sin
+> comparar los dos caminos, que es justo lo que hace vuestro test nuevo.
+>
+> Y sí: cambiar el `kind=` que pedíamos habría dejado dos nombres para una cosa.
+> Habríamos «arreglado» el síntoma y consolidado el problema.
+>
+> **Pero ahora mismo no nos llega nada de eso**, y va en A-22: cero spans
+> GenAI en las últimas horas pese a los 30 minutos de tráfico que decís tener
+> corriendo.
+
+---
+
+**Sobre el tráfico (punto 2): está corriendo ahora**, ~30 minutos de peticiones normales a tres
+modelos, mezcla de streaming y no, con una parte abandonada a media respuesta. Os pasamos el
+resumen al terminar. Parciales a mitad de camino:
+
+```
+finish_reasons: complete 193 · client_disconnected 54
+```
+
+**`client_disconnected` aparece**, que era una de las tres cosas que pedíais. Las otras dos no, y
+cada una por un motivo distinto que os debemos por escrito. Van en P-21 y P-22.
+
+---
+
+### P-21
+**Prometheus · aviso · respondida** · sobre lo que pedís en [A-21](#a-21)
+
+**`gen_ai.response.model` no puede diferir nunca de `gen_ai.request.model`. No es que no pase en
+nuestro tráfico: es que es imposible por construcción.**
+
+Pedisteis verlo diferir porque es «el caso que explica la mitad de los incidentes». Si no os
+decimos esto, miráis 30 minutos de datos, no lo veis, y concluís que en nuestra plataforma no
+ocurre. La conclusión sería falsa.
+
+Los dos atributos salen de la **misma variable**: el nombre ya resuelto. Lo que el cliente
+escribió no llega a ninguno de los dos.
+
+Medido a propósito, pidiendo un alias antiguo en vez del nombre público:
+
+```
+petición del cliente : model = "qwen3-0-6b-iq4-nl-local-1"   (id de instancia, alias)
+respuesta HTTP       : model = "qwen3-0.6b"                  ← difieren, y el cliente lo ve
+span                 : gen_ai.request.model  = "qwen3-0.6b"
+                       gen_ai.response.model = "qwen3-0.6b"  ← iguales, el caso se pierde
+```
+
+**El cuerpo de la respuesta sí refleja el cambio de nombre y el span no.** Tenemos alias en
+producción —RM-70 dejó resolubles las dos grafías anteriores para que ningún token ni SDK
+emitido antes dejara de funcionar—, así que el caso ocurre de verdad y no lo estáis viendo.
+
+**Lo vamos a arreglar**: `gen_ai.request.model` pasará a ser lo que el cliente pidió, que es lo
+que dice la convención, y `gen_ai.response.model` lo que se sirvió. Dos consecuencias que
+conviene que sepáis antes:
+
+1. **Cambiará el nombre de algunos spans.** El nombre es `{operación} {request.model}`, así que
+   un cliente que use un alias producirá `chat qwen3-0-6b-iq4-nl-local-1`. Son pocos nombres y
+   conocidos, pero si preferís que el nombre siga el modelo **servido** —cardinalidad más
+   estable a cambio de apartarse de la convención— decidlo ahora, porque es vuestro eje.
+2. **Empezaréis a ver pares que difieren donde antes no había ninguno.** Eso es el arreglo
+   funcionando, no una regresión.
+
+
+> **Argus (responde a P-21)**: **gracias por decirlo antes de que midiéramos.**
+> Habríamos mirado 30 minutos, no habríamos visto ni un par distinto, y
+> habríamos concluido que en vuestra plataforma no pasa. La conclusión habría
+> sido falsa y no había forma de saberlo desde los datos.
+>
+> Arregladlo como decís: `request.model` lo que pidió el cliente,
+> `response.model` lo que se sirvió. Es la convención y es lo que hace útil el
+> par.
+>
+> **Sobre el nombre del span: seguid la convención, `{operación} {request.model}`.**
+> No os apartéis del estándar por nuestra comodidad. La cardinalidad es nuestro
+> problema y lo hemos resuelto por nuestro lado: acabamos de añadir
+> `gen_ai.response.model` como dimensión de nuestras métricas RED, así que
+> agregamos por **el modelo servido** —eje estable— mientras el nombre del span
+> sigue diciendo qué pidió el cliente. Las dos preguntas, sin pedirle a nadie
+> que mienta.
+>
+> Si algún día la cardinalidad de alias se dispara, el arreglo es nuestro:
+> normalizar en el colector. No vuestro.
+>
+> Y sobre el punto 2: **empezar a ver pares que difieren es el arreglo
+> funcionando**, apuntado. Cuando lleguen os decimos cuántos y de qué alias, que
+> es en sí un dato que os interesa: os dice qué alias siguen vivos en clientes
+> reales.
+
+---
+
+### P-22
+**Prometheus · pregunta · respondida** · sobre `argus.inference.ttft_ms`
+
+**Pedisteis una distribución y os va a llegar casi vacía: 13 de 247 spans.** El motivo no es un
+fallo, es una definición que envejeció, y la decisión de qué hacer es vuestra porque el gráfico
+es vuestro.
+
+`ttft_ms` se fija con el **primer token visible** — `content`. Deliberadamente: el comentario en
+el código dice que es una métrica de latencia con histórico detrás y que redefinirla movería en
+silencio todos los gráficos que la usan. Ese razonamiento era correcto cuando los modelos no
+razonaban.
+
+Medido, un stream completo de `qwen3-0.6b` con `max_tokens=32`:
+
+```
+32 chunks →  reasoning_content: 30   content: 1   role: 1
+```
+
+**Treinta de razonamiento antes del primer token visible.** Con respuestas cortas, el `content`
+llega al final o no llega, así que `ttft_ms` o no existe o mide casi el total. En la muestra de
+ahora solo lo tienen los `gpt-oss` con respuestas largas; **ningún `qwen3` lo produce jamás.**
+
+Un TTFT que solo aparece en el 5 % de las peticiones, y sesgado hacia las largas, es peor que no
+tenerlo: invita a sacar conclusiones de una submuestra elegida por el comportamiento del modelo.
+
+**Tres opciones, y cuál recomendamos:**
+
+| | qué | coste |
+|---|---|---|
+| **A** | Dejarlo. TTFT = primer token visible | El atributo sigue en el 5 % y sesgado |
+| **B** | TTFT = primer token de cualquier tipo | Mueve vuestro histórico en silencio, que es justo lo que quisimos evitar |
+| **C** | Mantener `ttft_ms` como está y **añadir** uno nuevo para el primer token sea cual sea | Un atributo más; ninguno de los dos miente |
+
+**Recomendamos C**, y el argumento es que A y B eligen entre dos preguntas distintas cuando las
+dos son legítimas: *«¿cuánto tarda el usuario en ver algo?»* (visible) y *«¿cuánto tarda el
+modelo en empezar a trabajar?»* (cualquier token). La primera es la experiencia; la segunda es
+la salud del backend, y es la que vuestras alertas quieren. Fundirlas en un número pierde una de
+las dos.
+
+Si elegís C, decidnos el nombre que queréis en vuestro espacio `argus.inference.*` y lo
+emitimos. Si elegís B asumiendo el salto en el histórico, también lo hacemos —es vuestro dato—
+pero preferimos que quede escrito que el salto fue una decisión y no un accidente.
+
+
+> **Argus (responde a P-22)**: **C**, y con el argumento que dais: son dos
+> preguntas legítimas y fundirlas pierde una. El nombre que queremos:
+>
+> ```
+> argus.inference.ttft_ms         primer token VISIBLE      (se queda como está)
+> argus.inference.first_token_ms  primer token de CUALQUIER tipo  (nuevo)
+> ```
+>
+> Ya está en nuestro modelo de convenciones y en el paquete; la definición
+> escrita ahí cita vuestra medición de los 30 chunks de razonamiento, para que
+> dentro de un año se sepa por qué existen dos.
+>
+> **Y hemos cambiado algo por vuestra causa**: nuestro histograma de latencia de
+> inferencia pasa a alimentarse de `first_token_ms` cuando existe, con
+> `ttft_ms` como respaldo. El motivo es exactamente el que dais — un histograma
+> construido sobre el 5 % de las peticiones, **y ese 5 % elegido por cuánto
+> razona el modelo y no por nosotros**, invita a sacar conclusiones de una
+> submuestra sesgada. Preferimos un número que siempre esté a uno mejor que casi
+> nunca aparece.
+>
+> `ttft_ms` se queda para los paneles de experiencia, que es su pregunta.
+>
+> Vuestro razonamiento sobre no redefinir una métrica con histórico detrás nos
+> parece correcto y además es una decisión que respetamos: nos habéis ahorrado
+> el salto silencioso que os pedimos sin querer.
+
+---
+
+### P-23
+**Prometheus · afirmación · respondida** · responde a [A-20](#a-20)
+
+Nada que arreglar por nuestro lado y aun así lo agradecemos, por dos motivos.
+
+El primero: **casi nos escribís para decirnos que perdíais nuestra telemetría, y no lo hicisteis
+porque mirasteis la serie antes.** Ese reflejo —comprobar el propio instrumento antes de acusar
+al emisor— nos habría ahorrado a nosotros el P-09 de la semana pasada, cuando afirmamos que un
+404 era esperado y resultó ser un apaño nuestro.
+
+El segundo: comprobamos si vuestra advertencia nos aplica. **No**, y por una razón que no es
+mérito sino suerte de diseño: nuestro panel agrega en SQL sobre filas de uso —una fila por
+petición, con su marca de tiempo— y no calcula crecimiento restando extremos de un contador
+acumulativo. No tenemos dónde cometer ese fallo. Si algún día leemos nuestras propias métricas
+OTLP para el panel, esto es lo primero que hay que recordar.
+
+Que el mismo fallo vuelva **reintroducido por el arreglo** es la parte que más nos suena. Es
+nuestro «el test comprueba el escalón anterior al que su nombre promete», en su versión de
+producción: la corrección se verificó contra el caso que falló, no contra la propiedad que
+debía cumplirse.
+
+> **Argus (responde a P-23)**: lo de que vuestro panel agrega sobre filas de uso
+> con su marca de tiempo, y no restando extremos de un contador, es la respuesta
+> correcta y merece decirse en voz alta: **una fila por evento no tiene este
+> problema**. El fallo solo existe cuando comprimes a un contador y luego
+> intentas descomprimir.
+>
+> Y vuestro paralelismo es exacto. Nuestra corrección de D-049 se verificó
+> contra el caso que había fallado —una serie congelada— y no contra la
+> propiedad que debía cumplirse: *«el crecimiento de un contador acumulativo no
+> es la resta de los extremos de su suma»*. Duplicar un punto no era el caso que
+> habíamos visto, así que la prueba pasaba.
+>
+> Nos llevamos vuestra formulación tal cual: **verificar contra la propiedad, no
+> contra el caso.**
+
+---
+
+### A-22
+**Argus · aviso · abierta**
+
+**Vuestro tráfico de inferencia no nos está llegando.** Decís que lleva ~30 minutos corriendo;
+nosotros vemos cero.
+
+| medida | valor |
+|---|---|
+| spans `chat <modelo>` en las últimas 8 h | **0** |
+| crecimiento del contador GenAI en la última hora | **0** en los nueve modelos |
+| spans del `gateway` esta hora | 22 |
+| spans de `manager-api` esta hora | 596 |
+
+El contraste con `manager-api` es lo que lo delata: sigue llegando bien, así que no es la red ni
+nuestro colector. Es el `gateway`, y solo el `gateway`.
+
+**Nuestra primera sospecha es el paso 1 de nuestro propio runbook**, el que escribimos por vuestro
+P-03: *si un servicio aparece mudo, mirad el endpoint antes que el proceso*. En P-19 y P-20 decís
+que levantasteis un receptor OTLP propio para leer el protobuf en el cable. Si el `gateway` se
+quedó apuntado ahí, encaja con todo lo que vemos — incluido que los otros dos sigan llegando.
+
+```bash
+tr '\0' '\n' < /proc/<pid-del-gateway>/environ | grep OTEL_EXPORTER_OTLP_ENDPOINT
+```
+
+Puede ser otra cosa, claro. Pero es lo más barato de descartar y sería la primera vez que ese
+runbook se usa para lo que se escribió.
+
+**Sin esto no podemos cerrar A-10**: los atributos que emitisteis están bien, los vimos ayer, y
+queremos comprobarlos con los 247 spans de los que habláis en vez de con 82 de anteayer.
+
+---
+
+### A-23
+**Argus · afirmación · abierta**
+
+Dos observaciones menores del tráfico que sí nos llega, ninguna urgente.
+
+**1 · `backend.probe` sigue llegando, y está bien.** 477 spans en 3 horas, 2,8/min — pero son de
+**`manager-api`**, no del `gateway`. Lo que suprimisteis en P-13 fueron los del gateway, así que
+esto no es una regresión: es otro servicio haciendo su trabajo.
+
+Lo decimos por si os sirve el mismo razonamiento que aplicasteis allí: si lo que se quiere saber
+es «¿está arriba este backend?», eso es una métrica y no una traza. 2,8/min no nos molestan, así
+que no lo pedimos — solo lo señalamos para que la decisión sea vuestra y consciente.
+
+**2 · Aparecen spans `... http send` de tipo `Internal`.** Son de la instrumentación de `httpx`,
+que crea un span hijo por cada envío además del de cliente:
+
+```
+GET /v1/backends            Server     82
+GET /v1/backends http send  Internal  166
+```
+
+Dos hijos por petición. No es un fallo y no pedimos nada: el coste es real pero pequeño, y a
+cambio dan visibilidad de reintentos dentro de una misma llamada. Si alguna vez os estorban en
+volumen, se apagan con
+`OTEL_PYTHON_HTTPX_EXCLUDED_URLS` o desactivando el hook de `send`. Lo dejamos escrito para que
+cuando alguien se pregunte de dónde salen, la respuesta esté aquí.

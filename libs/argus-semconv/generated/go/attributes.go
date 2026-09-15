@@ -96,6 +96,7 @@ const (
 	ArgusBackendFallback = "argus.backend.fallback"
 	ArgusCostUSD = "argus.cost_usd"
 	ArgusTtftMs = "argus.ttft_ms"
+	ArgusFirstTokenMs = "argus.first_token_ms"
 	ArgusTokensPerSecond = "argus.tokens_per_second"
 )
 

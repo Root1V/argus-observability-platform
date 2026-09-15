@@ -259,7 +259,26 @@ groups:
         type: double
       - id: argus.ttft_ms
         type: int
-        brief: Tiempo hasta el primer token.
+        brief: >
+          Tiempo hasta el primer token VISIBLE para el usuario. Es la metrica
+          de experiencia: cuanto tarda alguien en ver algo aparecer.
+      - id: argus.first_token_ms
+        type: int
+        brief: >
+          Tiempo hasta el primer token de CUALQUIER tipo, razonamiento
+          incluido. Es la metrica de salud del backend: cuanto tarda el modelo
+          en empezar a trabajar.
+
+          Existe separada de `argus.ttft_ms` porque los modelos que razonan
+          rompieron la equivalencia entre ambas. Medido en Prometheus, un
+          stream de qwen3-0.6b con max_tokens=32 emite 30 chunks de
+          `reasoning_content` antes del primer `content`: el TTFT visible o no
+          existe o mide casi el total, y solo aparecia en 13 de 247 peticiones,
+          sesgado hacia las respuestas largas.
+
+          Las alertas de latencia de inferencia usan ESTA, no `ttft_ms`: es la
+          unica que esta siempre presente y la que responde "el backend esta
+          lento" en vez de "el modelo penso mucho antes de hablar".
       - id: argus.tokens_per_second
         type: double
 

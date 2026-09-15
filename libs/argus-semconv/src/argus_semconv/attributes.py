@@ -104,6 +104,7 @@ ARGUS_BACKEND_CIRCUIT_STATE_VALUES: Final[tuple[str, ...]] = ("closed", "open", 
 ARGUS_BACKEND_FALLBACK: Final[str] = "argus.backend.fallback"
 ARGUS_COST_USD: Final[str] = "argus.cost_usd"
 ARGUS_TTFT_MS: Final[str] = "argus.ttft_ms"
+ARGUS_FIRST_TOKEN_MS: Final[str] = "argus.first_token_ms"
 ARGUS_TOKENS_PER_SECOND: Final[str] = "argus.tokens_per_second"
 
 # --------------------------------------------------------------------------

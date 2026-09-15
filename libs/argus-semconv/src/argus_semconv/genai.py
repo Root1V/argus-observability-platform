@@ -149,6 +149,7 @@ class GenAISpan:
         circuit_state: str | None = None,
         fallback: bool | None = None,
         ttft_ms: int | None = None,
+        first_token_ms: int | None = None,
         tokens_per_second: float | None = None,
         cost_usd: float | None = None,
     ) -> None:
@@ -157,18 +158,29 @@ class GenAISpan:
         Ninguna aplicacion sabe que backend respondio, si hubo fallback o si
         salto el circuit breaker. Por eso instrumentar aqui da a todas las apps
         que usen esta libreria informacion que de otro modo se pierde.
+
+        Los DOS tiempos de primer token son distintos y los dos son legitimos:
+        `ttft_ms` es el primer token visible —la experiencia de quien espera— y
+        `first_token_ms` el primero de cualquier tipo, razonamiento incluido —la
+        salud del backend—. Con modelos que razonan dejaron de coincidir, y
+        fundirlos en un numero pierde una de las dos preguntas (D-061).
         """
         self._set(A.ARGUS_BACKEND_ID, backend_id)
         self._set(A.ARGUS_BACKEND_CIRCUIT_STATE, circuit_state)
         self._set(A.ARGUS_BACKEND_FALLBACK, fallback)
         self._set(A.ARGUS_TTFT_MS, ttft_ms)
+        self._set(A.ARGUS_FIRST_TOKEN_MS, first_token_ms)
         self._set(A.ARGUS_TOKENS_PER_SECOND, tokens_per_second)
         self._set(A.ARGUS_COST_USD, cost_usd)
 
-        if ttft_ms:
+        # La metrica se alimenta del primer token de cualquier tipo cuando
+        # existe: es la que responde "el backend esta lento" y la unica que
+        # esta presente en todas las peticiones. `ttft_ms` solo aparecia en el
+        # 5 % de las de Prometheus, y sesgado hacia las respuestas largas.
+        if (latencia := first_token_ms or ttft_ms) is not None:
             _metrics.record_ttft(
                 provider=self._provider, model=self._model,
-                seconds=ttft_ms / 1000.0, backend_id=backend_id,
+                seconds=latencia / 1000.0, backend_id=backend_id,
             )
         if cost_usd:
             _metrics.record_cost(
