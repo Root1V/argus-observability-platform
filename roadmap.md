@@ -254,7 +254,7 @@ preparan con parche, tests y evidencia; los aplica su equipo.
 | `S-01` | ✅ | **Prometheus** | `Resource.create()` **aplicado** el 13/09. Retiraron además su pila propia: somos el único destino — [respuesta](docs/solicitudes/prometheus-respuesta.md) |
 | `S-02` | ❌ | **Prometheus** | `traceparent`: **medido y descartado**. 0 de 11.091 trazas cruzan servicios; su inferencia no hace saltos HTTP — D-058 |
 | `S-04` | ⏳ | **Prometheus** | Retirar el alias `edge-ai-inference` cuando redesplieguen con el nombre nuevo |
-| `S-05` | ⏳ | **Prometheus** | Rueda de `argus-obs-semconv` entregada; atributos del gateway pedidos en A-10 |
+| `S-05` | ✅ | **Prometheus** | **A-10 cerrada**: 689 de 689 spans, reparto idéntico al generador, 125 `client_disconnected` — D-068 |
 | `S-06` | ✅ | **Prometheus** | `http/dup` puesto y **ya tiene sobre qué actuar** tras S-08: las dos grafías en los tres servicios |
 | `S-07` | ✅ | **Prometheus** | `service.version` 2.0.0 e `instance.id` en los tres. Verificado en el almacén |
 | `S-08` | ✅ | **Prometheus** | Hecho sin que mandáramos solicitud: span de servidor por ASGI, 0 → 25 atributos. Verificado — D-058 |
@@ -279,6 +279,7 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
 | `B-10` | ⏳ | **Índice PyPI privado (`devpi`)** | **Prioridad alta**: Prometheus rechaza —con razón— instalar una rueda suelta por SHA. Bloquea su adopción del paquete — D-036, D-054 |
 | `B-14` | 💭 | **Registrar `argus-obs-*` en PyPI defensivamente** | La protección de D-035 depende de que sigan libres |
+| `B-18` | ⏳ | **Validar los atributos de un documento contra el modelo** | Mandamos a Prometheus tres nombres inventados y los implementaron. El generador no cubre lo que se escribe a mano — D-067 |
 | `B-17` | ⏳ | **Rotar `ARGUS_GATEWAY_TOKEN`** | Estuvo versionado desde `78918b9`. `make rotate-token`; no afecta a equipos externos — D-066 |
 | `B-15` | ⏳ | **Métricas del host REAL en macOS** | El `hostmetrics` mide la VM de Docker: un núcleo al 98,7% durante 62h fue invisible. Candidato: el dead man's switch, que ya corre nativo — D-063 |
 | `B-16` | ⏳ | **Instalar el dead man's switch como LaunchAgent** | Está escrito y no corre. Hoy no hay red de seguridad externa — D-063 |

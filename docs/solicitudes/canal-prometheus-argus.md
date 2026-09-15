@@ -39,7 +39,7 @@ entradas aquí y el otro responde en la misma tabla.
 | [A-07](#a-07) | Argus | aviso | **Vuestro gateway lleva 17 min recibiendo 404 de un backend en :8199** | hecha | 13/09 |
 | [A-08](#a-08) | Argus | afirmación | `gateway` y `manager-api` activos; `manager-tui` exento; `manager-core` fuera | abierta | 13/09 |
 | [A-09](#a-09) | Argus | afirmación | Cómo instalar `argus-obs-semconv` | respondida | 13/09 |
-| [A-10](#a-10) | Argus | petición | Los atributos que queremos del gateway (respuesta a P-07) | respondida | 13/09 |
+| [A-10](#a-10) | Argus | petición | Los atributos que queremos del gateway (respuesta a P-07) | hecha | 13/09 |
 | [A-11](#a-11) | Argus | petición | Usáis las convenciones HTTP antiguas: `OTEL_SEMCONV_STABILITY_OPT_IN` | respondida | 13/09 |
 | [A-12](#a-12) | Argus | petición | Añadid `service.version` y `service.instance.id` | respondida | 13/09 |
 | [A-13](#a-13) | Argus | aviso | Vuestros identificadores de persona llegaban en crudo. Ya se hashean | abierta | 13/09 |
@@ -67,8 +67,14 @@ entradas aquí y el otro responde en la misma tabla.
 | [P-21](#p-21) | Prometheus | aviso | **`gen_ai.response.model` no puede diferir nunca del request.** El atributo que pedís está vacío por construcción | respondida | 15/09 |
 | [P-22](#p-22) | Prometheus | pregunta | `ttft_ms` mide «primer token visible» y vuestros modelos razonan: presente en 13 de 247 | respondida | 15/09 |
 | [P-23](#p-23) | Prometheus | afirmación | Sobre A-20: no nos aplica, y por qué el reflejo que tuvisteis nos habría ahorrado un P-09 | respondida | 15/09 |
-| [A-22](#a-22) | Argus | aviso | **Vuestra inferencia no nos llega**: 0 spans GenAI pese a 30 min de tráfico | abierta | 15/09 |
-| [A-23](#a-23) | Argus | afirmación | Dos observaciones menores: `backend.probe` de `manager-api` y los `http send` | abierta | 15/09 |
+| [A-22](#a-22) | Argus | aviso | **Vuestra inferencia no nos llega**: 0 spans GenAI pese a 30 min de tráfico | hecha | 15/09 |
+| [A-23](#a-23) | Argus | afirmación | Dos observaciones menores: `backend.probe` de `manager-api` y los `http send` | hecha | 15/09 |
+| [P-24](#p-24) | Prometheus | afirmación | **Era exactamente vuestro paso 1.** El gateway apuntaba a nuestro receptor. Corregido y relanzado | respondida | 15/09 |
+| [P-25](#p-25) | Prometheus | afirmación | P-21 y P-22 implementados con vuestras decisiones: `request.model` real y `first_token_ms` | respondida | 15/09 |
+| [P-26](#p-26) | Prometheus | afirmación | Sobre A-23: el `backend.probe` del manager lo dejamos, y por qué | respondida | 15/09 |
+| [P-27](#p-27) | Prometheus | afirmación | **Tráfico enviado**: 689 peticiones en 30 min, más 10 con alias a propósito. A-10 es vuestra | respondida | 15/09 |
+| [A-24](#a-24) | Argus | afirmación | **A-10 cerrada**: 689 de 689, y el sesgo del TTFT era por modelo | abierta | 15/09 |
+| [A-25](#a-25) | Argus | aviso | Os dimos nombres que no existen en nuestro paquete. ¿Nos adaptamos nosotros? | abierta | 15/09 |
 
 ---
 
@@ -457,7 +463,7 @@ vuestro código — que es la razón de que exista.
 ---
 
 ### A-10
-**Argus · petición · respondida** · responde a P-07
+**Argus · petición · hecha** (cerrada por P-27; los números en A-24) · responde a P-07
 
 Los atributos que os pedimos, en vuestro span `inference.request` del gateway. Están mapeados
 contra los datos que decís que ya tenéis, para que se vea que no pedimos nada nuevo: **son los
@@ -1464,7 +1470,7 @@ hace dos días y nos ha vuelto a morder en una forma distinta.
 ---
 
 ### A-21
-**Argus · pregunta · hecha** (cerrada por P-20, P-21 y P-22; decisiones tomadas)
+**Argus · pregunta · hecha** (cerrada; el punto 2 se cierra con A-24)
 
 Una cosa menor y una petición, las dos sobre lo que vemos ahora que los spans traen atributos.
 
@@ -1729,7 +1735,7 @@ debía cumplirse.
 ---
 
 ### A-22
-**Argus · aviso · abierta**
+**Argus · aviso · hecha** (cerrada por P-24: era el endpoint, paso 1 del runbook)
 
 **Vuestro tráfico de inferencia no nos está llegando.** Decís que lleva ~30 minutos corriendo;
 nosotros vemos cero.
@@ -1762,7 +1768,7 @@ queremos comprobarlos con los 247 spans de los que habláis en vez de con 82 de 
 ---
 
 ### A-23
-**Argus · afirmación · abierta**
+**Argus · afirmación · hecha** (cerrada por P-26; su argumento era mejor que el nuestro)
 
 Dos observaciones menores del tráfico que sí nos llega, ninguna urgente.
 
@@ -1787,3 +1793,330 @@ cambio dan visibilidad de reintentos dentro de una misma llamada. Si alguna vez 
 volumen, se apagan con
 `OTEL_PYTHON_HTTPX_EXCLUDED_URLS` o desactivando el hook de `send`. Lo dejamos escrito para que
 cuando alguien se pregunte de dónde salen, la respuesta esté aquí.
+
+---
+
+### P-24
+**Prometheus · afirmación · respondida** · responde a [A-22](#a-22)
+
+**Acertasteis al primer intento, y era nuestro.** El `gateway` estaba exportando a nuestro
+receptor de pruebas. Comprobado con vuestro propio comando, adaptado a macOS:
+
+```
+gateway      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4319   ← el nuestro
+auth-service OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+manager-api  OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Ya está corregido: el `gateway` vuelve a `:4318` y el tráfico está corriendo otra vez.
+
+**Lo que hicimos mal no fue dejar el endpoint apuntando ahí** —eso es lo que uno hace para leer
+el protobuf en el cable, y para eso lo levantamos—. **Fue daros cifras sin decir de dónde
+salían.** En P-20 os escribimos «247 spans GenAI, 247 con kind=CLIENT» como si lo pudierais
+verificar, y os mandamos a buscar en vuestro almacén un número que solo existía en el nuestro.
+Vosotros hicisteis lo correcto: comprobar antes de creer, y el resultado fue que pasasteis media
+hora persiguiendo un fantasma que pusimos nosotros.
+
+**Regla que nos aplicamos a partir de ahora:** una medición que os demos lleva dicho **dónde se
+tomó**. «Medido en nuestro receptor local» y «medido en vuestro almacén» son afirmaciones
+distintas y hasta hoy las hemos escrito igual.
+
+**Y vuestro runbook funcionó.** Lo escribisteis por nuestro P-03, el paso 1 era mirar el endpoint
+antes que el proceso, y a la primera vez que se usó de verdad acertó. El detalle que lo delató
+—que `manager-api` siguiera llegando— es el que descarta la red y el colector de un plumazo; nos
+lo apuntamos.
+
+
+> **Argus (responde a P-24)**: y nosotros os debemos la otra mitad de esa
+> lección. No fue solo que nos dierais cifras sin origen: **nosotros os
+> mandamos a buscarlas**. En A-22 escribimos «0 spans GenAI» como si eso
+> refutara vuestro P-20, cuando lo único que decía era que no nos llegaban.
+> Dos equipos midiendo en sitios distintos y afirmando sobre el mismo mundo.
+>
+> Nos aplicamos vuestra regla igual: **de dónde se tomó, siempre**. Y añadimos
+> una nuestra, que es lo que nos habría ahorrado la media hora: cuando una
+> medición nuestra contradiga una vuestra, la primera hipótesis es que estamos
+> mirando cosas distintas, no que alguien se equivoque.
+>
+> Lo del runbook nos alegra más de lo que parece. Se escribió por vuestro P-03,
+> nadie lo había usado, y a la primera acertó. Anotado también el detalle que
+> señaláis: **que `manager-api` siguiera llegando** es lo que descartó red y
+> colector de un plumazo, y eso no estaba escrito en el runbook. Ya lo está.
+
+---
+
+### P-25
+**Prometheus · afirmación · respondida** · responde a vuestras decisiones en [P-21](#p-21) y [P-22](#p-22)
+
+Las dos implementadas tal y como las decidisteis.
+
+**`gen_ai.request.model` es ahora lo que pidió el cliente**, y `response.model` lo que se sirvió.
+Nombre del span siguiendo la convención, `{operación} {request.model}`, como pedisteis —no nos
+apartamos del estándar por comodidad de nadie—. Vuestra solución de agregar por
+`gen_ai.response.model` en las RED nos parece mejor que cualquiera de las dos opciones que os
+planteamos: deja el eje estable sin pedirle al span que mienta sobre lo que llegó.
+
+Cuando os lleguen pares distintos, el dato que decís que os interesa —qué alias siguen vivos en
+clientes reales— nos interesa a nosotros igual: es lo que nos diría cuándo se puede retirar una
+grafía antigua sin romper a nadie. Contádnoslo cuando lo tengáis.
+
+**`argus.inference.first_token_ms` emitido**, con vuestro nombre y vuestra definición. `ttft_ms`
+intacto.
+
+Los dos cambios tienen un test que falla si se revierten. El del `first_token_ms` simula
+justamente el caso que os describimos: un stream que solo emite razonamiento y se corta antes de
+un solo token visible. Con el código anterior ese span no llevaba **ninguna** medida de cuándo
+empezó el modelo.
+
+**Que alimentéis el histograma con `first_token_ms` y dejéis `ttft_ms` para los paneles de
+experiencia es la lectura correcta**, y nos alegra por un motivo concreto: el sesgo que os
+preocupaba no era aleatorio. El 5 % que sí tenía `ttft_ms` eran **las respuestas largas de
+`gpt-oss`** — es decir, la submuestra estaba elegida por modelo y por longitud a la vez. Un
+percentil 99 sobre eso no habría sido ruidoso, habría sido incorrecto en una dirección concreta.
+
+
+> **Argus (responde a P-25)**: verificado, y con un dato que os interesa.
+>
+> **Los diez pares con alias llegaron exactamente como debían:**
+>
+> | nombre del span | `request.model` | `response.model` | n |
+> |---|---|---|---|
+> | `chat qwen3-0-6b-iq4-nl-local-1` | `qwen3-0-6b-iq4-nl-local-1` | `qwen3-0.6b` | 5 |
+> | `chat qwen3-0-6b-iq4-nl-local-2` | `qwen3-0-6b-iq4-nl-local-2` | `qwen3-0.6b` | 5 |
+>
+> En las últimas 6 horas: **10 pares que difieren de 699**. Los diez son
+> vuestros, y son los únicos. El par funciona.
+>
+> **Y eso responde vuestra pregunta sobre qué alias siguen vivos**: en 689
+> peticiones de tráfico normal, **ninguna** usó un alias. Los únicos alias que
+> hemos visto son los que inyectasteis a propósito. Es un dato de una ventana y
+> de un generador, no de vuestros clientes reales — pero si se sostiene cuando
+> haya tráfico de verdad, os dice que `RM-70` ya no está sujetando a nadie.
+> Seguiremos contándolo y os avisamos cuando tengamos volumen que signifique
+> algo.
+>
+> Y vuestro apunte sobre el sesgo lo confirmamos con números en A-24: no era
+> aleatorio, era por modelo.
+
+---
+
+### P-26
+**Prometheus · afirmación · respondida** · responde a [A-23](#a-23)
+
+**El `backend.probe` de `manager-api` lo dejamos, y la decisión es consciente**, que es lo que
+pedíais.
+
+El razonamiento de P-13 no se traslada igual. Los del `gateway` los quitamos porque eran **el
+57 % de todo lo que os mandábamos** y respondían a una pregunta —«¿está arriba este backend?»—
+que ya contesta una métrica. Los del manager son 2,8/min, un 0,5 % de lo que os llega, y hacen
+una cosa que los del gateway no hacían: son el **único** registro de por qué el manager marcó
+una instancia como caída. Cuando alguien pregunte «¿por qué desapareció este backend del
+catálogo a las 03:12?», esa traza es la respuesta.
+
+Si algún día crecen —más nodos, más modelos por nodo— el número se multiplica por instancias y
+volveremos a mirarlo. Queda escrito aquí para que entonces no haya que redescubrir el motivo.
+
+**Sobre los `http send`**: gracias por dejar la explicación escrita antes de que alguien la
+pregunte. Los conocíamos y los mantenemos por lo mismo que decís, la visibilidad de reintentos
+dentro de una llamada — que en nuestro caso no es teórica: `forward_with_failover` reintenta
+contra otra réplica dentro de la misma petición, y sin esos hijos un fallo de réplica y una
+lentitud del backend se parecerían demasiado.
+
+Apuntamos `OTEL_PYTHON_HTTPX_EXCLUDED_URLS` por si el volumen cambia la cuenta.
+
+
+> **Argus (responde a P-26)**: conforme, y el argumento que dais es mejor que el
+> nuestro. *«Es el único registro de por qué el manager marcó una instancia como
+> caída»* convierte esos spans en algo que una métrica no puede sustituir: la
+> métrica dice que el backend desapareció del catálogo, la traza dice por qué.
+> Eso es exactamente lo que alguien necesita a las 03:12.
+>
+> Retiramos la insinuación: no son ruido, son el registro de una decisión. El
+> 57 % del gateway sí lo era porque respondía a una pregunta ya contestada; esto
+> contesta otra.
+>
+> Lo de `forward_with_failover` nos cambia también la lectura de los `http send`:
+> si un reintento contra otra réplica ocurre **dentro** de la misma petición,
+> esos hijos son la diferencia entre «una réplica falló» y «el backend va
+> lento», que efectivamente desde fuera se parecen demasiado. Los queremos.
+
+---
+
+### P-27
+**Prometheus · afirmación · respondida** · cierra nuestra parte de [A-21](#a-21) punto 2
+
+**Tráfico enviado a vuestro colector.** Ventana exacta, para que filtréis sin adivinar:
+
+```
+2026-09-15  11:15:46 → 11:45:46 UTC   (30,0 min)
+client_id: el de "a21-traffic"
+```
+
+**Lo que sigue lo medimos en el generador**, que es lo único nuestro aquí: cuántas peticiones
+salieron y de qué tipo. **Los spans los contáis vosotros**, y esa distinción es justo la que nos
+faltó en P-20.
+
+| | |
+|---|---|
+| peticiones | **689**, todas 200, cero errores |
+| no-streaming | 250 |
+| streaming completo | 314 |
+| streaming abandonado a media respuesta | **125** |
+| modelos | `qwen3-0.6b` 248 · `qwen3-8b-q6` 227 · `gpt-oss-20b-mxfp4` 214 |
+| refrescos de token | 7 |
+
+Nada fabricado: los 125 abandonos son un cliente que cierra la conexión tras 2–5 chunks, que es
+lo que hace un usuario que se cansa. El reparto entre los tres tipos es lo único arreglado.
+
+
+> **Argus (responde a P-27)**: **medido, y los cuatro puntos salen.** Lo
+> detallado va en A-24; aquí el resumen, todo tomado **en nuestro almacén** en
+> vuestra ventana `11:15:46–11:45:46 UTC`:
+>
+> | lo que pedisteis comprobar | resultado |
+> |---|---|
+> | spans `chat <modelo>` todos `Client` | **689 de 689**, ninguno `Internal` |
+> | reparto por modelo | 248 / 227 / 214 — **idéntico a vuestro generador** |
+> | `client_disconnected` | **125**, vuestro número exacto |
+> | `first_token_ms` con distribución | **439 de 689** (63,7 %) frente a 30 (4,4 %) del visible |
+> | los diez pares con alias | **10 de 10**, y son los únicos que difieren en 6 h |
+>
+> Que 689 peticiones produzcan 689 spans y el reparto por modelo coincida al
+> dedillo con lo que contó vuestro generador es la mejor prueba que hemos tenido
+> de que la tubería no pierde nada: dos contadores independientes, en dos lados
+> de la frontera, con el mismo número.
+>
+> **A-10 cerrada.** Y gracias por no cerrarla vosotros: tenerlo claro nos obligó
+> a mirarlo de verdad en vez de darlo por bueno.
+
+---
+
+**Un aviso para que no repitáis la conclusión falsa de P-21.** El generador pide **nombres
+públicos**, así que en esos 689 el par `request.model` / `response.model` **coincide siempre**, y
+eso es correcto: nadie pidió un alias.
+
+Así que os hemos mandado el caso aparte, a propósito, justo después de la ventana:
+
+```
+~11:48 UTC · 10 peticiones
+  pedido  : qwen3-0-6b-iq4-nl-local-1  /  ...-local-2   (ids de instancia, alias)
+  servido : qwen3-0.6b                                  (10 de 10)
+```
+
+Con el arreglo de P-25 esos diez spans deberían llevar `gen_ai.request.model` con el alias y
+`gen_ai.response.model` con `qwen3-0.6b`, y el nombre del span será `chat
+qwen3-0-6b-iq4-nl-local-1`. **Si los veis así, el par funciona; si los veis iguales, el arreglo
+no llegó y queremos saberlo.**
+
+---
+
+**Lo que os toca comprobar, y por qué no lo afirmamos nosotros:**
+
+1. Que los spans `chat <modelo>` de esa ventana son **todos `Client`** y ninguno `Internal`.
+2. Que `gen_ai.response.finish_reasons` incluye `client_disconnected` — deberían ser del orden de
+   los 125 abandonos.
+3. Que `argus.inference.first_token_ms` **sí tiene distribución** ahora, y no el 5 % de antes.
+   Este es el que más nos interesa de los tres: es el que dijimos que estaba sesgado por cuánto
+   razona el modelo, y es el que ahora alimenta vuestro histograma.
+4. Los diez pares con alias de arriba.
+
+**A-10 es vuestra para cerrar cuando la miréis.** No la damos por cerrada nosotros: la abristeis
+vosotros y el dato que falta está en vuestro almacén, no en el nuestro.
+
+---
+
+### A-24
+**Argus · afirmación · abierta** · cierra [A-10](#a-10)
+
+Los números completos de vuestra ventana. **Todo medido en nuestro almacén**, `11:15:46`–`11:45:46`
+UTC del 15/09.
+
+#### El sesgo del TTFT no era aleatorio, y el número lo deja claro
+
+De los 689 spans, cuántos traían cada medida de latencia de arranque:
+
+| | spans | cobertura |
+|---|---|---|
+| `argus.inference.first_token_ms` | **439** | 63,7 % |
+| `argus.inference.ttft_ms` (visible) | **30** | 4,4 % |
+
+Vuestro 5 % predicho, clavado. Y **a quién pertenecía ese 4,4 %**:
+
+| modelo | con `ttft_ms` visible |
+|---|---|
+| `gpt-oss-20b-mxfp4` | 26 |
+| `qwen3-0.6b` | 4 |
+| `qwen3-8b-q6` | **0** |
+
+Ahora la distribución que sí existe, con `first_token_ms`:
+
+| modelo | n | p50 | p95 | máx |
+|---|---|---|---|---|
+| `qwen3-0.6b` | 152 | 42 ms | 53 ms | 90 ms |
+| `qwen3-8b-q6` | 144 | **115 ms** | **283 ms** | 488 ms |
+| `gpt-oss-20b-mxfp4` | 143 | 137 ms | 161 ms | 172 ms |
+
+**Juntad las dos tablas y sale el argumento entero**: `qwen3-8b-q6` es el de peor cola —p95 de
+283 ms, más de cinco veces el de `qwen3-0.6b`— y es **exactamente el que no aparecía nunca** en
+la métrica vieja. Un p99 sobre `ttft_ms` no habría sido ruidoso: habría estado construido casi
+entero con `gpt-oss` y habría declarado sana la plataforma justo mientras el modelo más lento se
+degradaba.
+
+Teníais razón en que el sesgo era por modelo y no aleatorio. No lo habríamos visto sin esta
+ventana.
+
+#### Por qué 439 y no 689, que es la pregunta obvia
+
+689 − 439 = **250**, que es exactamente vuestro recuento de peticiones **no-streaming**. Los 439
+son 314 streaming completos + 125 abandonados.
+
+O sea que `first_token_ms` está en el **100 % de las peticiones donde la medida significa algo** y
+ausente donde no hay un «primer token» observable. No pedimos que lo añadáis a las no-streaming:
+inventar ahí un número lo volvería incomparable con el resto, que es el fallo que acabamos de
+arreglar.
+
+Lo decimos porque cualquiera que mire la cobertura verá 63,7 % y pensará que falta algo. No
+falta.
+
+---
+
+### A-25
+**Argus · aviso · abierta**
+
+**Os dimos nombres de atributo que no existen en nuestro propio paquete, y vosotros los
+implementasteis fielmente.**
+
+En A-10 escribimos `argus.inference.backend_id` y `argus.inference.ttft_ms`. En P-22 os dijimos
+`argus.inference.first_token_ms`. Nuestro modelo de convenciones —la fuente de verdad desde la
+que generamos las constantes de cada lenguaje— define:
+
+```
+argus.backend.id        no  argus.inference.backend_id
+argus.ttft_ms           no  argus.inference.ttft_ms
+argus.first_token_ms    no  argus.inference.first_token_ms
+```
+
+Nos lo encontramos de la peor forma posible: midiendo vuestra ventana con **nuestros** nombres y
+viendo cero. Estuvimos a punto de escribiros que el arreglo no había llegado. Volvimos a
+consultar con los nombres que os pedimos y estaban los 689.
+
+**Vosotros no habéis hecho nada mal.** Emitisteis exactamente lo que os pusimos en una tabla.
+
+**Qué hacemos, y no lo decidimos sin vosotros.** Hay dos caminos y el coste no es simétrico:
+
+| | qué implica para vosotros | qué implica para nosotros |
+|---|---|---|
+| **A** · Cambiar nuestro paquete a `argus.inference.*` | nada, ya lo emitís así | renombrar en el modelo y en las constantes generadas |
+| **B** · Que cambiéis a `argus.*` | un cambio y un redespliegue | nada |
+
+**Proponemos A.** Vuestros nombres son mejores: `argus.inference.*` dice de qué dominio es el
+atributo, y el nuestro lo dejaba suelto en la raíz junto a cosas que no tienen nada que ver.
+Aprovechamos que el paquete no lo usa todavía nadie más.
+
+No lo tocamos hasta que digáis, porque si estáis a punto de emitir algo más bajo esos nombres
+conviene que el cambio sea uno y no dos. **¿Os viene bien A?**
+
+Y la lección por nuestro lado, que es la incómoda: teníamos una fuente de verdad con generación
+automática de constantes precisamente para que esto no pasara, y luego escribimos los nombres **a
+mano en un documento** sin comprobarlos contra ella. El generador no sirve de nada si el contrato
+que mandas fuera se escribe en otro sitio.
