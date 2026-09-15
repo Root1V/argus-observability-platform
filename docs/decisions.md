@@ -1495,3 +1495,64 @@ indistinguible de actividad si agregas en el orden equivocado. `sum` antes de
 
 **Cómo se encontró**: mirando la serie temporal antes de mandar la acusación, no
 antes de escribir el código. La suite seguía en verde.
+
+---
+
+## D-061 · Dos tiempos de primer token, porque son dos preguntas
+
+**Contexto**. Pedimos a Prometheus una distribución de `ttft_ms` y nos
+respondieron que llegaría casi vacía: **13 de 247 peticiones**. Su `ttft_ms` se
+fija con el primer token *visible*, y los modelos que razonan emiten decenas de
+chunks de razonamiento antes. Medido por ellos: un stream de `qwen3-0.6b` con
+`max_tokens=32` emite **30 chunks de razonamiento, 1 de contenido**. Ningún
+`qwen3` produce jamás el atributo.
+
+Ofrecieron tres opciones y recomendaron la tercera. Aceptada.
+
+**Decisión**. Dos atributos, porque son dos preguntas y las dos son legítimas:
+
+| atributo | qué mide | para qué |
+|---|---|---|
+| `argus.ttft_ms` | primer token **visible** | experiencia: cuánto tarda alguien en ver algo |
+| `argus.first_token_ms` | primer token de **cualquier** tipo | salud del backend: cuánto tarda el modelo en empezar |
+
+**Y el histograma de latencia de inferencia pasa a alimentarse de
+`first_token_ms`**, con `ttft_ms` como respaldo. El motivo no es preferencia: un
+histograma construido sobre el 5 % de las peticiones —y ese 5 % elegido por
+cuánto razona el modelo, no por nosotros— es una submuestra sesgada que invita
+a conclusiones falsas. Un número que siempre está vale más que uno mejor que
+casi nunca aparece.
+
+**Lo que no se hizo**: redefinir `ttft_ms`. Habría movido en silencio todo el
+histórico que ya cuelga de él, que es exactamente el cambio-por-efecto-secundario
+que venimos evitando.
+
+---
+
+## D-062 · El nombre del span sigue la convención; la agregación, el modelo servido
+
+**Contexto**. Prometheus descubrió que `gen_ai.response.model` **no puede
+diferir nunca** de `gen_ai.request.model` en su gateway: los dos salen de la
+misma variable ya resuelta. El caso que dijimos que «explica la mitad de los
+incidentes de inferencia» era invisible por construcción — y sin su aviso
+habríamos mirado 30 minutos de datos y concluido que no ocurre.
+
+Al arreglarlo, el nombre del span pasa a ser `{operación} {request.model}`, así
+que un cliente que use un alias produce un nombre distinto para el mismo modelo.
+Nos ofrecieron apartarse de la convención para mantenernos la cardinalidad
+estable.
+
+**Decisión**. **Que sigan la convención.** La cardinalidad es nuestro problema,
+no suyo, y se resuelve de nuestro lado: `gen_ai.response.model` pasa a ser
+dimensión de las métricas RED, así que agregamos por el modelo **servido** —eje
+estable— mientras el nombre del span dice qué **pidió** el cliente.
+
+**Por qué importa el principio**. Pedir a un equipo que se aparte de un estándar
+para ahorrarnos trabajo de agregación cambia un coste nuestro, acotado y
+resoluble, por una deuda suya, permanente y que afecta a cualquier otra
+herramienta que lea su telemetría. Si la cardinalidad de alias se dispara, el
+arreglo sigue siendo nuestro: normalizar en el colector.
+
+**Efecto lateral útil**: cuando empiecen a aparecer pares que difieren, la lista
+de alias que los producen les dice **qué alias siguen vivos en clientes reales**,
+que es información que hoy no tienen.

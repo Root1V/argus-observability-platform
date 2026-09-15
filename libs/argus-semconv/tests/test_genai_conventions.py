@@ -150,3 +150,38 @@ def test_slo_breach_marks_hot(spans) -> None:
     assert attrs[A.ARGUS_SLO_BREACHED] is True
     assert attrs[A.ARGUS_HOT] is True
     assert attrs[A.ARGUS_SLO_THRESHOLD_MS] == 1
+
+
+def test_los_dos_tiempos_de_primer_token_conviven(spans) -> None:
+    """Son dos preguntas distintas y las dos son legítimas.
+
+    `argus.ttft_ms` = primer token VISIBLE, la experiencia de quien espera.
+    `argus.first_token_ms` = el primero de cualquier tipo, razonamiento
+    incluido: la salud del backend.
+
+    Con modelos que razonan dejaron de coincidir. Medido en Prometheus: un
+    stream de qwen3-0.6b con `max_tokens=32` emite 30 chunks de razonamiento
+    antes del primer token visible, y el TTFT visible solo aparecía en 13 de
+    247 peticiones. Fundirlos en un número pierde una de las dos preguntas.
+    """
+    with genai("chat", provider="ollama", request_model="qwen3-0.6b") as g:
+        g.backend(backend_id="llama-cpp-0", first_token_ms=180, ttft_ms=2400)
+
+    (finished,) = spans.get_finished_spans()
+    assert finished.attributes[A.ARGUS_FIRST_TOKEN_MS] == 180
+    assert finished.attributes[A.ARGUS_TTFT_MS] == 2400
+
+
+def test_la_metrica_de_latencia_prefiere_el_primer_token_de_cualquier_tipo() -> None:
+    """Es la única presente en todas las peticiones.
+
+    Un histograma construido sobre el 5 % de las peticiones —y ese 5 % elegido
+    por cuánto razona el modelo, no por nosotros— invita a sacar conclusiones
+    de una submuestra sesgada.
+    """
+    import inspect
+
+    from argus_semconv.genai import GenAISpan
+
+    fuente = inspect.getsource(GenAISpan.backend)
+    assert "first_token_ms or ttft_ms" in fuente

@@ -273,7 +273,13 @@ connectors:
       - name: http.route
       - name: error.type
       - name: gen_ai.operation.name
+      # Las DOS, y el motivo importa. La convencion dice que el nombre del span
+      # es `{operacion} {request.model}`, asi que un cliente que pida por un
+      # alias produce un nombre distinto para el mismo modelo. Agregar por
+      # `response.model` —lo que se sirvio de verdad— mantiene el eje estable
+      # sin pedirle a nadie que se aparte del estandar (D-062).
       - name: gen_ai.request.model
+      - name: gen_ai.response.model
     exemplars:
       enabled: true
     metrics_flush_interval: 10s
