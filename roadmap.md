@@ -88,6 +88,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-21` | ✅ | **Canal Telegram** | Google bloqueó Chat y las contraseñas de aplicación. Telegram edita mensajes: divulgación progresiva real — D-053 |
 | `F1-22` | ✅ | **Sesgo del muestreo, escrito en el dato** | Concluimos mal sobre el tráfico de Prometheus; su equipo nos corrigió. `argus.sampling.baseline_pct` — D-054 |
 | `F1-23` | ✅ | **Salvaguardas de canal** | Destino de pruebas denunciado; todo `page` enruta al canal humano — D-056, D-057 |
+| `F1-24` | ✅ | **Sonda de silencio: crecimiento por serie** | Una duplicación del exportador se leía como actividad: un muerto parecía vivo, otra vez — D-060 |
 | `F2-14` | 💭 | `make channel-test` recorre TODAS las apps activas | Hoy solo prueba `argus`: el fallo de enrutado de otra app no lo ve — D-057 |
 | `F2-15` | 💭 | Exponer incidentes resueltos en la API | `/incidents` solo muestra abiertos; una tormenta pasada es invisible — D-059 |
 
@@ -249,9 +250,9 @@ preparan con parche, tests y evidencia; los aplica su equipo.
 | `S-02` | ❌ | **Prometheus** | `traceparent`: **medido y descartado**. 0 de 11.091 trazas cruzan servicios; su inferencia no hace saltos HTTP — D-058 |
 | `S-04` | ⏳ | **Prometheus** | Retirar el alias `edge-ai-inference` cuando redesplieguen con el nombre nuevo |
 | `S-05` | ⏳ | **Prometheus** | Rueda de `argus-obs-semconv` entregada; atributos del gateway pedidos en A-10 |
-| `S-06` | ⏳ | **Prometheus** | `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`: usan las convenciones HTTP antiguas (A-11) |
-| `S-07` | ⏳ | **Prometheus** | `service.version` y `service.instance.id` (A-12) |
-| `S-08` | ⏳ | **Prometheus** | **Sube de prioridad**: el span de servidor lo abre ASGI. Sustituye a S-02 y arregla S-06 — D-058 |
+| `S-06` | ✅ | **Prometheus** | `http/dup` puesto y **ya tiene sobre qué actuar** tras S-08: las dos grafías en los tres servicios |
+| `S-07` | ✅ | **Prometheus** | `service.version` 2.0.0 e `instance.id` en los tres. Verificado en el almacén |
+| `S-08` | ✅ | **Prometheus** | Hecho sin que mandáramos solicitud: span de servidor por ASGI, 0 → 25 atributos. Verificado — D-058 |
 | `S-03` | 💭 | **Axonium** (`llm_arch_sdk/`) | Instrumentar con `argus-obs-semconv`. **En cambio ahora mismo**; esperar a que se estabilice |
 
 ---

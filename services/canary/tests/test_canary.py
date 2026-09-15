@@ -431,3 +431,43 @@ async def test_la_recarga_conserva_los_fallos_consecutivos(tmp_path) -> None:
     assert runner._consecutivos["p/auth-service"] == 1, "el que sigue vigilado conserva su cuenta"
     assert "p/se-va" not in runner._consecutivos, "el que desaparece del registro se olvida"
     assert runner._alertados == {"p/auth-service"}
+
+
+async def test_la_consulta_mide_crecimiento_por_serie(monkeypatch) -> None:
+    """Sumar las series antes de restar convierte una duplicación en actividad.
+
+    El exportador reescribe a veces el mismo punto: misma serie, mismo valor,
+    mismo `TimeUnix`. Si se suman todas las series de un instante, ese instante
+    vale el doble y la resta lo lee como crecimiento. Medido sobre una serie
+    real congelada tres horas, la fórmula vieja daba 204 y la correcta 0.
+
+    Es el mismo fallo que D-049 en otra forma, así que la prueba fija la forma
+    de la consulta: agrupar por `Attributes` y deduplicar con `max` antes de
+    comparar no es un detalle de estilo.
+    """
+    import httpx
+
+    consultas: list[str] = []
+
+    class RespuestaFalsa:
+        text = "0"
+        def raise_for_status(self): ...
+
+    class ClienteFalso:
+        def __init__(self, **kw): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, content, headers):
+            consultas.append(content)
+            return RespuestaFalsa()
+
+    monkeypatch.setattr(httpx, "AsyncClient", ClienteFalso)
+
+    sonda = SondaSilencio(app="a", component="c", clickhouse_url="http://x",
+                          usuario="u", password="p")
+    await sonda.ejecutar()
+
+    consulta = consultas[0]
+    assert "GROUP BY Attributes, TimeUnix" in consulta, "el crecimiento es por serie"
+    assert "max(toFloat64" in consulta, "hay que deduplicar puntos idénticos"
+    assert "sum(crecimiento)" in consulta, "se suma DESPUÉS de restar, no antes"
