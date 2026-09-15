@@ -79,6 +79,15 @@ class Signal(BaseModel):
     received_at: datetime = Field(default_factory=_now)
     occurred_at: datetime | None = None
 
+    # Severidad PEDIDA por quien emite la senal, cuando la sabe. Una regla de
+    # alerta escribe `severity: ticket` porque conoce su propia urgencia mejor
+    # que una tabla por tipo de senal; ignorarla convierte cada regla del camino
+    # templado en un `page` y a la guardia en gente que silencia avisos.
+    #
+    # Sigue siendo una PETICION: la criticidad de la aplicacion la acota
+    # igualmente, asi que un laboratorio no despierta a nadie ni pidiendolo.
+    severity: Severity | None = None
+
     # Identidad de dos niveles: la aplicacion y el sub-componente.
     app: str = "unregistered"
     component: str = "unknown"

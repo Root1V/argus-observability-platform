@@ -91,6 +91,9 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-24` | ✅ | **Sonda de silencio: crecimiento por serie** | Una duplicación del exportador se leía como actividad: un muerto parecía vivo, otra vez — D-060 |
 | `F1-25` | ✅ | **`argus.first_token_ms`** | El TTFT visible solo existía en 13 de 247 peticiones con modelos que razonan — D-061 |
 | `F1-26` | ✅ | **Agregación por modelo servido** | `gen_ai.response.model` como dimensión: los alias no parten los paneles — D-062 |
+| `F2-16` | ✅ | **vmalert entrega de verdad** | Todo el camino templado moría en un 401; el síntoma era el silencio — D-064 |
+| `F2-17` | ✅ | **La severidad de la regla se respeta** | Toda alerta del camino templado era `page`, dijera lo que dijera — D-065 |
+| `F2-18` | ✅ | **Reglas de saturación del host** | Con aviso explícito de que en macOS miden la VM, no el Mac — D-063 |
 | `F2-14` | 💭 | `make channel-test` recorre TODAS las apps activas | Hoy solo prueba `argus`: el fallo de enrutado de otra app no lo ve — D-057 |
 | `F2-15` | 💭 | Exponer incidentes resueltos en la API | `/incidents` solo muestra abiertos; una tormenta pasada es invisible — D-059 |
 
@@ -276,6 +279,9 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
 | `B-10` | ⏳ | **Índice PyPI privado (`devpi`)** | **Prioridad alta**: Prometheus rechaza —con razón— instalar una rueda suelta por SHA. Bloquea su adopción del paquete — D-036, D-054 |
 | `B-14` | 💭 | **Registrar `argus-obs-*` en PyPI defensivamente** | La protección de D-035 depende de que sigan libres |
+| `B-17` | ⏳ | **Rotar `ARGUS_GATEWAY_TOKEN`** | Estuvo versionado desde `78918b9`. `make rotate-token`; no afecta a equipos externos — D-066 |
+| `B-15` | ⏳ | **Métricas del host REAL en macOS** | El `hostmetrics` mide la VM de Docker: un núcleo al 98,7% durante 62h fue invisible. Candidato: el dead man's switch, que ya corre nativo — D-063 |
+| `B-16` | ⏳ | **Instalar el dead man's switch como LaunchAgent** | Está escrito y no corre. Hoy no hay red de seguridad externa — D-063 |
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from alert_bus import normalize
-from argus_schemas import SignalKind
+from argus_schemas import Severity, Signal, SignalKind
 from argus_semconv import attributes as A
 from otlp_factory import STATUS_ERROR, build_request
 
@@ -226,3 +226,49 @@ def test_sigue_aceptando_el_formato_de_webhook() -> None:
 
 def test_un_array_vacio_no_produce_senales() -> None:
     assert list(normalize.signals_from_alertmanager([])) == []
+
+
+def test_la_severidad_de_la_regla_se_respeta() -> None:
+    """`severity: ticket` en una regla es intención del autor, no ruido.
+
+    Sin leerla, toda alerta del camino templado se resolvía por tipo de señal
+    —BURN_RATE = page— así que una regla que pedía `ticket` despertaba a alguien
+    igual. Con la fatiga de alertas como problema dominante, una plataforma que
+    convierte todo en `page` se silencia sola.
+    """
+    from alert_bus.normalize import signals_from_alertmanager
+
+    (senal,) = signals_from_alertmanager([{
+        "labels": {"alertname": "ArgusAlgo", "severity": "ticket",
+                   "service_namespace": "argus", "service_name": "vmalert"},
+        "annotations": {"summary": "algo"},
+    }])
+    assert senal.severity is Severity.TICKET
+
+
+def test_una_severidad_desconocida_no_revienta_la_ingesta() -> None:
+    """Un valor mal escrito en una regla no puede tirar el camino templado."""
+    from alert_bus.normalize import signals_from_alertmanager
+
+    (senal,) = signals_from_alertmanager([{
+        "labels": {"alertname": "X", "severity": "urgentisimo"},
+        "annotations": {},
+    }])
+    assert senal.severity is None
+
+
+def test_la_criticidad_sigue_acotando_lo_que_pide_la_regla(registry) -> None:
+    """Pedir `page` no basta: un laboratorio no despierta a nadie ni pidiéndolo.
+
+    La severidad de la regla es una petición, no una orden. La válvula de
+    criticidad es lo que impide que una app de juguete genere guardias.
+    """
+    from alert_bus.engine import Engine
+
+    motor = Engine(registry, [])
+    motor.ingest([Signal(kind=SignalKind.BURN_RATE, severity=Severity.PAGE,
+                         app="llm-benchmark", component="bench-runner",
+                         signature="X", title="x")])
+
+    (incidente,) = motor.open_incidents()
+    assert incidente.severity.rank <= registry.get("llm-benchmark").severity_ceiling.rank

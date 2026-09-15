@@ -124,6 +124,9 @@ release:  ## Etiqueta y construye una version:  make release V=1.0.0a1
 telegram-setup:  ## Termina de configurar Telegram (espera a que pulses Iniciar)
 	@uv run --quiet python scripts/telegram_setup.py $(if $(ESPERA),--espera $(ESPERA),)
 
+rotate-token:  ## Rota ARGUS_GATEWAY_TOKEN en .env, .env.agent y el secreto de vmalert
+	@./scripts/rotar_token.sh
+
 channel-test:  ## Manda un aviso de PRUEBA por los canales configurados
 	@set -a; . platform/.env; set +a; uv run python scripts/probar_canal.py --severidad $${SEV:-page}
 
