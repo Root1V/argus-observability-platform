@@ -1451,3 +1451,47 @@ la tormenta sino uno posterior. La tormenta abrió el suyo a las 10:58, dejó de
 alimentarse, y `resolve_after_s` lo cerró a los 15 minutos. Correcto, pero
 significa que **`/incidents` no sirve para investigar el pasado**: hace falta
 consultar los incidentes resueltos, que hoy no se exponen.
+
+---
+
+## D-060 · El crecimiento se mide por serie, no sobre la suma del instante
+
+**Contexto**. Al verificar la entrega de Prometheus leímos las métricas GenAI y
+concluimos que había ~500 llamadas de inferencia en la última hora mientras las
+trazas no mostraban ninguna. Estuvimos a punto de avisarles de que perdíamos su
+telemetría GenAI. La serie temporal lo desmintió:
+
+```
+10:20  204   10:05  204   09:20  408  ←   08:35  204
+```
+
+**Congelada en 204 durante tres horas.** El 408 de las 09:20 es el exportador
+escribiendo **el mismo punto dos veces** —misma serie, mismo valor, mismo
+`TimeUnix`—. Nuestra fórmula sumaba todas las series de un instante y restaba
+`max − min`, así que leyó la duplicación como 204 llamadas nuevas.
+
+**Decisión**. El crecimiento se calcula **por serie**, deduplicando puntos
+idénticos con `max` antes de comparar, y se suma **después** de restar:
+
+```sql
+sum(crecimiento) FROM (
+  SELECT Attributes, max(v) - min(v) AS crecimiento FROM (
+    SELECT Attributes, TimeUnix, max(toFloat64(Value)) AS v   -- dedup
+    ... GROUP BY Attributes, TimeUnix)
+  GROUP BY Attributes)
+```
+
+Sobre la misma ventana real: fórmula vieja **204**, nueva **0**.
+
+**Por qué importa**. Esa fórmula es la de la sonda de silencio. Un servicio
+muerto con una sola duplicación en la ventana habría parecido vivo — el fallo
+exacto que D-049 arregló, **reintroducido por el arreglo de D-049**.
+
+**La lección, que ya va por la tercera forma**: en una serie acumulativa, que un
+valor exista no significa que haya pasado algo. Lo escribimos hace dos días y
+nos volvió a morder, esta vez porque la duplicación de un punto es
+indistinguible de actividad si agregas en el orden equivocado. `sum` antes de
+`max−min` y después de `max−min` no son la misma operación.
+
+**Cómo se encontró**: mirando la serie temporal antes de mandar la acusación, no
+antes de escribir el código. La suite seguía en verde.

@@ -211,14 +211,29 @@ class SondaSilencio:
         El `toFloat64` no es decorativo: `Count` es `UInt64` y `Value` es
         `Float64`, y ClickHouse se niega a restar enteros con signo de enteros
         sin signo.
+
+        **El crecimiento se mide POR SERIE, no sobre la suma de todas.** Sumar
+        primero y restar despues parece equivalente y no lo es: el exportador
+        reescribe a veces el mismo punto dos veces —visto en los datos, la misma
+        serie con el mismo valor y el mismo `TimeUnix`—, la suma del instante se
+        dobla, y la resta lee esa duplicacion como actividad. Medido sobre una
+        serie congelada durante tres horas, la formula vieja daba **204** y la
+        nueva **0**. Un servicio muerto habria parecido vivo otra vez.
+
+        Por eso el `max` en la agrupacion mas interna: deduplica puntos
+        identicos antes de comparar. Y por eso `sum` solo al final, sobre
+        crecimientos por serie que ya son reales.
         """
         return (
-            "(SELECT if(any(temp) = 1, sum(v), max(v) - min(v)) FROM ("
-            f"  SELECT TimeUnix, any(AggregationTemporality) AS temp, sum(toFloat64({columna})) AS v"
-            f"  FROM {tabla}"
-            f"  WHERE ResourceAttributes['service.name'] = '{componente}'"
-            f"  AND TimeUnix > now() - INTERVAL {ventana} SECOND"
-            "  GROUP BY TimeUnix))"
+            "(SELECT if(any(temp) = 1, sum(total), sum(crecimiento)) FROM ("
+            "  SELECT any(temp) AS temp, sum(v) AS total, max(v) - min(v) AS crecimiento FROM ("
+            f"    SELECT Attributes, TimeUnix, any(AggregationTemporality) AS temp,"
+            f"           max(toFloat64({columna})) AS v"
+            f"    FROM {tabla}"
+            f"    WHERE ResourceAttributes['service.name'] = '{componente}'"
+            f"    AND TimeUnix > now() - INTERVAL {ventana} SECOND"
+            "    GROUP BY Attributes, TimeUnix)"
+            "  GROUP BY Attributes))"
         )
 
 

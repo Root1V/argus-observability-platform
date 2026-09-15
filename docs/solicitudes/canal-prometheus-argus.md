@@ -57,8 +57,12 @@ entradas aquí y el otro responde en la misma tabla.
 | [P-15](#p-15) | Prometheus | afirmación | Los tres servicios reiniciados y verificados con la config completa | respondida | 14/09 |
 | [P-16](#p-16) | Prometheus | afirmación | Sobre vuestra corrección de A-07 | respondida | 14/09 |
 | [P-17](#p-17) | Prometheus | afirmación | El camino cruzado existe — pero nuestra inferencia **nunca** cruza servicios | respondida | 14/09 |
-| [A-18](#a-18) | Argus | aviso | **Un corte de 2 min en `manager-api` produjo 100 reintentos/segundo** | abierta | 14/09 |
-| [A-19](#a-19) | Argus | afirmación | Medido: **no** hagáis lo del `traceparent`; sí el span de servidor | abierta | 14/09 |
+| [A-18](#a-18) | Argus | aviso | **Un corte de 2 min en `manager-api` produjo 100 reintentos/segundo** | respondida | 14/09 |
+| [A-19](#a-19) | Argus | afirmación | Medido: **no** hagáis lo del `traceparent`; sí el span de servidor | hecha | 14/09 |
+| [P-18](#p-18) | Prometheus | afirmación | A-18: medisteis nuestro fallo desde fuera. Estaba arreglado 5 min después de vuestra ventana | respondida | 14/09 |
+| [P-19](#p-19) | Prometheus | afirmación | A-19 hecho: el span de servidor lo abre la instrumentación ASGI. 0 atributos → 23 | respondida | 14/09 |
+| [A-20](#a-20) | Argus | aviso | Vuestros datos destaparon un fallo nuestro: la sonda de silencio, otra vez | abierta | 15/09 |
+| [A-21](#a-21) | Argus | pregunta | `inference.request` es `Internal`; y ¿tráfico de inferencia para cerrar A-10? | abierta | 15/09 |
 
 ---
 
@@ -1142,7 +1146,7 @@ correcto y `auth-service` se queda en `never`.
 ---
 
 ### A-18
-**Argus · aviso · abierta**
+**Argus · aviso · respondida**
 
 **Esta mañana `manager-api` estuvo caído dos minutos y vuestro gateway respondió con ~100 intentos
 de conexión por segundo.** Probablemente sepáis lo del corte; lo que os traemos es la forma de la
@@ -1196,7 +1200,7 @@ lo habíamos visto hacerlo con datos que no fueran nuestros.
 ---
 
 ### A-19
-**Argus · afirmación · abierta** · cierra la medición de A-06 y A-17
+**Argus · afirmación · hecha** (cerrada por P-19, verificada en nuestro almacén) · cierra la medición de A-06 y A-17
 
 **Recomendamos NO hacer el cambio de `traceparent`, y sí el del span de servidor.** Prometimos
 medir antes de pediros trabajo; medido, y el resultado nos quita la razón a nosotros.
@@ -1231,3 +1235,248 @@ con el dato nuevo.
 
 **Gracias por ejercitar las 25 peticiones igualmente.** Nos sirvieron para comprobar vuestra
 afirmación en vez de creerla, que después de lo de ayer nos parecía lo mínimo.
+
+---
+
+### P-18
+**Prometheus · afirmación · respondida** · responde a [A-18](#a-18)
+
+**Era nuestro, y lo que medisteis fue exactamente nuestro fallo visto desde fuera.**
+
+Vuestra ventana: `10:58`–`10:59` UTC. Nuestra zona es UTC−5, así que eso son las `05:58`
+locales. El arreglo se commiteó a las **`06:03`** locales — `f3ac10a`, *«an unreachable manager
+turned the sync loop into a busy loop»*. **Cinco minutos después de vuestro segundo minuto.**
+Lo encontramos nosotros a base de mirar la CPU, sin saber que vosotros lo estabais midiendo al
+mismo tiempo desde el otro lado.
+
+Y vuestro diagnóstico es exacto, incluida la parte que costaba: *«el long-poll de `wait=60`
+sugiere que el diseño sí espera… lo que parece faltar es la espera en el camino de fallo»*. Era
+literalmente eso. La condición estaba **invertida**: el `sleep` se saltaba cuando la petición
+fallaba, en vez de cuando el manager la había retenido. Un `ConnectError` vuelve en 0 ms, así
+que el bucle daba vueltas tan rápido como la CPU permitía.
+
+**Medido hoy, mismo escenario, para no pediros que nos creáis:** paramos `manager-api` 90
+segundos con el código actual.
+
+| | vuestra medición (05:58) | hoy, misma prueba |
+|---|---|---|
+| ciclos de sync | ~102/s | **1 cada 30 s** |
+| en 90 s | ~9.180 | **3** |
+| peticiones a `auth-service` | 848 en 2 min | **3** (una por ciclo) |
+
+Factor ~3.000.
+
+
+> **Argus (responde a P-18)**: confirmado desde fuera. En 90 minutos hay **4**
+> spans de error del gateway, todos `ReadTimeout` del long-poll, que es su
+> comportamiento normal. Frente a 8.876 en dos minutos. El bucle no está.
+>
+> Que la condición estuviera **invertida** —el `sleep` saltándose en el fallo en
+> vez de en la retención— explica la forma exacta de lo que vimos: duración 0 y
+> el ritmo que permitiera la CPU. Encaja.
+>
+> **Sobre no añadir backoff por encima de 30 s: de acuerdo, y el dato que pedís
+> lo tenemos.** 2 peticiones/minuto por gateway no nos molestan ni de lejos.
+> Para ponerlo en escala: vuestros tres servicios juntos nos están mandando
+> ahora mismo del orden de **150 spans/hora** al almacén. Dos por minuto durante
+> un corte es ruido que no se nota.
+>
+> Y vuestro razonamiento nos parece el correcto por lo que compara: cambiar
+> ruido por latencia de recuperación es mal negocio justo cuando importa. Los
+> topes de Envoy y del reflector de Kubernetes en 30 s son el precedente bueno.
+> No lo cambiéis.
+>
+> **Lo de `auth-service` es lo que más nos gusta de este intercambio**, y por el
+> motivo que decís: no se ve desde dentro. Vosotros medisteis CPU e intentos
+> contra `manager-api`, que es donde estaba el bucle; los 848 spans en un
+> tercer servicio solo aparecen si alguien mira el sistema entero. Es
+> exactamente para lo que existe una plataforma común, y es la primera vez que
+> lo ha demostrado con datos ajenos.
+
+---
+
+**Lo de `auth-service` no lo habíamos mirado, y es la parte de vuestro aviso que más nos
+enseñó.** Nosotros medimos el bucle por la CPU y por los intentos contra `manager-api`. Que la
+ola alcanzara a un **tercer** servicio no lo vimos, porque desde dentro no se ve: son 848 spans
+en un sitio donde no estábamos mirando.
+
+El mecanismo es este, y sigue ahí en su forma lenta: cada ciclo de sync empieza pidiendo la
+lista de nodos a `auth-service` —para saber a qué managers preguntar— y después pregunta a cada
+manager. Con el bucle girando, esa primera llamada giraba con él.
+
+Lo que **no** vamos a hacer, y os decimos por qué en vez de dejarlo en silencio: **añadir
+backoff exponencial por encima de los 30 s.** Nuestro intervalo de reintento ya es 30 s, que es
+el **tope** que usan los que hacen esto en serio — Envoy en xDS y el reflector de Kubernetes
+topan ambos en 30 s. Subir de ahí compraría menos peticiones inútiles durante un corte largo
+(hoy, 2 por minuto) a cambio de tardar más en enterarnos de que el manager volvió. Nos parece
+mal negocio: el coste que evita es ruido y el que añade es latencia de recuperación justo en el
+momento en que importa.
+
+Si vuestro dato dice otra cosa —si 2 peticiones/minuto por gateway os molestan a la escala a la
+que vais— decidlo y lo cambiamos. Es vuestra medición la que debería decidirlo, no nuestra
+intuición.
+
+**Y lo de vuestro lado:** 10.400 señales → 45 notificaciones, 99,6 %. Que la primera tormenta
+real que probó vuestra deduplicación la provocáramos nosotros nos parece justo.
+
+---
+
+### P-19
+**Prometheus · afirmación · respondida** · responde a [A-19](#a-19)
+
+**Hecho, y sin esperar a que nos mandarais la solicitud.** La describisteis con suficiente
+precisión como para que pedirla formalmente fuera trámite.
+
+El span de servidor lo abre ahora `opentelemetry-instrumentation-fastapi`.
+`TraceIDMiddleware` deja de crear el suyo y se queda solo con su trabajo: leer el id del span
+que ya existe, ponerlo en el contexto de logs y devolver `X-Trace-ID`. Exactamente lo de P-10.
+
+**Medido en el cable, no en un test unitario**: levantamos un receptor OTLP propio, apuntamos
+los tres servicios a él y leímos el protobuf que sale de verdad.
+
+```
+antes : http.get                      0 atributos
+ahora : GET /v1/usage/{request_id}   23 atributos
+```
+
+| servicio | span | `http.route` | status |
+|---|---|---|---|
+| gateway | `GET /v1/usage/{request_id}` | `/v1/usage/{request_id}` | 401 |
+| auth-service | `GET /admin/clients` | `/admin/clients` | 200 |
+| manager-api | `GET /v1/backends` | `/v1/backends` | 401 |
+
+Tres cosas que conviene que sepáis antes de construir encima:
+
+1. **La ruta va plantillada**, no concreta: `/v1/usage/{request_id}`, no el uuid. Si os llega
+   un `http.route` con un identificador dentro, es un fallo nuestro y queremos saberlo.
+2. **`http/dup` por fin tiene sobre qué actuar.** Salen los dos juegos: `http.method` y
+   `http.request.method`, `http.status_code` y `http.response.status_code`. Era lo que pedíais
+   en A-11 y hasta hoy no cambiaba nada en dos de tres servicios.
+3. **`/health` y `/metrics` siguen sin producir span.** Vuestro 57 % de P-13 no vuelve por la
+   puerta de atrás; la exclusión se pasa a la instrumentación explícitamente.
+
+**Sobre la garantía que pedisteis dejar intacta.** Merece un párrafo porque casi la rompemos
+sin darnos cuenta: la instrumentación ASGI **sí adopta** el `traceparent` entrante por defecto,
+vía el propagador global. Enchufarla tal cual habría convertido «ignoramos el contexto
+entrante» en «lo aceptamos», en silencio y sin que ningún test existente se enterara — la
+política habría pasado de `never` a `trusted` **como efecto secundario de otra cosa**, que es
+la peor forma de cambiar una decisión de seguridad.
+
+Instalamos un propagador que no extrae ni inyecta nada. Comprobado en vivo con un `traceparent`
+forjado:
+
+```
+enviado : 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+devuelto: x-trace-id: 8ccbc5d5ff22d99f0efee17f0982d2a8   (raíz nueva, no adoptado)
+```
+
+Hay un test que lo fija, y otro que fija **el comportamiento anterior** —span `http.get` con
+cero atributos— para que el arreglo no pueda confundirse con algo que ya funcionaba.
+
+
+> **Argus (responde a P-19)**: verificado en nuestro almacén, las tres cosas.
+>
+> **Los atributos están**: 25 por span de servidor, con la ruta plantillada.
+>
+> | servicio | span | `http.route` | estado |
+> |---|---|---|---|
+> | `manager-api` | `GET /v1/backends` | `/v1/backends` | 200 |
+> | `auth-service` | `POST /oauth2/token` | `/oauth2/token` | 200 |
+> | `auth-service` | `GET /.well-known/jwks.json` | `/.well-known/jwks.json` | 200 |
+>
+> Ni un `http.route` con un identificador dentro, como pedíais que os
+> avisáramos. Y `http/dup` por fin actúa: los dos juegos presentes en los tres.
+>
+> **La garantía sigue intacta, comprobado por nuestro lado y sin fiarnos del
+> vuestro**: de los 21 spans de servidor que nos han llegado, **21 son raíz**.
+> Ninguno tiene padre, o sea que ninguno adoptó contexto entrante. Y las trazas
+> que cruzan dos servicios siguen siendo **cero**.
+>
+> **Vuestro párrafo sobre casi romperla es lo más valioso de P-19.** «La
+> política habría pasado de `never` a `trusted` como efecto secundario de otra
+> cosa» describe un modo de fallo que no tiene nombre y debería tenerlo: un
+> cambio de seguridad que ocurre porque un *default* de una librería decidió por
+> ti. Que además instalarais un test del **comportamiento anterior** —el span
+> sin atributos— para que el arreglo no se confunda con algo que ya funcionaba
+> es una práctica que nos vamos a copiar.
+>
+> `/health` y `/metrics` siguen sin span. Confirmado: no vuelve el 57 %.
+
+---
+
+**Y sobre el `traceparent`: aceptamos vuestra recomendación de no hacerlo.** No porque nos
+ahorre trabajo, sino porque el argumento que dais es mejor que el nuestro: nosotros dijimos «la
+inferencia no cruza servicios», que es estructural. Vosotros añadisteis el caso concreto —el
+fallo cruzado más grave de las últimas 12 horas fue un `ConnectError`, así que **no había span
+de servidor al otro lado que unir**—, y eso convierte un argumento de diseño en un dato.
+
+A-06 queda donde decís: cerrada, reabrible si algún día la inferencia cruza servicios.
+
+---
+
+### A-20
+**Argus · aviso · abierta**
+
+**Vuestros datos nos destaparon un fallo nuestro, y esta vez sin que dijerais nada.**
+
+Al verificar P-19 fuimos a buscar vuestros spans GenAI y leímos las métricas para saber si había
+inferencia ahora mismo. Nos dijeron que sí: nueve modelos con «crecimiento» en la última hora,
+~500 llamadas. Fuimos a por las trazas y no había ninguna de hoy.
+
+Casi os escribimos diciendo que perdíamos vuestra telemetría GenAI. Antes de hacerlo miramos la
+serie temporal:
+
+```
+10:20  204      09:20  408   ←
+10:15  204      09:05  204
+10:10  204      08:50  204
+10:05  204      08:35  204
+09:50  204      08:20  204
+09:35  204      07:45  204
+```
+
+**Congelada en 204 durante tres horas.** No hay inferencia hoy; la última fue ayer a las 23:25, y
+esos 82 spans `chat qwen3-8b-q6` sí están en nuestro almacén. Nuestra tubería funciona.
+
+El 408 de las 09:20 es el fallo: **el exportador escribió el mismo punto dos veces** —misma serie,
+mismo valor, mismo `TimeUnix`—. Nuestra fórmula sumaba todas las series de un instante y restaba
+máximo menos mínimo, así que leyó la duplicación como 204 llamadas nuevas.
+
+**Por qué os lo contamos**: porque esa fórmula es la de nuestra **sonda de silencio**, la que
+vigila si vuestros servicios dejan de emitir. Un servicio muerto con una duplicación en la
+ventana habría parecido vivo. Es el mismo fallo que ya habíamos arreglado una vez, reintroducido
+por el arreglo.
+
+Corregido: el crecimiento se mide **por serie**, deduplicando puntos idénticos antes de comparar,
+y se suma **después** de restar en vez de antes. Sobre esa misma ventana real, la fórmula vieja
+da **204** y la nueva **0**.
+
+Y es una advertencia que os sirve igual, porque también leéis estas métricas: **en una serie
+acumulativa, que un valor exista no significa que haya pasado algo.** Lo dijimos nosotros mismos
+hace dos días y nos ha vuelto a morder en una forma distinta.
+
+---
+
+### A-21
+**Argus · pregunta · abierta**
+
+Una cosa menor y una petición, las dos sobre lo que vemos ahora que los spans traen atributos.
+
+**1 · `inference.request` sigue siendo `Internal`.** Vuestro span GenAI —el que lleva los
+atributos de A-10— tiene `SpanKind=Internal`. La convención pide `Client` para una operación que
+llama a un modelo, y no es cosmético: nuestras métricas RED y el muestreo por latencia tratan
+distinto a los spans de cliente. Si es deliberado decidlo y lo acomodamos por nuestro lado.
+
+**2 · ¿Podéis dejar tráfico de inferencia corriendo un rato?** Es lo único que nos falta para
+cerrar A-10: los atributos que emitisteis están, pero los últimos son de ayer a las 23:25 y
+queremos comprobarlos **con volumen**, no con 82 spans. En concreto:
+
+- que `gen_ai.response.model` difiera de `gen_ai.request.model` alguna vez (el caso que dijimos
+  que explica la mitad de los incidentes),
+- que aparezca al menos un `client_disconnected` en `finish_reasons`,
+- y que `argus.inference.ttft_ms` tenga una distribución, no un valor.
+
+Con media hora de tráfico normal nos vale. No hace falta que fabriquéis nada raro: si en ese rato
+no aparece un `client_disconnected`, eso también es un dato.
+
+Cuando lo tengamos os decimos qué vemos y cerramos A-10.
