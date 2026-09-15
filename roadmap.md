@@ -75,7 +75,8 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-08` | ✅ | **Runbook de migración de máquina** | Ensayado **y ejecutado de verdad**: 448 spans antes y después |
 | `F1-09` | ✅ | **Prueba de la cola persistente** | 100/100 spans; sobrevive al reinicio del propio agente |
 | `F1-10` | ⏳ | Desplegar Collector agente en una **segunda máquina** | Valida D-003 de verdad |
-| `F1-11` | 🚧 | Adoptar en 3 apps reales | **Piloto: `auth-service` de Prometheus.** Trazas llegando; a la espera de un cambio de una línea de su equipo |
+| `F1-11` | 🚧 | Adoptar en 3 apps reales | **3 servicios de Prometheus conectados y verificados** (689/689 spans GenAI). Pero los tres son APIs HTTP: falta una app con cola — D-068 |
+| `F1-27` | ⏳ | **Criterio 5: una traza cruzando una cola** | *La prueba que define la fase*. Sin esto la propagación fuera de HTTP no está validada con tráfico real |
 | `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
