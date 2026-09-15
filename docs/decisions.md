@@ -1676,3 +1676,67 @@ credencial y reinicia su stack.
 al repositorio?»— se escribió para el fichero que acababa de crear. Encontró uno
 que llevaba días. Vale la pena correrla sobre todo, no sobre lo último que
 tocaste.
+
+---
+
+## D-067 · El contrato que se manda fuera se escribe a mano, y eso anula el generador
+
+**Contexto**. Al verificar la ventana de tráfico de Prometheus consultamos
+`argus.ttft_ms` y `argus.first_token_ms` y salió **cero** en 689 spans. Estuvimos
+a punto de escribirles que su arreglo no había llegado. Volvimos a consultar con
+los nombres que les habíamos **pedido** y estaban los 689.
+
+Nosotros les dimos `argus.inference.backend_id`, `argus.inference.ttft_ms` y
+`argus.inference.first_token_ms`. Nuestro modelo de convenciones define
+`argus.backend.id`, `argus.ttft_ms` y `argus.first_token_ms`.
+
+**Ellos implementaron fielmente lo que les pusimos en una tabla.** El error es
+entero nuestro.
+
+**Lo que lo hace grave**: existe `libs/semconv-model/argus.yaml` como fuente de
+verdad, con un generador que produce las constantes de cada lenguaje y un test
+de CI que falla si lo generado no coincide con lo commiteado. Todo ese aparato
+existe para que dos lenguajes no emitan el mismo atributo con nombres distintos.
+
+Y luego escribimos el contrato **a mano en un documento**, sin comprobarlo contra
+el modelo. **El generador no sirve de nada si el contrato que mandas fuera se
+escribe en otro sitio.**
+
+**Decisión propuesta a Prometheus (A-25)**: adaptarnos nosotros. Sus nombres son
+mejores —`argus.inference.*` dice de qué dominio es el atributo, el nuestro lo
+dejaba suelto en la raíz— y el coste de cambiar es asimétrico: para ellos es un
+redespliegue, para nosotros un renombrado en un paquete que aún no usa nadie más.
+
+Pendiente de su respuesta antes de tocar nada, para que sea un cambio y no dos.
+
+**Lo que falta por construir**: que un documento que declare atributos se valide
+contra el modelo. Hoy nada impide escribir un nombre inventado en una tabla de
+Markdown y mandárselo a otro equipo. **B-18**.
+
+---
+
+## D-068 · Dos contadores independientes con el mismo número
+
+**Contexto**. Prometheus mandó 30 minutos de tráfico y contó **en su generador**
+qué salió; nosotros contamos **en nuestro almacén** qué llegó. Deliberadamente
+separado: en P-20 nos habían dado cifras de su receptor local como si pudiéramos
+verificarlas, y perdimos media hora persiguiendo spans que nunca cruzaron.
+
+| | su generador | nuestro almacén |
+|---|---|---|
+| peticiones / spans | 689 | **689** |
+| `qwen3-0.6b` | 248 | **248** |
+| `qwen3-8b-q6` | 227 | **227** |
+| `gpt-oss-20b-mxfp4` | 214 | **214** |
+| abandonos / `client_disconnected` | 125 | **125** |
+
+**Es la mejor prueba que hemos tenido de que la tubería no pierde nada.** No es
+un test nuestro comprobando nuestro código: son dos contadores independientes, a
+cada lado de la frontera, coincidiendo al dedillo.
+
+Confirma además que `genai-always` conserva el 100 % de los spans GenAI: con
+muestreo probabilístico habríamos visto ~70 de 689.
+
+**La práctica que lo hizo posible, y que adoptamos**: cada medición dice **dónde
+se tomó**. «Medido en nuestro generador» y «medido en vuestro almacén» son
+afirmaciones distintas, y escribirlas igual fue lo que costó la media hora.

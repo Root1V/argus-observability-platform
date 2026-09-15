@@ -36,6 +36,15 @@ OTEL_SERVICE_NAME=<componente>
 del plano central. Exportan al agente de su propia máquina, y el agente se
 encarga del resto. Si ves la IP del plano central ahí, está mal aunque funcione.
 
+> **Atajo que funcionó la primera vez que se usó de verdad**: si OTRO servicio
+> de la misma máquina sí está llegando, descarta de un plumazo la red, el agente
+> y el colector. El problema es de ese proceso, y casi siempre es su endpoint.
+>
+> Pasó el 15/09/2026 con el `gateway` de Prometheus: `manager-api` y
+> `auth-service` llegaban con normalidad y solo el `gateway` estaba mudo. Su
+> endpoint apuntaba a un receptor OTLP de pruebas que alguien había levantado
+> para leer el protobuf en el cable, y que nadie recordó quitar.
+
 ## 2. ¿Está el agente de esa máquina vivo?
 
 ```bash
