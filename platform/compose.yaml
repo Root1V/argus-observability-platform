@@ -80,10 +80,20 @@ services:
       - --remoteWrite.url=http://victoriametrics:8428
       - --remoteRead.url=http://victoriametrics:8428
       - --notifier.url=http://alert-bus:8080
+      # El alert-bus EXIGE token, y vmalert no lo mandaba. Cada alerta del
+      # camino templado moria en un 401 que solo se veia en el log de vmalert:
+      # las reglas se evaluaban, disparaban, y la notificacion se perdia. Se
+      # descubrio porque no habia alertas que fallaran, no porque fallaran.
+      - --notifier.bearerTokenFile=/run/secrets/argus_token
       - --rule=/rules/*.yaml
+      # Relee las reglas sin reiniciar. Sin esto, anadir un fichero exige
+      # `up -d --force-recreate`: un `restart` no basta, y eso hace que un
+      # cambio de reglas parezca aplicado sin estarlo.
+      - --configCheckInterval=30s
       - --evaluationInterval=10s
     volumes:
       - ./rules:/rules:ro
+      - ./secrets/argus_token:/run/secrets/argus_token:ro
 
   # El Collector corre SIN privilegios (uid 10001), y un volumen nombrado nace
   # perteneciendo a root. Sin esto, la cola persistente no puede crearse y el

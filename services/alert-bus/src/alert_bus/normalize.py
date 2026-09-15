@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
-from argus_schemas import Signal, SignalKind
+from argus_schemas import Severity, Signal, SignalKind
 from argus_semconv import attributes as A
 
 log = logging.getLogger("alert_bus.normalize")
@@ -210,8 +210,20 @@ def signals_from_alertmanager(payload: dict[str, Any] | list[dict[str, Any]]) ->
 
         kind = SignalKind.ANOMALY if "anomal" in name.lower() else SignalKind.BURN_RATE
 
+        # La etiqueta `severity` de la regla es intencion del autor, no ruido.
+        # Sin leerla, toda alerta del camino templado se resolvia por tipo de
+        # senal —BURN_RATE = page— y las reglas que decian `ticket` despertaban
+        # a alguien igual.
+        try:
+            severidad = Severity(labels["severity"]) if labels.get("severity") else None
+        except ValueError:
+            severidad = None
+            log.warning("alertmanager.severidad_desconocida",
+                        extra={"valor": labels.get("severity"), "alerta": name})
+
         yield Signal(
             kind=kind,
+            severity=severidad,
             app=labels.get("service_namespace") or labels.get("app") or "unregistered",
             component=labels.get("service_name") or labels.get("component") or "unknown",
             environment=labels.get("deployment_environment_name"),

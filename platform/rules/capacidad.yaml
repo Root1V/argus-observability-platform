@@ -1,0 +1,78 @@
+# Saturacion del host.
+#
+# Existe por un incidente propio: un proceso se quedo girando en vacio al 98,7 %
+# de un nucleo durante **62 horas** en la misma Mac que corre la inferencia
+# local y toda la plataforma. Nadie se entero.
+#
+# Y lo incomodo es que el dato estaba: 371.712 puntos de `system.cpu.time`
+# cubriendo justo esa ventana, recogidos por el `hostmetrics` del Collector
+# agente. **Ninguna regla los leia.** Recoger una metrica que nadie consulta no
+# es observabilidad, es almacenamiento.
+#
+# El plan lo tenia previsto —el agente de capacidad, §8.4 n.o 15— aplazado
+# hasta que "la plataforma compita con la inferencia local en la misma
+# maquina". Eso ya ha pasado.
+#
+# ================== LO QUE ESTAS REGLAS NO VEN ==================
+#
+# **En macOS estas reglas NO miden el Mac.** El `hostmetrics` corre dentro del
+# contenedor del agente, que no monta `/proc` del host ni usa `pid: host`, asi
+# que mide la **VM Linux de Docker Desktop**. Comprobado: 1,7 % de CPU mientras
+# el Mac tenia un nucleo al 98,7 % y una carga de 3,90.
+#
+# Y en macOS eso NO tiene arreglo montando nada: la VM es una frontera real. El
+# unico sitio desde el que se ve el Mac es un proceso NATIVO en el Mac.
+#
+# Asi que estas reglas si sirven —dentro de esa VM viven ClickHouse, el
+# Collector y el resto del plano central, y saturarla los degrada— pero **no
+# cubren el caso que las origino**. Ese sigue abierto: B-15.
+#
+# El §5.3 del plan dice que `hostmetrics` cubre "CPU, memoria, disco, red del
+# host" en el nivel cero-codigo de macOS. Es incorrecto tal y como esta
+# desplegado, y esta corregido aqui en vez de en la cabeza de nadie.
+groups:
+  - name: argus.capacidad
+    interval: 30s
+    rules:
+      # Fraccion de CPU NO ociosa, por host. `system.cpu.time` es un contador
+      # acumulativo de segundos por estado; la tasa da nucleos ocupados.
+      - record: argus:host_cpu_busy:ratio5m
+        expr: |
+          sum by (host_name) (rate(system_cpu_time_seconds_total{state!="idle"}[5m]))
+          /
+          clamp_min(sum by (host_name) (rate(system_cpu_time_seconds_total[5m])), 0.001)
+
+      # Un nucleo entero ocupado de forma sostenida por algo que no es trabajo
+      # util. El umbral es deliberadamente alto y la ventana deliberadamente
+      # larga: compilar, indexar o servir un modelo saturan la CPU y eso es
+      # normal. Lo anomalo es que no pare NUNCA.
+      - alert: ArgusHostCPUSostenida
+        expr: argus:host_cpu_busy:ratio5m > 0.85
+        for: 2h
+        labels:
+          severity: ticket
+          componente: host
+        annotations:
+          summary: "{{ $labels.host_name }} (VM de contenedores) lleva 2 h por encima del 85 % de CPU"
+          description: >
+            Puede ser trabajo legitimo —inferencia local, una compilacion
+            larga— o un proceso girando en vacio. Dos horas seguidas sin bajar
+            es lo que distingue una cosa de la otra.
+            Empieza por: ps -eo pid,etime,%cpu,command | sort -k3 -rn | head
+          runbook: docs/runbooks/host-saturado.md
+
+      # La memoria tiene un modo de fallo distinto: no se recupera sola, y
+      # cuando aprieta se lleva por delante lo que haya, incluida la plataforma.
+      - alert: ArgusHostMemoriaAlta
+        expr: |
+          sum by (host_name) (system_memory_usage_bytes{state=~"used|wired"})
+          /
+          clamp_min(sum by (host_name) (system_memory_usage_bytes), 1)
+          > 0.92
+        for: 15m
+        labels:
+          severity: ticket
+          componente: host
+        annotations:
+          summary: "{{ $labels.host_name }} al {{ $value | humanizePercentage }} de memoria"
+          runbook: docs/runbooks/host-saturado.md

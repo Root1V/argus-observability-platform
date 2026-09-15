@@ -1556,3 +1556,123 @@ arreglo sigue siendo nuestro: normalizar en el colector.
 **Efecto lateral útil**: cuando empiecen a aparecer pares que difieren, la lista
 de alias que los producen les dice **qué alias siguen vivos en clientes reales**,
 que es información que hoy no tienen.
+
+---
+
+## D-063 · Un proceso girando en vacío 62 horas, y la plataforma no lo vio
+
+**Contexto**. El usuario preguntó por un proceso de fondo que llevaba 62 horas.
+Resultó ser un `python3 -` lanzado desde un heredoc, **al 98,7 % de un núcleo**,
+en la misma Mac que corre la inferencia local y todo Argus. El trabajo que iba a
+hacer estaba terminado y commiteado desde tres días antes. Matarlo bajó la carga
+de 4,24 a 3,90.
+
+**Lo grave no es el proceso: es que no lo detectáramos.** Tenemos 371.712 puntos
+de `system.cpu.time` cubriendo justo esa ventana.
+
+**Y la razón por la que ninguna regla habría servido**: el `hostmetrics` corre
+**dentro del contenedor del agente**, que no monta `/proc` del host ni usa
+`pid: host`. En macOS eso significa que mide la **VM Linux de Docker Desktop**,
+no el Mac — comprobado: **1,7 % de CPU** mientras el Mac tenía un núcleo al
+98,7 %.
+
+En macOS no tiene arreglo montando nada: la VM es una frontera real. El único
+sitio desde el que se ve el Mac es un proceso **nativo** en el Mac.
+
+**Decisión**. Tres cosas, y la última es la que importa:
+
+1. Reglas de saturación (`platform/rules/capacidad.yaml`) para la VM de
+   contenedores, que **sí** vale la pena vigilar: ahí viven ClickHouse y el
+   Collector.
+2. El fichero y el runbook dicen **explícitamente lo que no ven**, para que un
+   silencio no se lea como salud.
+3. **B-15**: métricas del host real por un proceso nativo. El *dead man's
+   switch* es el candidato natural —ya está escrito para correr fuera de los
+   contenedores y sin dependencias—, pero hoy **ni siquiera está instalado**
+   como servicio.
+
+**Corrección al plan**: §5.3 dice que `hostmetrics` cubre «CPU, memoria, disco,
+red del host» en el nivel cero-código de macOS. Es falso tal y como está
+desplegado.
+
+---
+
+## D-064 · vmalert no podía entregar ni una alerta, y el síntoma era el silencio
+
+**Contexto**. Investigando lo anterior encontramos en el log de vmalert errores
+`401` del alert-bus: *«token invalido o ausente»*. `vmalert` no llevaba ninguna
+configuración de autenticación y el endpoint la exige.
+
+**Todo el camino templado estaba muerto**: burn-rate, bandas de anomalía y las
+reglas de capacidad recién escritas evaluaban, disparaban, y la notificación se
+perdía en un 401 visible solo en el log de vmalert.
+
+**Lo que hizo difícil verlo**: `grep 401` sobre las últimas 24 horas daba
+**cero**. No porque funcionara, sino porque **no había disparado ninguna alerta**.
+El fallo solo es visible cuando algo va mal, que es exactamente cuando ya es
+tarde.
+
+**Decisión**. `--notifier.bearerTokenFile`, con el token en un fichero montado y
+fuera del repositorio. Verificado con una regla temporal que dispara siempre:
+llegó al bus, 3 señales, 0 errores.
+
+**Y de paso**: `--configCheckInterval=30s`. Sin él, añadir un fichero de reglas
+exige `up -d --force-recreate` — un `restart` no basta, y eso hace que un cambio
+parezca aplicado sin estarlo. Es la tercera vez esta semana que un cambio en un
+fichero montado no llega al proceso.
+
+---
+
+## D-065 · La severidad que pide una regla se respeta, acotada por la criticidad
+
+**Contexto**. La alerta de prueba llegó como `page` pese a que la regla decía
+`severity: ticket`. `signals_from_alertmanager` **nunca leía esa etiqueta**: la
+severidad salía de una tabla por tipo de señal, y `BURN_RATE` → `page`.
+
+O sea que **toda regla del camino templado despertaba a alguien**, dijera lo que
+dijera. Con la fatiga de alertas como el problema dominante de 2026 (§2.12), una
+plataforma que convierte todo en `page` se silencia sola en semanas.
+
+**Decisión**. `Signal` lleva una `severity` opcional. Cuando la regla la declara,
+manda: su autor conoce su urgencia mejor que una tabla por tipo. La criticidad
+de la aplicación **la sigue acotando**, así que es una petición y no una orden —
+un laboratorio no despierta a nadie ni pidiéndolo.
+
+Un valor mal escrito no rompe la ingesta: se avisa y se cae al comportamiento
+por tipo.
+
+**Cómo se encontró**: verificando que una alerta de prueba llegaba. Llegó, y
+llegó mal. Comprobar la entrega y no solo la ausencia de error es lo que enseñó
+la diferencia.
+
+---
+
+## D-066 · El token del gateway estaba versionado
+
+**Contexto**. Al comprobar que el nuevo fichero de secreto de vmalert no se
+colaba al repositorio, la misma comprobación encontró otra cosa:
+`platform/.env.agent` con el `ARGUS_GATEWAY_TOKEN` real **estaba rastreado en
+git**, y lo estaba desde el commit `78918b9`.
+
+El `.gitignore` cubría `.env` y no `.env.agent`. Un patrón que cubre el fichero
+que imaginaste y no la familia a la que pertenece.
+
+**Decisión**. Fuera del seguimiento, `.gitignore` pasa a `.env.*` con excepción
+explícita para las plantillas, y se versiona `platform/.env.agent.example` con
+el porqué escrito dentro.
+
+**Sobre rotar**. El token sigue en el historial. El alcance está acotado —el
+repositorio no tiene remoto— y, lo que más importa para decidir: **ningún equipo
+externo lo necesita.** El receptor OTLP del agente no exige autenticación, así
+que las aplicaciones —las de Prometheus incluidas— exportan sin token; la
+frontera la pone que el puerto solo escuche en `127.0.0.1`. El token solo viaja
+agente→gateway y hacia la API del alert-bus.
+
+Así que rotar es una operación **interna y sin coordinación**. Queda en
+`make rotate-token`, y la decisión de cuándo es del dueño del entorno: es su
+credencial y reinicia su stack.
+
+**La lección**: la comprobación que encontró esto —«¿puede este secreto llegar
+al repositorio?»— se escribió para el fichero que acababa de crear. Encontró uno
+que llevaba días. Vale la pena correrla sobre todo, no sobre lo último que
+tocaste.

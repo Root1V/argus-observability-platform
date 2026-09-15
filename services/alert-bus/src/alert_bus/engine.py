@@ -189,6 +189,11 @@ class Engine:
         Una aplicacion de criticidad baja no despierta a nadie por mucho que
         falle: es la valvula que evita que un laboratorio genere guardias.
         """
+        # Si quien emite pidio una severidad, manda: conoce su urgencia mejor
+        # que una tabla por tipo. La criticidad sigue acotando despues.
+        if signal.severity is not None:
+            return signal.severity if signal.severity.rank <= ceiling.rank else ceiling
+
         base = {
             SignalKind.ERROR: Severity.PAGE,
             SignalKind.GUARDRAIL: Severity.PAGE,
