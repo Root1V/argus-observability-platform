@@ -14,25 +14,21 @@ make pilot-check     # ¿está todo listo? Te dice exactamente qué falta
 **Configurar un canal de notificación.** Es lo único que no puedo dejar hecho:
 necesita una credencial tuya.
 
-Google Chat es el más rápido — un webhook de espacio, sin aprobación de
-proveedor ni coste por mensaje:
+**Telegram**, dos minutos y sin depender de ninguna cuenta corporativa. Los
+detalles están en [`canales.md`](canales.md); el resumen:
 
-1. En el espacio de Google Chat → *Apps y integraciones* → *Webhooks* →
-   *Añadir webhook*. Copia la URL.
-2. En `platform/.env`:
-
-```bash
-ALERTBUS_SINKS=console,json,gchat
-ALERTBUS_GCHAT_WEBHOOK=https://chat.googleapis.com/v1/spaces/XXX/messages?key=...&token=...
-```
-
-3. `docker compose -f platform/compose.yaml --profile lean up -d alert-bus`
-
-Comprueba que llegó:
+1. `/newbot` con [@BotFather](https://t.me/BotFather) → copia el token.
+2. Busca tu bot y pulsa **Iniciar**. Sin eso Telegram le impide escribirte.
+3. `ALERTBUS_TELEGRAM_TOKEN=...` en `platform/.env`, y luego:
 
 ```bash
-make pilot-check          # debe decir "Listo para el piloto"
+make telegram-setup   # espera a que pulses Iniciar y rellena el chat_id
+make up && make channel-test
 ```
+
+> **Google Chat sigue implementado pero probablemente no te sirva**: sus
+> webhooks entrantes son una función de Google Workspace, y una cuenta personal
+> muestra la opción en gris (D-044).
 
 ---
 
@@ -328,12 +324,47 @@ Dale una o dos semanas. Lo que hay que vigilar no es si funciona el primer día:
 
 ---
 
-## Del piloto al rollout
+## Cuándo se puede cerrar el piloto
 
-Cuando el piloto lleve un par de semanas sin sorpresas:
+La primera versión de este documento decía «cuando lleve un par de semanas sin
+sorpresas». Eso no es comprobable, y un criterio que no se puede comprobar se
+cumple el día que alguien tiene prisa. Estos sí:
+
+### Lo que el piloto tiene que haber demostrado
+
+| | criterio | cómo se comprueba |
+|---|---|---|
+| 1 | Una aplicación real emite con identidad correcta | `service.namespace`, `service.name`, rol y entorno en el almacén |
+| 2 | Un incidente real llega a una persona | El aviso en el canal, no en el log |
+| 3 | Una tormenta real se deduplica | Miles de señales → decenas de notificaciones |
+| 4 | El silencio de un servicio real abre incidente | Pararlo y esperar la ventana |
+| 5 | **Una traza cruza una frontera que no es HTTP** | Una unidad de trabajo API→cola→worker en **una sola** traza |
+| 6 | **Un segundo host** manda telemetría | Un agente en otra máquina (`F1-10`) |
+| 7 | **Hay red de seguridad externa** | El *dead man's switch* corriendo fuera de los contenedores (`B-16`) |
+| 8 | **Catorce días sin un fallo nuevo de la plataforma** | Ninguna decisión nueva del tipo «esto no hacía lo que decía» |
+
+Los cuatro primeros están **demostrados con datos** (§ «Qué mirar»). Los cuatro
+últimos, no.
+
+El 5 es el que más importa y es el que el plan llamaba *la prueba que define la
+fase*: si una unidad de trabajo que cruza una cola produce **dos** trazas en vez
+de una, la propagación fuera de HTTP no funciona y nada de lo que se construya
+encima sirve. Los tres servicios del piloto actual son APIs HTTP, así que ese
+caso **sigue sin ejercitarse con tráfico real**.
+
+El 8 no es burocracia. Entre el 13 y el 15 de septiembre el piloto destapó, solo
+de nuestro lado: la seudonimización diseñada y nunca implementada, la sonda de
+silencio dando por vivo a un muerto (dos veces, por causas distintas), el camino
+templado incapaz de entregar una sola alerta, toda regla convertida en `page`
+dijera lo que dijera, y el token del gateway versionado en git. **Cerrar el
+piloto mientras sigue encontrando cosas a ese ritmo es declarar terminada una
+plataforma que aún no lo está.**
+
+### Y entonces, el rollout
 
 1. **Levanta el índice privado** (`B-10`). Con `--find-links` a una ruta local
-   no escalas a quince repos, y menos dentro de contenedores.
+   no escalas a quince repos, y menos dentro de contenedores. Ya hay un equipo
+   que lo pidió explícitamente antes de adoptar el paquete.
 2. **Monta la red privada** (`B-11`). Sin un nombre estable, mover el plano
    central obliga a reconfigurar todos los agentes.
 3. **Aplica la plantilla** al resto, priorizando por criticidad del registro y

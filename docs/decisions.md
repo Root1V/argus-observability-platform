@@ -1740,3 +1740,46 @@ muestreo probabilístico habríamos visto ~70 de 689.
 **La práctica que lo hizo posible, y que adoptamos**: cada medición dice **dónde
 se tomó**. «Medido en nuestro generador» y «medido en vuestro almacén» son
 afirmaciones distintas, y escribirlas igual fue lo que costó la media hora.
+
+---
+
+## D-069 · Un criterio de cierre que no se puede comprobar no es un criterio
+
+**Contexto**. `docs/piloto.md` decía que el piloto se cierra «cuando lleve un par
+de semanas sin sorpresas». Al preguntarse si ya se podía cerrar, esa frase no
+respondía nada: ¿qué es una sorpresa? ¿cuenta un fallo nuestro? ¿y uno que
+encontró el otro equipo?
+
+Un criterio así se cumple el día que alguien tiene prisa.
+
+**Decisión**. Ocho criterios comprobables, cada uno con cómo se comprueba. Cuatro
+están demostrados con datos; cuatro no:
+
+- **5 · Una traza cruzando una frontera que no es HTTP.** El plan la llamaba *la
+  prueba que define la fase*. Los tres servicios del piloto son APIs HTTP, así
+  que sigue sin ejercitarse con tráfico real.
+- **6 · Un segundo host.** D-003 —la topología portátil, el motivo de que las
+  apps exporten siempre a `localhost`— no se ha validado nunca.
+- **7 · Red de seguridad externa.** El *dead man's switch* está escrito, sin
+  dependencias y pensado para correr fuera de los contenedores. **No está
+  instalado.** Hoy, si la plataforma cae, su silencio es indistinguible de que
+  todo va bien — que es exactamente lo que ese fichero existe para impedir.
+- **8 · Catorce días sin un fallo nuevo de la plataforma.**
+
+**Sobre el octavo**, que es el que decide. Entre el 13 y el 15 de septiembre el
+piloto destapó, **solo de nuestro lado**: la seudonimización diseñada y nunca
+implementada (D-050), la sonda de silencio dando por vivo a un muerto dos veces
+por causas distintas (D-049, D-060), el camino templado incapaz de entregar una
+sola alerta (D-064), toda regla convertida en `page` (D-065), y el token del
+gateway versionado (D-066).
+
+**Eso no es un piloto que va mal: es un piloto haciendo su trabajo.** Pero
+cerrarlo mientras encuentra a ese ritmo sería declarar terminada una plataforma
+cuyo camino templado estaba muerto esta misma mañana.
+
+**Lo que el piloto SÍ ha demostrado**, y conviene no minimizarlo: tres servicios
+reales emitiendo con identidad correcta, 689 de 689 spans GenAI contrastados
+contra un contador independiente del otro equipo, una tormenta real de 10.446
+señales colapsada en 45 notificaciones, silencio real detectado y confirmado, y
+un incidente real de la aplicación piloto entregado en el móvil con divulgación
+progresiva.
