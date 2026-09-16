@@ -139,6 +139,9 @@ rotate-token:  ## Rota ARGUS_GATEWAY_TOKEN en .env, .env.agent y el secreto de v
 channel-test:  ## Manda un aviso de PRUEBA por los canales configurados
 	@set -a; . platform/.env; set +a; uv run python scripts/probar_canal.py --severidad $${SEV:-page}
 
+pilot-status:  ## ¿Cuánto le queda al piloto para poder cerrarse?
+	@uv run --quiet python scripts/pilot_status.py
+
 pilot-check:  ## ¿Listo para conectar una aplicacion real?
 	@uv run python scripts/pilot_check.py
 

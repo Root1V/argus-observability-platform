@@ -1152,6 +1152,8 @@ fatiga de alertas es el problema dominante de 2026 (§2.12 del plan).
 
 ## D-049 · La sonda de silencio mide crecimiento, no presencia de puntos
 
+> **Fallo de plataforma** · descubierto 2026-09-13 · la sonda de silencio contaba puntos: un muerto parecía sano
+
 **Contexto**. Al activar Prometheus (D-046) comprobamos la sonda contra el
 estado real y dijo que `auth-service` estaba sano. Llevaba **tres horas sin
 emitir una sola traza**.
@@ -1189,6 +1191,8 @@ emitir, no que **nunca** empezó (D-046).
 ---
 
 ## D-050 · La seudonimización estaba diseñada y nunca implementada
+
+> **Fallo de plataforma** · descubierto 2026-09-13 · seudonimización diseñada y nunca implementada
 
 **Contexto**. Al revisar el tráfico real de Prometheus encontramos `user_id` y
 `jwt.subject` —el mismo UUID de 36 caracteres— **en crudo** en ClickHouse. El
@@ -1314,6 +1318,8 @@ propiedad. Hay una prueba que lo fija.
 
 ## D-054 · El sesgo del muestreo viaja en el span
 
+> **Fallo de plataforma** · descubierto 2026-09-14 · concluimos sobre tráfico ajeno sin corregir nuestro propio sesgo
+
 **Contexto**. Analizando el tráfico de Prometheus concluimos que sondeaban un
 backend roto **ocho veces más a menudo** que los sanos, y se lo dijimos con
 aire de dato medido. Su equipo nos corrigió con su código en la mano: el bucle
@@ -1374,6 +1380,8 @@ fichero.
 
 ## D-056 · Un destino de pruebas que sobrevive al despliegue rompe el canal en silencio
 
+> **Fallo de plataforma** · descubierto 2026-09-14 · un destino de pruebas sobrevivió al despliegue
+
 **Contexto**. Para probar el sink de Telegram sin cuenta real añadí
 `telegram_api_base` y desplegué el alert-bus apuntando a un servidor falso. Al
 día siguiente el contenedor **seguía apuntando ahí**, con el servidor ya muerto:
@@ -1391,6 +1399,8 @@ la opción— habría dejado el sink sin forma de probarse, que es peor.
 ---
 
 ## D-057 · Todo `page` enruta al canal humano, sin excepción
+
+> **Fallo de plataforma** · descubierto 2026-09-14 · el `page` de tres apps no llegaba a ningún canal humano
 
 **Contexto**. Al añadir Telegram lo puse en el `page` de `argus` y, por un
 reemplazo mal acotado, solo en el `ticket` de las demás. Resultado: el incidente
@@ -1455,6 +1465,8 @@ consultar los incidentes resueltos, que hoy no se exponen.
 ---
 
 ## D-060 · El crecimiento se mide por serie, no sobre la suma del instante
+
+> **Fallo de plataforma** · descubierto 2026-09-15 · la sonda volvió a dar por vivo a un muerto, por otra vía
 
 **Contexto**. Al verificar la entrega de Prometheus leímos las métricas GenAI y
 concluimos que había ~500 llamadas de inferencia en la última hora mientras las
@@ -1561,6 +1573,8 @@ que es información que hoy no tienen.
 
 ## D-063 · Un proceso girando en vacío 62 horas, y la plataforma no lo vio
 
+> **Fallo de plataforma** · descubierto 2026-09-15 · `hostmetrics` mide la VM de Docker, no el Mac
+
 **Contexto**. El usuario preguntó por un proceso de fondo que llevaba 62 horas.
 Resultó ser un `python3 -` lanzado desde un heredoc, **al 98,7 % de un núcleo**,
 en la misma Mac que corre la inferencia local y todo Argus. El trabajo que iba a
@@ -1599,6 +1613,8 @@ desplegado.
 
 ## D-064 · vmalert no podía entregar ni una alerta, y el síntoma era el silencio
 
+> **Fallo de plataforma** · descubierto 2026-09-15 · vmalert no podía entregar ni una alerta
+
 **Contexto**. Investigando lo anterior encontramos en el log de vmalert errores
 `401` del alert-bus: *«token invalido o ausente»*. `vmalert` no llevaba ninguna
 configuración de autenticación y el endpoint la exige.
@@ -1625,6 +1641,8 @@ fichero montado no llega al proceso.
 
 ## D-065 · La severidad que pide una regla se respeta, acotada por la criticidad
 
+> **Fallo de plataforma** · descubierto 2026-09-15 · toda regla del camino templado salía como `page`
+
 **Contexto**. La alerta de prueba llegó como `page` pese a que la regla decía
 `severity: ticket`. `signals_from_alertmanager` **nunca leía esa etiqueta**: la
 severidad salía de una tabla por tipo de señal, y `BURN_RATE` → `page`.
@@ -1648,6 +1666,8 @@ la diferencia.
 ---
 
 ## D-066 · El token del gateway estaba versionado
+
+> **Fallo de plataforma** · descubierto 2026-09-15 · el token del gateway estaba versionado
 
 **Contexto**. Al comprobar que el nuevo fichero de secreto de vmalert no se
 colaba al repositorio, la misma comprobación encontró otra cosa:
@@ -1680,6 +1700,8 @@ tocaste.
 ---
 
 ## D-067 · El contrato que se manda fuera se escribe a mano, y eso anula el generador
+
+> **Fallo de plataforma** · descubierto 2026-09-15 · mandamos fuera nombres de atributo que no existen
 
 **Contexto**. Al verificar la ventana de tráfico de Prometheus consultamos
 `argus.ttft_ms` y `argus.first_token_ms` y salió **cero** en 689 spans. Estuvimos
@@ -1788,6 +1810,8 @@ progresiva.
 
 ## D-070 · El dead man's switch vive fuera del repositorio, y sabe hablar Telegram
 
+> **Fallo de plataforma** · descubierto 2026-09-16 · el dead man's switch no sabía avisar y launchd no podía ejecutarlo
+
 **Contexto**. El criterio 7 del piloto (D-069) pedía red de seguridad externa.
 El fichero existía desde F2-10 —sin dependencias, pensado para correr fuera de
 los contenedores— y **nunca se había instalado**. Al ir a hacerlo salieron dos
@@ -1827,3 +1851,36 @@ list` da **0**.
 
 **Se añadió `victoriametrics` a los objetivos**: sin él no hay camino templado,
 y es la pieza que más recientemente estuvo rota sin que nadie lo supiera (D-064).
+
+---
+
+## D-071 · El reloj de los catorce días lo reinicia cada fallo, y se mide solo
+
+**Contexto**. «¿Cómo va el monitoreo de dos semanas?» no tenía respuesta: había
+que leer el historial de git y decidir a ojo qué contaba como fallo. Eso es el
+mismo defecto que D-069 arregló en el criterio, reaparecido en la medición.
+
+**Decisión**. Las decisiones que registran un fallo **nuestro** llevan una marca
+legible por máquina justo bajo el título:
+
+```
+> **Fallo de plataforma** · descubierto 2026-09-16 · qué fue
+```
+
+`make pilot-status` cuenta los días desde el más reciente y comprueba
+mecánicamente los criterios que se pueden comprobar. Los que no —el 4, el 5 y el
+6— salen como `?` en vez de como verdes, porque un criterio que nadie verifica y
+sale en verde es peor que uno que sale en amarillo.
+
+**Marcar un fallo nuevo reinicia el reloj a cero.** No es una penalización: es la
+definición. Si la plataforma sigue descubriendo que no hacía lo que decía, no
+está lista, por muchos días que lleve encendida.
+
+**Estado al escribir esto**: 12 fallos registrados, el último **hoy mismo** —el
+dead man's switch que no sabía avisar—. El reloj lleva cinco horas.
+
+**Lo que hace honesta a esta métrica**: quien la reinicia es quien encuentra el
+fallo, y hasta ahora ese hemos sido nosotros en los doce casos. La tentación de
+no marcar uno para no perder la racha es real, y por eso la marca va **en la
+decisión**, donde ya hay que escribir lo que pasó, y no en un contador aparte
+que se pueda olvidar.
