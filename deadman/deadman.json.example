@@ -22,6 +22,10 @@
   "estado": "~/.argus-deadman-state.json",
 
   "avisos": {
+    "telegram": {
+      "token": "",
+      "chat_id": ""
+    },
     "gchat": {
       "webhook": ""
     },

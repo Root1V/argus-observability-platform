@@ -109,6 +109,31 @@ def avisar_email(cfg: dict, asunto: str, cuerpo: str) -> str:
     return "email"
 
 
+def avisar_telegram(cfg: dict, asunto: str, cuerpo: str) -> str:
+    """El canal del piloto, y el unico que hoy esta configurado de verdad.
+
+    Un vigilante que no sabe hablar por el unico canal que escucha alguien es un
+    centinela mudo: se instala, corre, detecta la caida y avisa a nadie.
+
+    Sin dependencias, como el resto del fichero: `urllib` y nada mas. Y sin
+    `parse_mode`, a proposito — aqui el texto es lo que sea que haya fallado, y
+    un HTML mal formado devolveria 400 justo en el momento en que el aviso
+    importa.
+    """
+    datos = json.dumps({
+        "chat_id": cfg["chat_id"],
+        "text": f"{asunto}\n\n{cuerpo}",
+        "disable_web_page_preview": True,
+    }).encode()
+    peticion = urllib.request.Request(
+        f"https://api.telegram.org/bot{cfg['token']}/sendMessage",
+        data=datos, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(peticion, timeout=15):
+        return "telegram"
+
+
 def avisar_gchat(cfg: dict, asunto: str, cuerpo: str) -> str:
     datos = json.dumps({"text": f"*{asunto}*\n{cuerpo}"}).encode()
     peticion = urllib.request.Request(
@@ -119,7 +144,12 @@ def avisar_gchat(cfg: dict, asunto: str, cuerpo: str) -> str:
         return "gchat"
 
 
-CANALES = {"whatsapp": avisar_whatsapp, "email": avisar_email, "gchat": avisar_gchat}
+CANALES = {
+    "telegram": avisar_telegram,
+    "whatsapp": avisar_whatsapp,
+    "email": avisar_email,
+    "gchat": avisar_gchat,
+}
 
 
 def avisar(cfg: dict, asunto: str, cuerpo: str) -> list[str]:

@@ -1783,3 +1783,47 @@ contra un contador independiente del otro equipo, una tormenta real de 10.446
 señales colapsada en 45 notificaciones, silencio real detectado y confirmado, y
 un incidente real de la aplicación piloto entregado en el móvil con divulgación
 progresiva.
+
+---
+
+## D-070 · El dead man's switch vive fuera del repositorio, y sabe hablar Telegram
+
+**Contexto**. El criterio 7 del piloto (D-069) pedía red de seguridad externa.
+El fichero existía desde F2-10 —sin dependencias, pensado para correr fuera de
+los contenedores— y **nunca se había instalado**. Al ir a hacerlo salieron dos
+cosas que lo habrían dejado inútil:
+
+**1 · No sabía hablar por el único canal configurado.** Soportaba WhatsApp,
+correo y Google Chat. El canal del piloto es Telegram (D-053). Un vigilante
+instalado que detecta la caída y avisa a nadie es peor que no tenerlo: ocupa el
+sitio de la red de seguridad sin serlo.
+
+**2 · Instalado en el repositorio, `launchd` no puede ejecutarlo.** macOS no le
+da acceso a `~/Documents` sin *acceso total al disco*:
+
+```
+Operation not permitted
+```
+
+Y se veía en `launchctl list`: código de salida **2** en cada ciclo.
+
+**Decisión**. Telegram añadido —quince líneas, solo `urllib`, sin `parse_mode`
+porque un HTML mal formado daría 400 justo cuando el aviso importa—, y la
+instalación copia a `~/Library/Application Support/argus-deadman/`.
+
+**Sacarlo del repositorio es mejor que el permiso, por dos razones**: conceder
+acceso total al disco a un intérprete genérico es peor que el problema que
+resuelve; y el vigilante **no debe depender de que el repositorio siga donde
+está**. Si se mueve el proyecto o se hace `git clean`, el centinela sigue en pie.
+
+**Consecuencia que hay que recordar**: la copia instalada no se actualiza sola.
+Cambiar la configuración exige `make deadman-setup` otra vez, y el target lo
+dice al terminar.
+
+**Verificado de punta a punta, no solo instalado**: los cuatro objetivos en
+verde, parada real del `alert-bus` → detectado en el ciclo 1 sin avisar,
+confirmado y avisado en el 2, y aviso de recuperación al volver. `launchctl
+list` da **0**.
+
+**Se añadió `victoriametrics` a los objetivos**: sin él no hay camino templado,
+y es la pieza que más recientemente estuvo rota sin que nadie lo supiera (D-064).
