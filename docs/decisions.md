@@ -1884,3 +1884,88 @@ fallo, y hasta ahora ese hemos sido nosotros en los doce casos. La tentación de
 no marcar uno para no perder la racha es real, y por eso la marca va **en la
 decisión**, donde ya hay que escribir lo que pasó, y no en un contador aparte
 que se pueda olvidar.
+
+---
+
+## D-072 · Un relleno nuestro no puede pisar `OTEL_RESOURCE_ATTRIBUTES`
+
+> **Fallo de plataforma** · descubierto 2026-09-16 · nuestro SDK ignoraba la variable estándar, el mismo fallo que pedimos arreglar fuera
+
+**Contexto**. Montando la reproducción de una cola para el criterio 5, puse
+`OTEL_RESOURCE_ATTRIBUTES=service.namespace=prueba-cola,argus.component.role=worker`
+y las trazas llegaron con `service.namespace=cola-api` y `role=api`. La variable
+no hacía nada.
+
+**Es el mismo fallo por el que escribimos una solicitud, un parche y tests al
+equipo de Prometheus** (`docs/solicitudes/prometheus-resource-create.md`). Allí
+la causa era el constructor directo de `Resource`; aquí usamos `Resource.create()`
+—precisamente para evitarlo— y el síntoma es idéntico.
+
+**La causa**. `Resource.create()` fusiona, y lo que se le pasa **gana**. Eso es
+correcto para lo que alguien eligió, y es un fallo para lo que rellenamos
+nosotros: `namespace` cae a `service` cuando nadie lo dice, y `role` a `"api"`.
+Esos rellenos se pasaban igual que un valor elegido, así que pisaban la variable.
+
+**Un valor por defecto disfrazado de elección.**
+
+**Decisión**. `Config` recuerda qué atributos salieron de una elección real —un
+argumento o una variable `ARGUS_*`— y `build_resource` retira de lo que pasa a
+`Resource.create()` los rellenos que el entorno ya declara. Resultado:
+
+| | gana |
+|---|---|
+| `ARGUS_NAMESPACE=x` + `OTEL_RESOURCE_ATTRIBUTES=service.namespace=y` | `x` — lo elegido manda |
+| solo `OTEL_RESOURCE_ATTRIBUTES=service.namespace=y` | `y` — el relleno cede |
+| ninguno de los dos | `service.name` — como siempre |
+
+**Por qué importa más de lo que parece**. El caso *a* de la guía de migración
+—«la app ya tiene OTel: coste cero, solo variables de entorno»— **no funcionaba**
+para ninguna aplicación que además llamara a `argus.init()`. Su
+`OTEL_RESOURCE_ATTRIBUTES` se ignoraba en silencio y el servicio aparecía bajo
+un namespace equivocado, que es exactamente el síntoma que llevó a `unregistered`
+en el piloto de Prometheus.
+
+**Cómo apareció**: no en la suite, sino al usar la plataforma como la usaría
+alguien de fuera. Había dos tests del Resource y ninguno probaba la interacción
+con la variable estándar, porque siempre le pasábamos la configuración por
+`ARGUS_*`.
+
+---
+
+## D-073 · El criterio 5 está demostrado: una traza cruza la cola
+
+**Contexto**. El criterio 5 —una traza cruzando una frontera que no es HTTP— era
+el único de los ocho que además era un riesgo: el plan lo llama *la prueba que
+define la fase*, y si la propagación fuera de HTTP no funciona, nada de lo
+construido encima sirve.
+
+Los tres servicios del piloto son APIs HTTP, así que no lo ejercitaban. Del
+portafolio, **`video-translator` (el proyecto se llama Prosodia) es la única
+aplicación con cola**: `celery[redis]>=5.4.0`, con la API encolando en
+`projects.py:324` y el worker consumiendo en `run_project.py:63`.
+
+**Y Redis no basta.** Prometheus también usa Redis, pero solo como caché —`get`,
+`set`, `expire`, `sadd`, `incr`— y **cero** operaciones de cola. Un `get` no
+cruza a otro proceso: el span se queda en la misma traza. Hace falta alguien que
+*recoja* el trabajo al otro lado.
+
+**Decisión**. Antes de pedirle nada a su equipo, reproducir su forma exacta
+—FastAPI que hace `.delay()`, worker Celery sobre Redis— y medirlo contra el
+stack real. Resultado:
+
+```
+TraceId 5a3f479783d2515ab293302f262d0d59
+  cola-api     POST /proyectos/p-caliente/ejecutar   (raíz)
+  cola-api     apply_async/prueba.trabajo_largo
+  cola-worker  run/prueba.trabajo_largo
+  cola-worker  doblaje.procesar
+```
+
+**Una traza, dos procesos, a través de una cola de Redis.** `argus.init()`
+activa `CeleryInstrumentor` por detección automática, así que no hace falta
+escribir propagación a mano.
+
+**Un detalle que costó encontrarlo**: con tres peticiones normales la traza caía
+en el 10 % probabilístico del tail sampling y la pregunta se volvía
+incontestable por falta de muestra. Marcar el span con `argus.hot` la conserva
+entera. Conviene recordarlo al verificar cualquier cosa de bajo volumen.
