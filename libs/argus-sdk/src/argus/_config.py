@@ -55,6 +55,10 @@ class Config:
     version: str = ""
     instance_id: str = ""
     role: str = "api"
+
+    # Atributos que salieron de una eleccion real (argumento o ARGUS_*), frente
+    # a los que rellenamos nosotros. Lo rellena `from_env`.
+    elegidos: set[str] = field(default_factory=set)
     environment: str = ""
 
     # --- Transporte ----------------------------------------------------------
@@ -107,7 +111,7 @@ class Config:
             namespace=os.getenv("ARGUS_NAMESPACE", ""),
             version=os.getenv("ARGUS_VERSION") or os.getenv("SERVICE_VERSION", ""),
             instance_id=os.getenv("ARGUS_INSTANCE_ID") or os.getenv("HOSTNAME", ""),
-            role=os.getenv("ARGUS_ROLE", "api"),
+            role=os.getenv("ARGUS_ROLE", ""),
             environment=os.getenv("ARGUS_ENVIRONMENT") or os.getenv("DEPLOYMENT_ENVIRONMENT", ""),
             endpoint=endpoint,
             protocol=protocol,  # type: ignore[arg-type]
@@ -126,6 +130,17 @@ class Config:
         for key, value in overrides.items():
             if value is not None and hasattr(cfg, key):
                 setattr(cfg, key, value)
+
+        # Que atributos salieron de una eleccion REAL —argumento o variable
+        # ARGUS_*— y cuales son un relleno nuestro. La diferencia decide quien
+        # gana frente a OTEL_RESOURCE_ATTRIBUTES: lo elegido pisa la variable,
+        # un relleno JAMAS (D-072).
+        cfg.elegidos = {
+            campo for campo in ("namespace", "role", "environment", "version", "instance_id")
+            if getattr(cfg, campo)
+        }
+        if not cfg.role:
+            cfg.role = "api"
 
         if not cfg.instance_id:
             cfg.instance_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
