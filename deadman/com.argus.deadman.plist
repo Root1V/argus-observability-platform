@@ -5,6 +5,16 @@
   Corre FUERA de Docker a proposito: un vigilante dentro del contenedor que
   vigila se cae con el.
 
+  Y corre desde `~/Library/Application Support/argus-deadman/`, NO desde el
+  repositorio. Dos motivos:
+
+   1. macOS no deja a launchd leer `~/Documents` sin acceso total al disco.
+      Instalado ahi falla con "Operation not permitted" en cada ciclo. La
+      alternativa —conceder acceso total al disco a `python3`— es peor que el
+      problema que resuelve.
+   2. El vigilante no deberia depender de que el repositorio siga donde esta.
+      Si mueves el proyecto o haces `git clean`, el centinela sigue en pie.
+
   NO edites este fichero a mano: `make deadman-setup` genera una copia con las
   rutas reales ya rellenadas y te dice que hacer con ella.
 
@@ -22,9 +32,9 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
-    <string>/RUTA/ABSOLUTA/A/app_monitoring_explainability/deadman/deadman.py</string>
+    <string>/RUTA/INSTALADA/deadman.py</string>
     <string>--config</string>
-    <string>/RUTA/ABSOLUTA/A/app_monitoring_explainability/deadman/deadman.json</string>
+    <string>/RUTA/INSTALADA/deadman.json</string>
   </array>
 
   <!-- Cada 5 minutos. Mas frecuente no compra nada: hacen falta dos fallos

@@ -283,7 +283,7 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-18` | ⏳ | **Validar los atributos de un documento contra el modelo** | Mandamos a Prometheus tres nombres inventados y los implementaron. El generador no cubre lo que se escribe a mano — D-067 |
 | `B-17` | ⏳ | **Rotar `ARGUS_GATEWAY_TOKEN`** | Estuvo versionado desde `78918b9`. `make rotate-token`; no afecta a equipos externos — D-066 |
 | `B-15` | ⏳ | **Métricas del host REAL en macOS** | El `hostmetrics` mide la VM de Docker: un núcleo al 98,7% durante 62h fue invisible. Candidato: el dead man's switch, que ya corre nativo — D-063 |
-| `B-16` | ⏳ | **Instalar el dead man's switch como LaunchAgent** | Está escrito y no corre. Hoy no hay red de seguridad externa — D-063 |
+| `B-16` | ✅ | **Dead man's switch instalado y corriendo** | Le faltaba Telegram, y en `~/Documents` launchd no puede ejecutarlo. Verificado con una caída real — D-070 |
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |
