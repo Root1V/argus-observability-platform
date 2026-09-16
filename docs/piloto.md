@@ -343,8 +343,19 @@ cumple el día que alguien tiene prisa. Estos sí:
 | 7 | **Hay red de seguridad externa** | El *dead man's switch* corriendo fuera de los contenedores (`B-16`) |
 | 8 | **Catorce días sin un fallo nuevo de la plataforma** | Ninguna decisión nueva del tipo «esto no hacía lo que decía» |
 
-Los cuatro primeros están **demostrados con datos** (§ «Qué mirar»). Los cuatro
-últimos, no.
+```bash
+make pilot-status     # cuánto queda, medido
+```
+
+El criterio 8 se mide contando días desde el último **fallo de plataforma** —las
+decisiones marcadas con `> **Fallo de plataforma** · descubierto AAAA-MM-DD` en
+`decisions.md`—. **Marcar uno nuevo reinicia el reloj**, y eso es deliberado: si
+la plataforma sigue descubriendo que no hacía lo que decía, no está lista, por
+muchos días que lleve encendida.
+
+Los criterios 4, 5 y 6 salen como `?` porque no se comprueban solos: el 4 se
+verificó una vez y no se re-ejecuta, y el 5 y el 6 necesitan que alguien conecte
+algo que hoy no existe.
 
 El 5 es el que más importa y es el que el plan llamaba *la prueba que define la
 fase*: si una unidad de trabajo que cruza una cola produce **dos** trazas en vez
