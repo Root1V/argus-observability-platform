@@ -70,6 +70,18 @@ wheels:  ## Construye las ruedas instalables de las librerias
 	  uv build --package $$p --out-dir dist --quiet; done
 	@ls -1 dist/*.whl | sed 's|dist/|  |'
 
+indice:  ## Construye el índice de paquetes y lo sirve en :8081
+	@$(MAKE) --no-print-directory wheels
+	@uv run --quiet python scripts/construir_indice.py
+	@$(COMPOSE) --profile lean up -d indice >/dev/null 2>&1 || true
+	@echo
+	@echo "  Índice en http://127.0.0.1:8081/simple"
+	@echo "  Instalación desde otra aplicación:"
+	@echo "    pip install --extra-index-url http://127.0.0.1:8081/simple 'argus-obs-sdk[asgi]'"
+	@echo
+	@echo "  OJO: --extra-index-url, no --index-url. El nuestro NO replica PyPI,"
+	@echo "  así que sustituirlo deja sin resolver las dependencias de terceros."
+
 dash:  ## Abre los dashboards e imprime la credencial
 	@set -a; . platform/.env; set +a; \
 	echo "  Grafana:  http://localhost:3001"; \

@@ -18,3 +18,7 @@ deadman/deadman.json
 
 # Secretos montados en contenedores. Nunca al repositorio.
 platform/secrets/
+
+# El índice se GENERA desde dist/ con scripts/construir_indice.py.
+# Versionar ruedas es versionar binarios que ya sabemos reproducir.
+platform/indice/simple/

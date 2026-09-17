@@ -2000,3 +2000,56 @@ referencia, con un aviso de que las respuestas van al canal.
 **Consecuencia para nosotros**: una copia del canal vive en el repositorio
 (`docs/solicitudes/`) para que el historial de decisiones no dependa de una
 carpeta fuera de git. Es copia, no fuente: la que se edita es la de Victor.
+
+---
+
+## D-075 · El índice de paquetes es estático, y pip verifica lo que uv no
+
+**Contexto**. Dos equipos bloqueados en lo mismo. Prometheus rechazó instalar una
+rueda suelta —*«aceptar un binario por SHA de un equipo hermano es una decisión
+de cadena de suministro, no una comodidad»*— y Prosodia marcó su tarea `RM-41`
+como **bloqueada** por la misma razón. `B-10` dejó de ser higiene y pasó a ser el
+camino crítico del rollout.
+
+**Decisión: un índice PEP 503 estático**, no `devpi` como decía el plan.
+
+- El plano central tiene que ser portátil (D-003). Un índice estático son
+  ficheros en un volumen: se mueve con `cp -r`, sin estado que migrar.
+- `devpi` aporta subida por `twine`, réplica de PyPI y varios índices. Nada de
+  eso hace falta para tres paquetes y dos consumidores, y cada pieza que no hace
+  falta es una que hay que actualizar.
+- Si algún día hace falta, `devpi` entra **detrás de la misma URL** y nadie de
+  fuera se entera. La decisión no se cierra, se aplaza.
+
+**Lo que se aprendió probándolo, y que cambia lo que se les puede prometer:**
+
+**1 · `--extra-index-url`, nunca `--index-url`.** El primer intento con
+`--index-url` falló: nuestro índice no replica PyPI, así que sustituirlo deja
+sin resolver `opentelemetry-*`, `fastapi` y `celery`. Obvio al verlo y no antes.
+
+**2 · pip verifica el `#sha256=`; uv NO lo hace por defecto.** Esto casi se
+convierte en una afirmación falsa mandada a otro equipo. Probado sustituyendo la
+rueda del índice por otra reconstruida —mismo nombre, mismos metadatos, bytes
+distintos—:
+
+| | resultado |
+|---|---|
+| `pip install` | **rechaza**: `THESE PACKAGES DO NOT MATCH THE HASHES` |
+| `uv pip install` | **instala** sin decir nada |
+
+Dos intentos previos de corromper el fichero no probaban nada: añadir bytes lo
+rompe como ZIP y sustituirlo por otro paquete lo rompe en los metadatos. Las dos
+veces la herramienta lo rechazó **por otro motivo**, y eso habría pasado por
+verificación de integridad sin serlo.
+
+**Mitigación para quien use uv**: `uv pip compile --generate-hashes` y luego
+`--require-hashes`. Verificado: 6 hashes en el lockfile, instalación correcta.
+
+**Lo que sigue abierto**: `--extra-index-url` deja la puerta a la confusión de
+dependencias —si alguien registra `argus-obs-sdk` en PyPI, pip podría preferirlo—.
+La mitigación real es `B-14`: registrar los nombres defensivamente. Sube de
+prioridad ahora que hay consumidores externos.
+
+**Cómo se encontró todo esto**: instalando desde el índice en un entorno limpio,
+como lo haría alguien de fuera. Ninguno de los tres hallazgos sale de leer la
+especificación de PEP 503.
