@@ -1,18 +1,48 @@
 # Argus
 
+[![publicar](https://github.com/Root1V/argus-observability-platform/actions/workflows/publicar.yml/badge.svg)](https://github.com/Root1V/argus-observability-platform/actions/workflows/publicar.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Plataforma de observabilidad, AIOps agéntico y explicabilidad para un
 portafolio de aplicaciones que crece.
 
-> **Estado**: F0 y F2 completas, F1 casi. **A un paso de poder pilotar con una
-> aplicación real** — ver [docs/piloto.md](docs/piloto.md) y `make pilot-check`.
+Las aplicaciones importan una librería ligera y exportan **siempre a
+`localhost`**; el plano central puede moverse de máquina sin que ninguna se
+entere. Un camino caliente detecta incidentes **sin tocar la base de datos**,
+y los agentes investigan sobre el frío.
+
+## Estado: piloto en curso
+
+No es una maqueta. Corre con una aplicación real desde el 13/09/2026 —
+**Prometheus**, una plataforma de inferencia local— y estos números están
+medidos, no estimados:
+
+| | |
+|---|---|
+| Spans reales del piloto | **68.709**, tres servicios |
+| Deduplicación bajo tormenta | **10.446 señales → 45 notificaciones** (99,6 %) |
+| Trazas GenAI contrastadas | **689 de 689**, contra el contador del otro equipo |
+| Detección hasta el aviso | **~2 s**, medido con reloj |
+| Pruebas | 229, en 3.11 · 3.12 · 3.13 |
+
+**El piloto no está cerrado, y `make pilot-status` dice por qué**: quedan tres
+criterios sin verificar y un reloj de catorce días sin fallos nuevos de la
+plataforma que se reinicia cada vez que encontramos uno. Van **14 fallos
+nuestros** encontrados ejecutando, no en la suite — están marcados uno a uno en
+[decisions.md](docs/decisions.md).
+
+Esa cuenta es deliberada. Una plataforma de observabilidad a medio construir es
+peor que no tenerla, porque genera confianza infundada.
 
 ## Los documentos
 
 | Documento | Para qué |
 |---|---|
-| [docs/piloto.md](docs/piloto.md) | **Conectar la primera aplicación real**, paso a paso |
+| [docs/piloto.md](docs/piloto.md) | **Conectar una aplicación**, paso a paso, y los 8 criterios para cerrar el piloto |
+| [docs/coordinacion.md](docs/coordinacion.md) | Cómo se coordina un cambio con el equipo de otra aplicación |
 | [roadmap.md](roadmap.md) | Qué está hecho, qué falta, y el backlog. Todo con código estable |
-| [docs/decisions.md](docs/decisions.md) | Por qué está hecho así. 35 decisiones con su coste |
+| [docs/decisions.md](docs/decisions.md) | Por qué está hecho así. **75 decisiones** con su coste y lo que se descartó |
 | [docs/como-probarlo.md](docs/como-probarlo.md) | Cómo verificarlo tú mismo |
 | [docs/runbooks/migrar-plano-central.md](docs/runbooks/migrar-plano-central.md) | Mover el plano central a otra máquina |
 | [docs/PLAN.md](docs/PLAN.md) | El plan completo con la investigación que lo respalda |
