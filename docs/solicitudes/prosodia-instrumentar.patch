@@ -1,0 +1,48 @@
+--- a/src/video_translator/web/main.py
++++ b/src/video_translator/web/main.py
+@@ -2,6 +2,13 @@
+ 
+ from __future__ import annotations
+ 
++# Antes de importar los routers: `init()` instala el puente de logging, y lo que
++# se importe antes se queda con el handler viejo. La identidad y el destino
++# salen del entorno (OTEL_*), asi que este fichero no cambia entre maquinas.
++import argus
++
++argus.init()
++
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+@@ -20,6 +27,11 @@
+ 
+ app = FastAPI(title="Prosodia Web API")
+ 
++# Abre el span de servidor y adopta el contexto entrante segun ARGUS_PROPAGATE.
++# Por defecto `never`: un llamante externo no puede inyectar el identificador
++# con el que se registran sus peticiones.
++app.add_middleware(argus.ASGIMiddleware)
++
+ app.add_middleware(
+     CORSMiddleware,
+     allow_origins=settings.cors_origins,
+--- a/src/video_translator/web/tasks/celery_app.py
++++ b/src/video_translator/web/tasks/celery_app.py
+@@ -2,6 +2,17 @@
+ 
+ from __future__ import annotations
+ 
++# El worker es un PROCESO APARTE: no hereda nada de la API. Sin esta llamada,
++# encolar produce una traza y procesar produce otra, y la unidad de trabajo
++# queda partida en dos justo donde cruza la cola.
++#
++# En el proceso de la API esto tambien se ejecuta (el router importa la tarea) y
++# es inofensivo: `init()` es idempotente y `main.py` ya la llamo antes con la
++# identidad de la API.
++import argus
++
++argus.init()
++
+ from celery import Celery
+ 
+ from video_translator.web.config import load_web_settings
