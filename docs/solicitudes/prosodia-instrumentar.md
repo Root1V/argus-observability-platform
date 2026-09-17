@@ -7,6 +7,13 @@
 **Impacto**: 2 ficheros, 6 líneas · **Urgencia**: ninguna, decidís vosotros
 **Parche listo**: [`prosodia-instrumentar.patch`](prosodia-instrumentar.patch)
 
+> **Este documento se ha trasladado al canal compartido**
+> `~/Documents/Victor/prosodia_argus/canal-prosodia-argus.md`, en las entradas
+> `A-01` a `A-06`. Se conserva aquí como referencia; **las respuestas van al
+> canal**, no a este fichero.
+>
+> Copia en el repositorio: [`canal-prosodia-argus.md`](canal-prosodia-argus.md).
+
 ---
 
 ## Resumen
