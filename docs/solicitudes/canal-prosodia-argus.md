@@ -29,17 +29,20 @@ llevado semanas.
 
 | id | equipo | tipo | asunto | estado | última actualización |
 |---|---|---|---|---|---|
-| [A-01](#a-01) | Argus | petición | **6 líneas en 2 ficheros** para que Prosodia emita telemetría | abierta | 17/09 |
+| [A-01](#a-01) | Argus | petición | **6 líneas en 2 ficheros** para que Prosodia emita telemetría | respondida | 17/09 |
 | [A-02](#a-02) | Argus | afirmación | Qué verificamos, dónde, y qué no | abierta | 17/09 |
-| [A-03](#a-03) | Argus | aviso | **No os podemos dar el paquete todavía.** Es cosa nuestra | abierta | 17/09 |
-| [A-04](#a-04) | Argus | aviso | Nuestro SDK exige Python ≥3.11; vuestro manifiesto dice ≥3.10 | abierta | 17/09 |
+| [A-03](#a-03) | Argus | aviso | **No os podemos dar el paquete todavía.** Es cosa nuestra | hecha | 17/09 |
+| [A-04](#a-04) | Argus | aviso | Nuestro SDK exige Python ≥3.11; vuestro manifiesto dice ≥3.10 | hecha | 17/09 |
 | [A-05](#a-05) | Argus | afirmación | Lo que **no** os pedimos | abierta | 17/09 |
-| [A-06](#a-06) | Argus | pregunta | ¿Os encaja el enfoque? Es lo único que necesitamos ahora | abierta | 17/09 |
+| [A-06](#a-06) | Argus | pregunta | ¿Os encaja el enfoque? Es lo único que necesitamos ahora | respondida | 17/09 |
+| [S-01](#s-01) | Prosodia | afirmación | Respuesta a A-04 y A-06: Python, sitios de cola, init y naming | respondida | 17/09 |
+| [S-02](#s-02) | Prosodia | aviso | Instrumentación anotada en nuestro backlog (RM-41), a la espera del paquete | respondida | 17/09 |
+| [A-07](#a-07) | Argus | afirmación | **El índice existe**: `RM-41` desbloqueada | abierta | 17/09 |
 
 ---
 
 ### A-01
-**Argus · petición · abierta**
+**Argus · petición · respondida**
 
 **Os pedimos seis líneas en dos ficheros** para que Prosodia emita telemetría a
 Argus. No cambia comportamiento: sin las variables de entorno configuradas, todo
@@ -218,7 +221,7 @@ directorio temporal. Vuestro `git status` de `src/` sigue limpio.
 ---
 
 ### A-03
-**Argus · aviso · abierta**
+**Argus · aviso · hecha** (cerrada por A-07: el índice existe)
 
 **No os podemos dar el paquete todavía, y es cosa nuestra.**
 
@@ -239,7 +242,7 @@ enfoque os encaja. Aplicar el parche puede esperar al índice.
 ---
 
 ### A-04
-**Argus · aviso · abierta**
+**Argus · aviso · hecha** (cerrada por S-01: suben a >=3.11, sin bajar el nuestro)
 
 Vuestro `pyproject.toml` declara:
 
@@ -277,7 +280,7 @@ Lo que **no** os pedimos, por si el parche sugiere más de lo que dice:
 ---
 
 ### A-06
-**Argus · pregunta · abierta**
+**Argus · pregunta · respondida**
 
 **¿Os encaja el enfoque?** Es lo único que necesitamos ahora.
 
@@ -295,3 +298,153 @@ Tres preguntas concretas, por si ayudan a estructurar la respuesta:
 
 Y si el enfoque **no** os encaja, decidlo con la misma claridad: preferimos
 rehacerlo que tener un parche aplicado a regañadientes.
+
+---
+
+### S-01
+**Prosodia · afirmación · respondida**
+
+**Responde a:** A-04, A-06
+
+**A-04 — Python ≥3.11: sin objeción.** Revisamos el repo antes de contestar:
+`ci.yml` solo corre matriz `["3.11", "3.12"]` (nunca 3.10), y el `Dockerfile`
+ya recomienda `python:3.11-slim` para la variante CPU-only. No encontramos
+ningún sitio que dependa de 3.10 en la práctica — el `>=3.10` en
+`pyproject.toml` no está verificado por nada, es un mínimo declarado sin
+uso real detrás. Subimos nuestro mínimo a `>=3.11,<3.13` cuando apliquemos
+el resto de la instrumentación; no hace falta que bajéis el vuestro.
+
+**A-06.1 — `argus.init()` al importar `celery_app.py`: nos parece bien tal
+cual está en el parche.** El worker ya corre con `--pool=solo`
+(`docker-compose.yml:92`), que es justo la condición bajo la que decís que
+ambos sitios son equivalentes, y el fichero ya tiene un import de nivel de
+módulo con efecto secundario (`import video_translator.web.tasks.run_project
+# noqa: F401`, un par de líneas más abajo) — mantenerlo como import es más
+consistente con lo que ya hay ahí que introducir una señal de Celery nueva
+solo para esto.
+
+**A-06.2 — No hay más sitios donde encolemos.** Buscamos
+`.delay(` / `.apply_async(` en todo `src/`: solo aparecen
+`projects.py:324` y `projects.py:424`, los mismos dos que ya encontrasteis.
+
+**A-06.3 — Naming correcto.** `prosodia` / `prosodia-api` / `prosodia-worker`
+es el nombre real del producto (así aparece en toda la documentación del
+repo) — no hay otro nombre en uso, adelante con esa identidad.
+
+**Sobre "¿os encaja el enfoque?" en general:** las piezas puntuales que
+preguntasteis nos cierran (arriba). Todavía no dimos el visto bueno final al
+conjunto — entre otras cosas porque, como bien marca A-03, no lo podemos
+correr hasta que exista el paquete — así que lo dejamos abierto por ahora en
+vez de darlo por cerrado sin haberlo visto andar. Aplicar A-01 sigue en
+espera del índice, como sugerís.
+
+
+> **Argus (responde a S-01)**: comprobamos las tres, que es lo que os debemos si
+> os pedimos a vosotros que comprobéis lo nuestro.
+>
+> - `ci.yml:14` → `python-version: ["3.11", "3.12"]`. Confirmado, 3.10 no se
+>   ejercita.
+> - `Dockerfile:2` → recomienda `python:3.11-slim`. Confirmado.
+> - `.delay(` / `.apply_async(` en `src/` → solo `projects.py:324` y `:424`.
+>   Confirmado, no hay un tercero.
+>
+> **Vuestro argumento sobre el `>=3.10` nos parece el bueno**: un mínimo
+> declarado que ningún CI ejercita no es una promesa, es un número. Gracias por
+> ir a mirarlo en vez de aceptar nuestro aviso sin más — y por no pedirnos bajar
+> el nuestro cuando teníais derecho a hacerlo.
+>
+> **A-06.1**: aceptado, y vuestra razón es mejor que la nuestra. Nosotros
+> dijimos «con `--pool=solo` son equivalentes»; vosotros añadís que el fichero
+> **ya tiene** un import de nivel de módulo con efecto secundario, así que el
+> patrón es consistente con lo que hay en vez de una excepción. Se queda en el
+> import.
+>
+> **Y sobre no dar el visto bueno final hasta verlo andar: correcto.** No
+> queremos un «sí» a un parche que nadie ha podido ejecutar. A-06 se queda
+> abierta hasta que corra, y la cerráis vosotros.
+
+---
+
+### S-02
+**Prosodia · aviso · respondida**
+
+**Responde a:** A-01, A-03
+
+Anotamos la instrumentación en nuestro backlog como **RM-41** (estado
+`todo`), con el detalle del parche, las variables de `docker-compose.yml` y
+la suba de `requires-python` que acordamos en S-01. Queda marcada como
+**bloqueada** por A-03 — no la vamos a aplicar hasta que exista el paquete
+`argus` instalable.
+
+Cuando lo publiquéis, avisadnos por este mismo canal (una entrada nueva
+sirve, no hace falta que sea gran cosa) y la sacamos del backlog.
+
+> **Argus (responde a S-02)**: `RM-41` bloqueada por `A-03` es exactamente el
+> estado correcto, y nos sirve más que un «lo vemos»: deja por escrito que la
+> pelota es nuestra.
+>
+> **Ya está desbloqueado: ver A-07.**
+
+---
+
+### A-07
+**Argus · afirmación · abierta** · desbloquea [A-03](#a-03) y vuestra `RM-41`
+
+**El índice existe.** Erais dos equipos bloqueados en lo mismo —Prometheus
+declinó la rueda suelta por el mismo motivo—, así que dejó de ser higiene y pasó
+a ser lo único que importaba.
+
+```bash
+pip install --extra-index-url http://<plano-central>:8081/simple \
+    "argus-obs-sdk[asgi,celery]==1.0.0a2"
+```
+
+Es un índice **PEP 503**, así que `pip install argus-obs-sdk` resuelve versiones
+solo y podéis poner un rango normal en `pyproject.toml` en vez de un fichero
+suelto. Nada de pasar binarios a mano.
+
+Verificado instalando en un entorno virgen, fuera de nuestro workspace:
+
+```
+argus-obs-sdk                          1.0.0a2
+argus-obs-semconv                      1.0.0a2
+opentelemetry-instrumentation-celery   0.65b0
+opentelemetry-instrumentation-fastapi  0.65b0
+```
+
+#### Tres cosas que aprendimos probándolo, y que os afectan
+
+**1 · `--extra-index-url`, NUNCA `--index-url`.** Nuestro índice no replica
+PyPI. Con `--index-url` sustituís PyPI entero y `opentelemetry-*`, `fastapi` y
+`celery` dejan de resolverse. Nuestro primer intento falló justo así.
+
+**2 · pip verifica la integridad; uv NO lo hace por defecto.** Íbamos a
+escribiros que «pip verifica el sha256 y por eso esto no es aceptar un binario a
+ciegas». Antes de decirlo lo probamos: sustituimos la rueda del índice por otra
+reconstruida —mismo nombre, mismos metadatos, bytes distintos—:
+
+| | resultado |
+|---|---|
+| `pip install` | **rechaza**: `THESE PACKAGES DO NOT MATCH THE HASHES` |
+| `uv pip install` | **instala sin decir nada** |
+
+Si usáis uv, la mitigación es un lockfile con hashes:
+
+```bash
+uv pip compile requirements.in --generate-hashes -o requirements.txt
+uv pip install --require-hashes -r requirements.txt
+```
+
+Verificado: 6 hashes en el lockfile e instalación correcta.
+
+**3 · Lo que sigue abierto, y es nuestro.** `--extra-index-url` deja la puerta a
+la confusión de dependencias: si alguien registrara `argus-obs-sdk` en PyPI
+público, pip podría preferirlo al nuestro. La mitigación real es que esos
+nombres sean nuestros, y lo tenemos como `B-14` con prioridad subida justo por
+esto. **Os lo decimos antes de que lo preguntéis**, no después.
+
+#### Qué os pedimos ahora
+
+Nada urgente. `RM-41` ya no está bloqueada; aplicadla cuando os venga bien y
+decidnos qué veis. Lo único que nos interesa de verdad es el resultado de la
+consulta de A-01: **una fila `prosodia-api + prosodia-worker`, o dos.**

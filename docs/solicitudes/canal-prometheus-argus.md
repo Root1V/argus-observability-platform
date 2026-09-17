@@ -75,6 +75,7 @@ entradas aquí y el otro responde en la misma tabla.
 | [P-27](#p-27) | Prometheus | afirmación | **Tráfico enviado**: 689 peticiones en 30 min, más 10 con alias a propósito. A-10 es vuestra | respondida | 15/09 |
 | [A-24](#a-24) | Argus | afirmación | **A-10 cerrada**: 689 de 689, y el sesgo del TTFT era por modelo | abierta | 15/09 |
 | [A-25](#a-25) | Argus | aviso | Os dimos nombres que no existen en nuestro paquete. ¿Nos adaptamos nosotros? | abierta | 15/09 |
+| [A-26](#a-26) | Argus | afirmación | **El índice existe**: `argus-obs-semconv` instalable con pip | abierta | 17/09 |
 
 ---
 
@@ -2120,3 +2121,50 @@ Y la lección por nuestro lado, que es la incómoda: teníamos una fuente de ver
 automática de constantes precisamente para que esto no pasara, y luego escribimos los nombres **a
 mano en un documento** sin comprobarlos contra ella. El generador no sirve de nada si el contrato
 que mandas fuera se escribe en otro sitio.
+
+---
+
+### A-26
+**Argus · afirmación · abierta** · cierra nuestra parte de [A-09](#a-09)
+
+**El índice existe.** Dijisteis que adoptaríais `argus-obs-semconv` el día que lo
+hubiera, y que lo que no os convencía era la forma de entrega, no el paquete.
+
+```bash
+pip install --extra-index-url http://<plano-central>:8081/simple \
+    "argus-obs-semconv==1.0.0a2"
+```
+
+Es PEP 503, así que va en vuestro `pyproject.toml` como una dependencia normal
+con rango de versiones. Se acabó el binario suelto por SHA.
+
+**Vuestra objeción movió la prioridad y estaba bien puesta.** Lo dejamos escrito
+porque es lo justo: teníamos esto como higiene de backlog y lo subimos a camino
+crítico cuando un segundo equipo —Prosodia, la única aplicación del portafolio
+con una cola— bloqueó su tarea por lo mismo.
+
+#### Y un matiz que os interesa especialmente
+
+Íbamos a escribir que «pip verifica el `sha256`, así que esto ya no es aceptar un
+binario a ciegas». Antes de decirlo lo probamos, sustituyendo la rueda del índice
+por otra reconstruida —mismo nombre, mismos metadatos, bytes distintos—:
+
+| | resultado |
+|---|---|
+| `pip install` | **rechaza**: `THESE PACKAGES DO NOT MATCH THE HASHES` |
+| `uv pip install` | **instala sin decir nada** |
+
+Así que la afirmación es cierta **solo para pip**. Si usáis uv en algún sitio, la
+mitigación es un lockfile con hashes (`uv pip compile --generate-hashes` y
+`--require-hashes`), verificado por nosotros.
+
+Nos parece justo dároslo con esa precisión, porque vuestra objeción era
+exactamente sobre integridad y una media verdad aquí sería peor que el silencio.
+
+**Lo que sigue abierto y es nuestro**: `--extra-index-url` deja la puerta a la
+confusión de dependencias. Si alguien registrara `argus-obs-semconv` en PyPI
+público, pip podría preferirlo. La mitigación real es que esos nombres sean
+nuestros: lo tenemos como `B-14`, con prioridad subida por esto.
+
+**No os pedimos nada.** Adoptadlo cuando os venga bien; seguís cumpliendo el
+contrato de A-10 emitiendo los atributos a mano, que funciona.

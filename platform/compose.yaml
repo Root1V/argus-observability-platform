@@ -70,6 +70,22 @@ services:
 
   # Reglas de alerta. Intervalo de 10 s: es el presupuesto del camino TEMPLADO
   # (2-15 s). El camino caliente no pasa por aqui, va directo al alert-bus.
+  # Indice de paquetes PEP 503. Estatico a proposito: son ficheros en un
+  # volumen, asi que se mueve con el resto del plano central sin estado que
+  # migrar. `devpi` entraria detras de esta misma URL el dia que haga falta
+  # subida por twine o replica de PyPI — hoy no hace falta (D-075).
+  indice:
+    <<: *restart
+    profiles: [lean, genai, agents, full]
+    image: nginx:1.27-alpine
+    volumes:
+      - ./indice:/usr/share/nginx/html:ro
+      - ./indice/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      # Solo en localhost. Desde otra maquina se llega por la red privada
+      # (B-11), no abriendo el puerto al mundo.
+      - "127.0.0.1:8081:80"
+
   vmalert:
     <<: *restart
     profiles: [lean, genai, agents, full]

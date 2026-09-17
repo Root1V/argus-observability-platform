@@ -280,8 +280,8 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-07` | ✅ | Grafana con dashboards provisionados | Dos: una aplicación y la plataforma — D-037 |
 | `B-08` | 💭 | Vistas materializadas de ClickHouse para burn-rate | Camino templado, si vmalert se queda corto |
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
-| `B-10` | ⏳ | **Índice PyPI privado (`devpi`)** | **Prioridad alta**: Prometheus rechaza —con razón— instalar una rueda suelta por SHA. Bloquea su adopción del paquete — D-036, D-054 |
-| `B-14` | 💭 | **Registrar `argus-obs-*` en PyPI defensivamente** | La protección de D-035 depende de que sigan libres |
+| `B-10` | ✅ | **Índice de paquetes PEP 503** | Estático, no devpi. `make indice`. pip verifica el sha256; uv no — D-075 |
+| `B-14` | ⏳ | **Registrar `argus-obs-*` en PyPI defensivamente** | **Sube**: con `--extra-index-url` y consumidores externos, es la mitigación real de la confusión de dependencias — D-075 |
 | `B-18` | ⏳ | **Validar los atributos de un documento contra el modelo** | Mandamos a Prometheus tres nombres inventados y los implementaron. El generador no cubre lo que se escribe a mano — D-067 |
 | `B-17` | ⏳ | **Rotar `ARGUS_GATEWAY_TOKEN`** | Estuvo versionado desde `78918b9`. `make rotate-token`; no afecta a equipos externos — D-066 |
 | `B-15` | ⏳ | **Métricas del host REAL en macOS** | El `hostmetrics` mide la VM de Docker: un núcleo al 98,7% durante 62h fue invisible. Candidato: el dead man's switch, que ya corre nativo — D-063 |
