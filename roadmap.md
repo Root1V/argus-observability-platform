@@ -78,7 +78,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-11` | 🚧 | Adoptar en 3 apps reales | **3 servicios de Prometheus conectados y verificados** (689/689 spans GenAI). Pero los tres son APIs HTTP: falta una app con cola — D-068 |
 | `F1-28` | ✅ | **`make pilot-status`** | El criterio 8 se mide solo; cada fallo marcado reinicia el reloj — D-071 |
 | `F1-27` | 🚧 | **Criterio 5: una traza cruzando una cola** | **Mecanismo demostrado** con una reproducción de la forma de Prosodia: una traza, dos procesos, una cola. Falta con tráfico real — D-073 |
-| `S-09` | ⏳ | **Prosodia** (`video-translator/`) | Solicitud escrita y verificada: aplica limpio y no añade avisos de lint. Esperando su revisión — D-073 |
+| `S-09` | ⏳ | **Prosodia** (`video-translator/`) | Canal abierto con A-01..A-06. Esperan responder si el enfoque encaja — D-073, D-074 |
 | `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |

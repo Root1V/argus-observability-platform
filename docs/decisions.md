@@ -1969,3 +1969,34 @@ escribir propagación a mano.
 en el 10 % probabilístico del tail sampling y la pregunta se volvía
 incontestable por falta de muestra. Marcar el span con `argus.hot` la conserva
 entera. Conviene recordarlo al verificar cualquier cosa de bajo volumen.
+
+---
+
+## D-074 · Un canal por equipo, no una carta por tema
+
+**Contexto**. La coordinación con Prometheus empezó como cartas: un documento
+nuestro, una respuesta suya, otro documento. Su equipo propuso sustituirlo por
+un **fichero compartido con dos escritores**, y en cuatro días resolvió lo que
+por cartas habría llevado semanas: 27 entradas de ellos, 25 nuestras, con
+estados explícitos y sin un solo «¿esto ya está hecho?».
+
+**Decisión**. Mismo formato para Prosodia, en
+`~/Documents/Victor/prosodia_argus/`. La solicitud suelta se traslada al canal
+como entradas `A-01` a `A-06` y queda en `docs/solicitudes/` solo como
+referencia, con un aviso de que las respuestas van al canal.
+
+**Lo que hace que funcione**, y que conviene no perder al replicarlo:
+
+- **Solo el dueño de una entrada la cierra.** Quien la abrió decide cuándo está
+  satisfecha, así que nadie se marca deberes a sí mismo.
+- **No se edita el texto ajeno**, solo se añade debajo y se cambia el estado.
+- **Un id por entrada, que no se reutiliza.** Permite citar «responde a A-03»
+  meses después.
+- **Si algo se verificó, decir cómo y dónde.** Añadimos el «dónde» por
+  experiencia: en el canal de Prometheus les dimos cifras de su receptor local
+  como si pudiéramos verificarlas, y perdimos media hora persiguiendo spans que
+  nunca cruzaron.
+
+**Consecuencia para nosotros**: una copia del canal vive en el repositorio
+(`docs/solicitudes/`) para que el historial de decisiones no dependa de una
+carpeta fuera de git. Es copia, no fuente: la que se edita es la de Victor.
