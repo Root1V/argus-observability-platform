@@ -5,6 +5,18 @@ description = "Convenciones semanticas de Argus. Para LIBRERIAS: depende solo de
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "Emeric Espiritu" }]
+keywords = ["observability", "opentelemetry", "semantic-conventions", "genai", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
 
 # ATENCION: esta lista de dependencias es un contrato, no un detalle.
 #
@@ -28,3 +40,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus_semconv"]
+
+# Quien encuentre esto en PyPI tiene derecho a saber de donde sale y donde
+# reportar. Un paquete sin origen publico es la misma opacidad de cadena de
+# suministro que nos objeto un equipo consumidor (D-075).
+[project.urls]
+Homepage = "https://github.com/Root1V/argus-obs"
+Repository = "https://github.com/Root1V/argus-obs"
+Issues = "https://github.com/Root1V/argus-obs/issues"

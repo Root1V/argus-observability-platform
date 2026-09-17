@@ -1,0 +1,90 @@
+# Construye, prueba y publica las tres librerias de Argus.
+#
+# Publicacion de CONFIANZA (OIDC), no tokens. PyPI verifica la identidad del
+# workflow de GitHub y emite una credencial de un solo uso. Esto importa por dos
+# motivos, y el segundo es el que decidio el diseno:
+#
+#  1. No hay ningun secreto que rotar, filtrar o guardar en el repositorio.
+#  2. La procedencia es comprobable desde fuera: cualquiera puede ver que el
+#     artefacto salio de ESTE repositorio y de ESTE workflow. Es la respuesta
+#     real a "aceptar un binario de un equipo hermano es una decision de cadena
+#     de suministro" — la objecion que motivo todo esto (D-075).
+
+name: publicar
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Las mismas que declaramos soportar en `requires-python`. Declarar
+        # una version que ningun CI ejercita no es una promesa, es un numero.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --all-extras --dev
+      - name: Pruebas
+        run: uv run pytest -q
+      - name: Las convenciones generadas coinciden con el modelo
+        run: uv run python tools/gen_semconv.py --check
+
+  construir:
+    needs: probar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Construir rueda y sdist de cada paquete
+        # El sdist NO es opcional: es lo que hace auditable el paquete. Una
+        # rueda es un binario; el sdist lleva el codigo que lo genero.
+        run: |
+          for p in argus-obs-semconv argus-obs-schemas argus-obs-sdk; do
+            uv build --package "$p" --out-dir dist
+          done
+      - name: Comprobar los metadatos antes de publicar
+        run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paquetes
+          path: dist/
+
+  publicar-en-testpypi:
+    needs: construir
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write          # lo unico que hace falta para OIDC
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: paquetes, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publicar-en-pypi:
+    # TestPyPI primero, SIEMPRE. Una version subida a PyPI no se puede
+    # reemplazar: si sale mal, el numero queda quemado para siempre.
+    needs: publicar-en-testpypi
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: paquetes, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1
