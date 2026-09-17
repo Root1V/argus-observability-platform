@@ -22,3 +22,9 @@ platform/secrets/
 # El índice se GENERA desde dist/ con scripts/construir_indice.py.
 # Versionar ruedas es versionar binarios que ya sabemos reproducir.
 platform/indice/simple/
+
+# La coordinacion con otros equipos vive FUERA del repositorio, en
+# ~/Documents/Victor/<equipo>_argus/. Aqui hay incidentes suyos, rutas de su
+# codigo y sus identificadores de backlog: es informacion de ellos y este
+# repositorio es publico. Ver docs/coordinacion.md.
+docs/solicitudes/
