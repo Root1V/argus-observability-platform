@@ -14,6 +14,9 @@ name: publicar
 
 on:
   push:
+    # `main` ademas de los tags: el repositorio es publico y un `main` roto se
+    # ve. Publicar solo ocurre en tags, pero PROBAR ocurre siempre.
+    branches: ["main"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
