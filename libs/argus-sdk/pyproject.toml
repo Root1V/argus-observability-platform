@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-sdk"
-version = "1.0.0a2"
+version = "1.0.0a3"
 description = "SDK de observabilidad de Argus. Para APLICACIONES: configura trazas, metricas y logs con una linea."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,7 @@ classifiers = [
 # arrastrar Starlette, y una app que no habla con Kafka no debe instalar su
 # instrumentacion. Todo lo demas va en extras.
 dependencies = [
-    "argus-obs-semconv>=1.0.0a2,<2",
+    "argus-obs-semconv>=1.0.0a3,<2",
     "opentelemetry-sdk>=1.30,<2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.30,<2",
 ]
