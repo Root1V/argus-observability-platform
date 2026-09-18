@@ -78,7 +78,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-11` | 🚧 | Adoptar en 3 apps reales | **3 servicios de Prometheus conectados y verificados** (689/689 spans GenAI). Pero los tres son APIs HTTP: falta una app con cola — D-068 |
 | `F1-28` | ✅ | **`make pilot-status`** | El criterio 8 se mide solo; cada fallo marcado reinicia el reloj — D-071 |
 | `F1-27` | 🚧 | **Criterio 5: una traza cruzando una cola** | **Mecanismo demostrado** con una reproducción de la forma de Prosodia: una traza, dos procesos, una cola. Falta con tráfico real — D-073 |
-| `S-09` | ⏳ | **Prosodia** (`video-translator/`) | Canal abierto con A-01..A-06. Esperan responder si el enfoque encaja — D-073, D-074 |
+| `S-09` | ⏳ | **Prosodia** (`video-translator/`) | `RM-41` desbloqueada: el paquete está en PyPI. Esperando que lo apliquen — D-076 |
 | `F1-12` | ✅ | Perfil `genai`: Langfuse arrancado y verificado | Provisionado sin UI; mismo `trace_id` en ClickHouse y Langfuse — D-039 |
 | `F1-13` | ✅ | **Librerías instalables desde fuera del workspace** | `make wheels` y etiquetas de git; nombres `argus-obs-*` — D-035, D-036 |
 | `F1-14` | ✅ | **Dashboards** | Grafana provisionado: una aplicación y la plataforma — D-037 |
@@ -280,8 +280,8 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-07` | ✅ | Grafana con dashboards provisionados | Dos: una aplicación y la plataforma — D-037 |
 | `B-08` | 💭 | Vistas materializadas de ClickHouse para burn-rate | Camino templado, si vmalert se queda corto |
 | `B-09` | 💭 | Instrumentación mínima del núcleo **Rust** de AIBank | Crates pre-1.0; acotar a las fronteras |
-| `B-10` | ✅ | **Índice de paquetes PEP 503** | Estático, no devpi. `make indice`. pip verifica el sha256; uv no — D-075 |
-| `B-14` | ⏳ | **Registrar `argus-obs-*` en PyPI defensivamente** | **Sube**: con `--extra-index-url` y consumidores externos, es la mitigación real de la confusión de dependencias — D-075 |
+| `B-10` | ✅ | **Publicado en PyPI** | El índice privado fue el paso intermedio. Trusted publishing OIDC, sin tokens — D-075, D-076 |
+| `B-14` | ✅ | **Nombres `argus-obs-*` registrados** | Cerrado al publicar: los tres son nuestros en PyPI y TestPyPI — D-076 |
 | `B-18` | ⏳ | **Validar los atributos de un documento contra el modelo** | Mandamos a Prometheus tres nombres inventados y los implementaron. El generador no cubre lo que se escribe a mano — D-067 |
 | `B-17` | ⏳ | **Rotar `ARGUS_GATEWAY_TOKEN`** | Estuvo versionado desde `78918b9`. `make rotate-token`; no afecta a equipos externos — D-066 |
 | `B-15` | ⏳ | **Métricas del host REAL en macOS** | El `hostmetrics` mide la VM de Docker: un núcleo al 98,7% durante 62h fue invisible. Candidato: el dead man's switch, que ya corre nativo — D-063 |

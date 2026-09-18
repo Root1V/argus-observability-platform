@@ -2053,3 +2053,52 @@ prioridad ahora que hay consumidores externos.
 **Cómo se encontró todo esto**: instalando desde el índice en un entorno limpio,
 como lo haría alguien de fuera. Ninguno de los tres hallazgos sale de leer la
 especificación de PEP 503.
+
+---
+
+## D-076 · Publicar en PyPI, no montar un índice privado
+
+**Contexto**. `B-10` llevaba días como «índice PyPI privado», y lo construimos
+(D-075). Funcionaba. Pero al escribirle a los dos equipos cómo usarlo, la
+explicación necesitaba tres advertencias —`--extra-index-url` y no
+`--index-url`, pip verifica el hash pero uv no, y la confusión de dependencias
+sigue abierta— y eso es la señal de que la solución no era la buena.
+
+**Decisión**. PyPI y TestPyPI, por *trusted publishing* desde GitHub Actions.
+
+**Lo que resuelve de golpe, y que el índice privado no:**
+
+| | índice privado | PyPI |
+|---|---|---|
+| Instalación | `--extra-index-url` + avisos | `pip install argus-obs-sdk` |
+| Integridad | pip sí, uv no | ambos, siempre |
+| Confusión de dependencias | abierta (`B-14`) | **cerrada**: los nombres son nuestros |
+| Auditoría del código | ninguna | `sdist` publicado |
+| Procedencia | ninguna | OIDC: verificable sin confiar en nosotros |
+
+**El punto que de verdad importaba** no era la comodidad de instalar: era la
+objeción de Prometheus, *«aceptar un binario por SHA de un equipo hermano es una
+decisión de cadena de suministro»*. El índice privado la esquivaba; el *trusted
+publishing* la responde — **no existe ningún token**, PyPI verifica la identidad
+del workflow y cualquiera puede comprobar de qué repositorio salió el artefacto.
+
+**Consecuencias.**
+- `B-14` (registrar los nombres defensivamente) se cierra por publicar: ya son
+  nuestros en los dos índices.
+- El índice estático se queda, pero deja de ser el camino recomendado: sirve
+  para probar una versión sin quemar un número.
+- Un entorno de GitHub **por paquete** (`pypi-argus-obs-sdk`, etc.). PyPI exige
+  que un `pending publisher` sea único por (owner, repo, workflow, entorno), así
+  que con un solo entorno el primer paquete se registra y los otros dos no
+  pueden. Efecto lateral bueno: cada trabajo sube una sola carpeta y ninguno
+  puede publicar un paquete que no le toca.
+
+**Por qué `1.0.0a3` y no `a2`**: la rueda que circuló entre los equipos tiene un
+`sha256` distinto del que se construye ahora —se le añadieron autor, URLs y
+clasificadores—. En PyPI las versiones son **inmutables**, así que publicar `a2`
+habría dejado dos artefactos distintos reclamando el mismo número para siempre.
+Quemar un número es barato; esa ambigüedad se descubre en el peor momento.
+
+Que Prometheus declinara instalar la rueda **y lo dijera explícitamente** evitó
+el problema. Si la hubieran instalado en silencio, hoy tendrían un `a2` que no
+coincide con el `a2` público.
