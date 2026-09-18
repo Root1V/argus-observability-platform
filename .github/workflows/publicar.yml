@@ -53,22 +53,45 @@ jobs:
       - name: Construir rueda y sdist de cada paquete
         # El sdist NO es opcional: es lo que hace auditable el paquete. Una
         # rueda es un binario; el sdist lleva el codigo que lo genero.
+        #
+        # Cada paquete en SU carpeta: los trabajos de publicacion suben una sola
+        # y asi ninguno puede publicar de mas por accidente.
         run: |
           for p in argus-obs-semconv argus-obs-schemas argus-obs-sdk; do
-            uv build --package "$p" --out-dir dist
+            uv build --package "$p" --out-dir "dist/$p"
           done
+          # `uv build` deja un .gitignore en cada carpeta y la accion de subida
+          # hace `twine upload <carpeta>/*`, que reventaria con el.
+          find dist -type f ! -name '*.whl' ! -name '*.tar.gz' -delete
+          ls -R dist
       - name: Comprobar los metadatos antes de publicar
-        run: uvx twine check dist/*
+        run: uvx twine check dist/*/*
       - uses: actions/upload-artifact@v4
         with:
           name: paquetes
           path: dist/
 
+  # UN ENTORNO POR PAQUETE, y el motivo no es estetico.
+  #
+  # PyPI exige que un `pending publisher` sea unico por la combinacion
+  # (owner, repo, workflow, entorno). Con un solo entorno, el primer paquete se
+  # registra y el segundo falla con "already been registered for a different
+  # project name". Dandole a cada uno su entorno, las tres configuraciones son
+  # distintas y los tres registros conviven.
+  #
+  # Efecto secundario bueno: cada trabajo sube UNA carpeta, asi que ninguno
+  # puede publicar un paquete que no le toca.
   publicar-en-testpypi:
     needs: construir
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: testpypi
+    strategy:
+      # Sin `fail-fast`: si uno falla, los demas deben intentarlo igual. Que
+      # `semconv` se publique y `sdk` no es mejor que quedarse sin ninguno.
+      fail-fast: false
+      matrix:
+        paquete: [argus-obs-semconv, argus-obs-schemas, argus-obs-sdk]
+    environment: testpypi-${{ matrix.paquete }}
     permissions:
       id-token: write          # lo unico que hace falta para OIDC
     steps:
@@ -77,6 +100,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/${{ matrix.paquete }}
 
   publicar-en-pypi:
     # TestPyPI primero, SIEMPRE. Una version subida a PyPI no se puede
@@ -84,10 +108,16 @@ jobs:
     needs: publicar-en-testpypi
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    environment: pypi
+    strategy:
+      fail-fast: false
+      matrix:
+        paquete: [argus-obs-semconv, argus-obs-schemas, argus-obs-sdk]
+    environment: pypi-${{ matrix.paquete }}
     permissions:
       id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with: { name: paquetes, path: dist/ }
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/${{ matrix.paquete }}
