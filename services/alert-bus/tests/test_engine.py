@@ -219,7 +219,6 @@ def test_los_dos_nombres_de_un_renombrado_abren_un_solo_incidente(tmp_path) -> N
     notifica dos veces — justo lo que la deduplicacion existe para evitar.
     """
     import yaml
-
     from alert_bus.registry import Registry
 
     ruta = tmp_path / "apps.yaml"

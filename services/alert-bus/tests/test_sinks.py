@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
@@ -295,17 +296,32 @@ def test_el_despacho_no_bloquea_la_ingesta(incidente: Incident) -> None:
 
 
 def test_un_canal_caido_no_impide_que_los_demas_reciban(incidente: Incident) -> None:
+    """Con UN SOLO worker, para que la propiedad se vea de verdad.
+
+    Un canal muerto ahora se reintenta (D-080), y el reintento espera segundos.
+    Si esa espera ocurriera dentro del hilo trabajador, con un worker el canal
+    sano no recibiria nada hasta que el muerto se rindiera. Por eso el
+    reintento se REPROGRAMA en vez de dormir: aqui se comprueba que el sano
+    cobra enseguida, sin esperar al muerto.
+    """
     memoria = MemorySink()
     despachador = Dispatcher(workers=1)
     despachador.start()
     try:
         despachador.submit([FailingSink(), memoria], incidente, update=False)
-        despachador.drain(timeout_s=3)
+        # Deliberadamente corto: menos que el primer reintento del canal roto.
+        limite = time.monotonic() + 1.0
+        while not memoria.opened and time.monotonic() < limite:
+            time.sleep(0.01)
+        assert len(memoria.opened) == 1, "el canal sano espero al muerto"
+
+        # Y el fallo acaba contandose cuando se agotan los intentos.
+        despachador.drain(timeout_s=15)
     finally:
         despachador.stop(timeout_s=2)
 
-    assert len(memoria.opened) == 1
     assert despachador.stats["fallidos"] == 1
+    assert despachador.por_canal["failing"]["fallidos"] == 1
 
 
 def test_la_cola_esta_acotada_y_cuenta_los_descartes(incidente: Incident) -> None:

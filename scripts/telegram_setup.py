@@ -128,7 +128,7 @@ def main() -> int:
     print(f"  {VERDE}OK  {OFF} escrito en platform/.env")
 
     print(f"\n{BOLD}Ahora:{OFF}")
-    print(f"  make up && make channel-test\n")
+    print("  make up && make channel-test\n")
     return 0
 
 

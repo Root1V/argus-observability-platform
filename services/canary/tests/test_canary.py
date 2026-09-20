@@ -283,7 +283,6 @@ def test_un_componente_sin_conectar_no_genera_sonda_de_silencio(tmp_path) -> Non
     ensena a la guardia a ignorar al canario.
     """
     import yaml
-
     from canary.build import cargar
     from canary.config import Settings
     from canary.probes import SondaSilencio
@@ -378,7 +377,6 @@ async def test_el_canario_recarga_el_registro_sin_reiniciar(tmp_path) -> None:
     se queda sin vigilar sin que nadie lo note.
     """
     import yaml
-
     from canary.build import cargar, firma
     from canary.config import Settings
     from canary.probes import SondaSilencio

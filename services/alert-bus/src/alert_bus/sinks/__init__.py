@@ -15,8 +15,8 @@ from .base import ConsoleSink, FailingSink, JSONSink, MemorySink, Sink
 from .dispatch import Dispatcher, InlineDispatcher
 from .email import EmailSink
 from .googlechat import GoogleChatSink
-from .telegram import TelegramSink
 from .render import cuerpo, resumen, texto_plano, titular
+from .telegram import TelegramSink
 from .whatsapp import WhatsAppSink
 
 __all__ = [

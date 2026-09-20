@@ -167,7 +167,6 @@ async def test_el_ticker_recarga_el_registro(tmp_path) -> None:
     import asyncio
 
     import yaml
-
     from alert_bus.app import _ticker
     from alert_bus.engine import Engine
 
