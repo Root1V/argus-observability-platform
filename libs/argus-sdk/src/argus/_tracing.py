@@ -30,11 +30,17 @@ from ._config import Config
 
 
 def _build_exporter(cfg: Config) -> Any:
-    """Construye el exportador OTLP.
+    """Construye el exportador OTLP segun el transporte resuelto.
 
-    gRPC por defecto: menor sobrecoste y latencia, y eso importa para el camino
-    caliente de deteccion. HTTP solo donde el destino lo exige.
+    gRPC cuando esta disponible: menor sobrecoste y latencia, y eso importa
+    para el camino caliente de deteccion. JSON cuando el proceso no puede
+    cargar protobuf, que es un caso real y no una hipotesis (D-077).
     """
+    if cfg.protocol == "http/json":
+        from ._otlp_json import ExportadorTrazasJSON
+
+        return ExportadorTrazasJSON(cfg.endpoint, cfg.headers or None)
+
     if cfg.protocol == "http/protobuf":
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as HTTPExporter
 

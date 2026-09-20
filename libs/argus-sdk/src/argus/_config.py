@@ -11,6 +11,7 @@ variable OTEL_* estandar > valor por defecto.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import socket
 import uuid
@@ -26,6 +27,35 @@ _TRUE: Final = frozenset({"1", "true", "yes", "on"})
 # tocar ni una aplicacion, y lo que hace que una app no se entere de que el
 # central esta suspendido.
 DEFAULT_ENDPOINT: Final = "http://localhost:4317"
+DEFAULT_ENDPOINT_HTTP: Final = "http://localhost:4318"
+
+Protocolo = Literal["grpc", "http/protobuf", "http/json"]
+
+
+def _disponible(modulo: str) -> bool:
+    """Si el paquete esta instalado, sin importarlo."""
+    try:
+        return importlib.util.find_spec(modulo) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _protocolo_por_defecto() -> Protocolo:
+    """Elige transporte segun lo que este instalado.
+
+    Los exportadores oficiales de OTLP —gRPC y HTTP por igual— arrastran
+    `opentelemetry-proto`, que exige `protobuf>=5.0`. Hay aplicaciones reales
+    que no pueden declarar ese rango (D-077), asi que desde 1.0.0a4 esos
+    exportadores viven en extras y el nucleo no depende de protobuf.
+
+    El orden preserva el comportamiento de quien ya tiene el extra instalado:
+    gRPC si esta, HTTP/protobuf si esta, y JSON —que no necesita nada— si no.
+    """
+    if _disponible("opentelemetry.exporter.otlp.proto.grpc"):
+        return "grpc"
+    if _disponible("opentelemetry.exporter.otlp.proto.http"):
+        return "http/protobuf"
+    return "http/json"
 
 
 def _flag(name: str, default: bool = False) -> bool:
@@ -63,7 +93,7 @@ class Config:
 
     # --- Transporte ----------------------------------------------------------
     endpoint: str = ""
-    protocol: Literal["grpc", "http/protobuf"] = "grpc"
+    protocol: Protocolo = "grpc"
     headers: dict[str, str] = field(default_factory=dict)
 
     # --- Comportamiento ------------------------------------------------------
@@ -90,15 +120,18 @@ class Config:
             or "unknown-service"
         )
 
+        protocol = os.getenv("ARGUS_PROTOCOL") or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or ""
+        if protocol not in ("grpc", "http/protobuf", "http/json"):
+            protocol = _protocolo_por_defecto()
+
+        # El puerto por defecto depende del transporte: 4317 es gRPC y 4318 es
+        # HTTP. Heredar el de gRPC al caer a JSON seria degradar a un
+        # exportador que funciona apuntando a un puerto que no contesta.
         endpoint = (
             os.getenv("ARGUS_ENDPOINT")
             or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-            or DEFAULT_ENDPOINT
+            or (DEFAULT_ENDPOINT if protocol == "grpc" else DEFAULT_ENDPOINT_HTTP)
         )
-
-        protocol = os.getenv("ARGUS_PROTOCOL") or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or "grpc"
-        if protocol not in ("grpc", "http/protobuf"):
-            protocol = "grpc"
 
         propagate = (os.getenv("ARGUS_PROPAGATE") or "never").strip().lower()
         if propagate not in ("never", "trusted", "always"):

@@ -85,29 +85,19 @@ para aquí y averigua por qué: todo lo demás depende de esto.
 
 ## Paso 2 — Instalar la librería
 
-Durante el piloto se instala desde una **etiqueta de git**: da versionado real,
-es reproducible, funciona dentro de contenedores y no necesita infraestructura.
+Desde PyPI, como cualquier otra dependencia. Nada de `--find-links`, ni de
+índices privados, ni de ruedas pasadas a mano.
 
 ```bash
-# En el repo de Argus: etiqueta una versión
-make release V=1.0.0a2
+pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a4"
 ```
 
-Y luego, para saber **qué teclear exactamente** en el repo de tu aplicación:
+En el `pyproject.toml` de tu aplicación:
 
-```bash
-make install-cmd
-```
-
-Imprime el comando con la ruta absoluta y la versión ya rellenadas. **Cópialo
-de ahí**, no de esta guía: una ruta escrita a mano es la forma más tonta de
-perder media hora.
-
-Sale algo así:
-
-```
-uv pip install --find-links /Users/tu-usuario/…/app_monitoring_explainability/dist \
-  'argus-obs-sdk[asgi,client,sql]==1.0.0a2'
+```toml
+dependencies = [
+  "argus-obs-sdk[asgi,client,sql]==1.0.0a4",
+]
 ```
 
 Los extras, según lo que use tu app:
@@ -120,31 +110,22 @@ Los extras, según lo que use tu app:
 | `celery` | Colas Celery |
 | `kafka` | Kafka, Redpanda |
 | `genai` | LangChain, LangGraph, Ollama, vLLM… (activa OpenLIT) |
+| `grpc` | Exportar por OTLP/gRPC en vez de JSON — ver el aviso de abajo |
 
 > **La versión va explícita, y no es opcional.** Con un prelanzamiento
-> (`1.0.0aN`), `uv pip install argus-obs-sdk` a secas falla con
-> *«pre-releases weren't enabled»*, que no apunta a la causa. Poner `==1.0.0a2`
-> lo resuelve. Es la contrapartida —deseada— de que un `pip install` normal
-> nunca se lleve un prelanzamiento por accidente (D-038).
+> (`1.0.0aN`), `pip install argus-obs-sdk` a secas no se lo lleva. Hace falta la
+> versión exacta, o `--pre`. Es la contrapartida —deseada— de que un
+> `pip install` normal nunca se lleve un prelanzamiento por accidente (D-038).
 
-Si la aplicación vive en **otra máquina**, `make install-cmd` imprime también la
-variante desde etiqueta de git, que no necesita acceso al directorio `dist`.
+> **El núcleo no depende de protobuf, y es a propósito.** Todos los exportadores
+> OTLP oficiales exigen `protobuf>=5.0`, lo que hace **imposible** instalar el
+> SDK en aplicaciones ancladas a `protobuf<3.20` — media pila de audio y ML lo
+> está. Por defecto exportamos por **OTLP/HTTP+JSON**, que no necesita nada.
+> Si quieres el binario y tus dependencias te lo permiten, añade el extra
+> `grpc`; el SDK lo detecta y lo usa solo (D-077).
 
-Cuando ajustemos algo del SDK: `make release V=1.0.0a3`, y tu app sube la
-versión en su comando de instalación.
-
-> **No usamos TestPyPI**, aunque parezca hecho para esto: sus dependencias no
-> están ahí de forma fiable, así que haría falta apuntar también a PyPI real —
-> y eso reintroduce justo la confusión de dependencias que el renombrado
-> eliminó (D-036).
-
-Los extras según lo que use tu app: `asgi` para FastAPI, `client` para
-httpx/requests, `sql` para SQLAlchemy, `celery`, `kafka`, `redis`, `genai`.
-
-> **Ojo con el nombre.** Es `argus-obs-sdk`, no `argus-sdk`: ese último existe
-> en PyPI y es de otra persona (D-035). El nombre de import sí es `argus`.
-
----
+> **Ojo con el puerto.** JSON habla HTTP: el puerto por defecto es **4318**, no
+> 4317. Si fijas `ARGUS_ENDPOINT` a mano, que coincida con el transporte.
 
 ## Paso 3 — Las dos líneas
 

@@ -54,6 +54,20 @@ receivers:
         auth:
           authenticator: bearertokenauth/server
 
+
+  # El Collector se mide a si mismo. Expone sus metricas en :8888 desde el
+  # principio, pero NADIE las recogia: por eso el agente pudo tirar el 100% de
+  # lo que le mandaban durante dos dias sin que nada avisara (D-079). Un plano
+  # de observabilidad que no se observa a si mismo no puede distinguir
+  # "no pasa nada" de "no me esta llegando nada".
+  prometheus/interno:
+    config:
+      scrape_configs:
+        - job_name: otelcol
+          scrape_interval: 15s
+          static_configs:
+            - targets: [127.0.0.1:8888]
+
 processors:
   memory_limiter:
     check_interval: 1s
@@ -62,9 +76,15 @@ processors:
 
   resource/gateway:
     attributes:
+      # `insert`, NO `upsert`: el gateway ve pasar la telemetria del agente,
+      # incluidas las metricas internas del propio agente. Con `upsert` les
+      # sellaba encima su propio nivel, y entonces NADA en el almacen llevaba
+      # `tier=agent` — asi que la regla que vigila si el agente ha enmudecido
+      # se disparaba siempre, incluso con el agente sano (D-079). Un
+      # detector que grita siempre es tan inutil como uno que no grita nunca.
       - key: argus.collector.tier
         value: gateway
-        action: upsert
+        action: insert
       # Un servicio que emite sin declararse aparece igualmente, como
       # provisional. Descubrir sin avisar llena el registro de basura; avisar
       # sin descubrir lo deja vacio. Hacemos las dos cosas.
@@ -358,7 +378,7 @@ service:
       exporters: [clickhouse]
 
     metrics:
-      receivers: [otlp, spanmetrics]
+      receivers: [otlp, spanmetrics, prometheus/interno]
       processors: [memory_limiter, resource/gateway, batch/clickhouse]
       exporters: [clickhouse, prometheusremotewrite]
 

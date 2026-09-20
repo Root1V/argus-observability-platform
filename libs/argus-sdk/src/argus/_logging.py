@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 import warnings
+from datetime import datetime
 from typing import Any
 
 from argus_semconv import attributes as A
@@ -66,9 +67,20 @@ class JSONFormatter(logging.Formatter):
         self._service = service
         self._namespace = namespace
 
+    @staticmethod
+    def _marca(record: logging.LogRecord) -> str:
+        """Marca de tiempo ISO-8601 con microsegundos y zona.
+
+        NO se usa `formatTime`: por dentro llama a `time.strftime` sobre un
+        `struct_time`, que no conoce `%f` y lo copia tal cual. El resultado era
+        un literal `.f` donde deberian ir los microsegundos, y una marca sin
+        subsegundo no permite ordenar dos logs de la misma peticion.
+        """
+        return datetime.fromtimestamp(record.created).astimezone().isoformat()
+
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%f%z"),
+            "timestamp": self._marca(record),
             "level": record.levelname.lower(),
             "app": self._namespace,
             "service": self._service,
@@ -138,7 +150,11 @@ def _bridge_to_otlp(cfg: Config) -> None:
         from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
-        if cfg.protocol == "http/protobuf":
+        if cfg.protocol == "http/json":
+            from ._otlp_json import crear_exportador_logs_json
+
+            exporter = crear_exportador_logs_json(cfg.endpoint, cfg.headers or None)
+        elif cfg.protocol == "http/protobuf":
             from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 
             endpoint = cfg.endpoint.rstrip("/")

@@ -39,28 +39,9 @@ groups:
         annotations:
           summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }}: quema lenta del presupuesto de error"
 
-  - name: argus.platform
-    interval: 30s
-    rules:
-      # La plataforma se vigila a si misma. Si el Collector descarta datos,
-      # todo lo que viene despues esta ciego y no lo sabe.
-      - alert: ArgusCollectorDroppingData
-        expr: rate(otelcol_processor_dropped_spans[5m]) > 0 or rate(otelcol_exporter_send_failed_spans[5m]) > 0
-        for: 5m
-        labels:
-          severity: page
-        annotations:
-          summary: "El Collector esta descartando telemetria"
-
-      # La cola en disco de un agente creciendo significa que el plano central
-      # lleva rato inalcanzable. Es el aviso de que el portatil esta suspendido
-      # o fuera de la red, y de que hay un limite: cuando el disco se llene, se
-      # pierde.
-      - alert: ArgusAgentQueueGrowing
-        expr: otelcol_exporter_queue_size > 30000
-        for: 10m
-        labels:
-          severity: ticket
-          annotations_hint: "El plano central lleva rato inalcanzable"
-        annotations:
-          summary: "Cola del Collector agente creciendo: {{ $value }} elementos"
+  # El grupo argus.platform vivia aqui con dos reglas que NUNCA pudieron
+  # disparar: estaban escritas contra `otelcol_exporter_send_failed_spans` y
+  # `otelcol_processor_dropped_spans`, nombres que no existen — los reales
+  # llevan sufijo `_total`. Una regla contra una metrica inexistente no da
+  # error: se queda en "sin datos", que se parece muchisimo a "todo bien".
+  # Sustituidas por platform/rules/plataforma.yaml (D-079).

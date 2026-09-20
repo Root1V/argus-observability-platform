@@ -6,7 +6,6 @@ from argus._config import Config
 from argus._resource import build_resource
 
 
-
 def test_un_relleno_nuestro_no_pisa_la_variable_estandar(monkeypatch) -> None:
     """Es el mismo fallo que pedimos arreglar a otro equipo, en nuestra casa.
 

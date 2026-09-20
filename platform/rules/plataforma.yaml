@@ -1,0 +1,96 @@
+# La plataforma vigilandose a si misma.
+#
+# Estas reglas nacen de un fallo concreto: al rotar el token del gateway, el
+# Collector agente se quedo con el viejo y devolvio 401 en CADA exportacion
+# durante dos dias. Tiraba el 100% de lo que le mandaban las aplicaciones y
+# NADA aviso, porque las metricas internas del Collector no las recogia nadie
+# (D-079).
+#
+# El modo de fallo que cubren es el peor de todos: no se cae nada, no hay
+# errores en ninguna app, y los paneles se quedan tranquilamente vacios. El
+# silencio parece salud.
+groups:
+  - name: argus.plataforma
+    interval: 15s
+    rules:
+      # ---------------------------------------------------------------------
+      # Un solo fallo de exportacion sostenido ya es telemetria perdida: la
+      # cola reintenta, pero un 401 no es reintentable y se descarta. No hay
+      # umbral "aceptable" aqui, solo tolerancia a un pico transitorio.
+      - alert: ArgusCollectorDescartaTelemetria
+        expr: |
+          sum by (job, exporter) (
+            rate(otelcol_exporter_send_failed_spans_total[5m])
+            + rate(otelcol_exporter_send_failed_metric_points_total[5m])
+            + rate(otelcol_exporter_send_failed_log_records_total[5m])
+          ) > 0
+        for: 2m
+        labels:
+          severity: page
+          argus_app: argus-platform
+          argus_component: collector
+        annotations:
+          summary: "El Collector esta descartando telemetria ({{ $labels.exporter }})"
+          description: >-
+            {{ $labels.exporter }} lleva 2 minutos sin poder exportar. Si es
+            401, casi seguro el token no coincide con el del gateway: comprueba
+            que platform/.env.agent se regenero tras la ultima rotacion
+            (`make agent` lo rehace siempre).
+          runbook: docs/runbooks/plataforma.md#collector-descarta
+
+      # ---------------------------------------------------------------------
+      # La cola persistente es lo que permite cerrar la tapa del portatil sin
+      # perder nada. Si se llena, deja de ser un colchon y empieza a descartar.
+      - alert: ArgusColaDelAgenteCreciendo
+        expr: otelcol_exporter_queue_size > 0.8 * otelcol_exporter_queue_capacity
+        for: 10m
+        labels:
+          severity: ticket
+          argus_app: argus-platform
+          argus_component: collector
+        annotations:
+          summary: "La cola del Collector va al 80% ({{ $labels.exporter }})"
+          description: >-
+            El destino lleva rato inalcanzable o lento. Mientras quepa no se
+            pierde nada; cuando se llene, si.
+
+      # ---------------------------------------------------------------------
+      # LA REGLA QUE VIGILA A LAS DE ARRIBA, y la unica que puede cazar un
+      # agente roto.
+      #
+      # El agente manda sus PROPIAS metricas por el mismo exportador que se le
+      # rompe. Cuando falla, sus series dejan de llegar, asi que
+      # `send_failed > 0` no puede dispararse por el: no hay a quien mirar.
+      # Solo la AUSENCIA lo detecta.
+      #
+      # Por nivel y no global: mientras el gateway siga reportando, un
+      # `absent()` sin filtro no ve nada raro — que es exactamente como dos
+      # dias de perdida total pasaron desapercibidos (D-079).
+      - alert: ArgusAgenteSinAutoMetricas
+        expr: absent(otelcol_exporter_sent_spans_total{argus_collector_tier="agent"})
+        for: 5m
+        labels:
+          severity: page
+          argus_app: argus-platform
+          argus_component: collector-agent
+        annotations:
+          summary: "El Collector agente lleva 5 minutos sin reportarse"
+          description: >-
+            O esta parado, o no puede exportar. Sus metricas viajan por el mismo
+            exportador que se le rompe, asi que su silencio ES la senal. Mira
+            `docker logs argus-agent-agent-1 | grep "Status Code"`.
+          runbook: docs/runbooks/plataforma.md#collector-descarta
+
+      - alert: ArgusGatewaySinAutoMetricas
+        expr: absent(otelcol_exporter_sent_spans_total{argus_collector_tier="gateway"})
+        for: 5m
+        labels:
+          severity: page
+          argus_app: argus-platform
+          argus_component: collector-gateway
+        annotations:
+          summary: "El gateway lleva 5 minutos sin reportarse"
+          description: >-
+            Sin sus metricas internas no se puede distinguir "no pasa nada" de
+            "no me esta llegando nada". Revisa el receptor prometheus/interno.
+          runbook: docs/runbooks/plataforma.md#collector-descarta

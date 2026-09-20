@@ -50,10 +50,13 @@ logs:  ## Sigue los logs del Collector
 	$(COMPOSE) logs -f collector
 
 agent:  ## Arranca el Collector agente de esta maquina (puertos 4317/4318)
-	@test -f platform/.env.agent || { \
-	  set -a; . platform/.env; set +a; \
-	  printf 'ARGUS_GATEWAY_ENDPOINT=collector:4318\nARGUS_ALERTBUS_ENDPOINT=alert-bus:8080\nARGUS_GATEWAY_TOKEN=%s\nARGUS_INSECURE=true\n' "$$ARGUS_GATEWAY_TOKEN" > platform/.env.agent; \
-	  echo "platform/.env.agent generado"; }
+	@# SIEMPRE se regenera desde platform/.env. Antes solo se generaba si
+	@# faltaba, y eso convirtio un fichero DERIVADO en una copia con vida
+	@# propia: al rotar el token del gateway, el agente siguio con el viejo y
+	@# tiro el 100% de lo que le mandaban las aplicaciones durante dos dias,
+	@# sin que nada avisara (D-079).
+	@set -a; . platform/.env; set +a; \
+	  printf 'ARGUS_GATEWAY_ENDPOINT=collector:4318\nARGUS_ALERTBUS_ENDPOINT=alert-bus:8080\nARGUS_GATEWAY_TOKEN=%s\nARGUS_INSECURE=true\n' "$$ARGUS_GATEWAY_TOKEN" > platform/.env.agent
 	docker compose -f platform/compose.agent.yaml --env-file platform/.env.agent up -d
 	@until curl -sf http://127.0.0.1:13134/ >/dev/null 2>&1; do sleep 2; done
 	@echo "Agente listo. Las aplicaciones exportan a localhost:4317 o :4318"
