@@ -41,6 +41,17 @@ groups:
       # multiplica las llamadas por tarea mas rapido de lo que bajan los
       # precios. Lo que hay que vigilar no es el precio unitario, es el coste
       # POR EJECUCION.
+      #
+      # OJO tras 1.0.0a5: `argus.feature` ya no se rellena con `"unknown"`
+      # cuando nadie la declara, se OMITE (D-082). Las series sin atribuir
+      # pasan de agruparse bajo `unknown` a agruparse bajo la etiqueta vacia,
+      # asi que durante los 7 dias que dura la ventana `offset` los dos lados
+      # de la comparacion no casan para esas series y la regla no dispara por
+      # ellas. Es transitorio y se cura solo; se deja escrito para que nadie
+      # persiga un hueco que tiene explicacion.
+      #
+      # No se compensa con `or` ni rellenando en la consulta: eso reintroduce
+      # por detras justo la ambiguedad que quitamos por delante.
       - alert: ArgusFugaDeCoste
         expr: |
           sum by (argus_app, argus_feature, gen_ai_request_model) (rate(argus_cost_usd_total[15m]))
