@@ -17,7 +17,7 @@ re-exporta ademas de configurar la telemetria.
 
 from __future__ import annotations
 
-from . import attributes
+from . import attributes, metrics
 from ._content import capture_enabled, mask
 from .genai import GenAISpan, agent, documents, genai, retrieval, tool
 from .guardrails import AgentRun, Budget, GuardrailBreach, current_run
@@ -38,6 +38,9 @@ SEMCONV_VERSION = attributes.SEMCONV_VERSION
 __all__ = [
     # Convenciones generadas
     "attributes",
+    # Metricas GenAI, emitidas desde la API. Publico desde 1.0.0a5: quien
+    # sirve inferencia las necesita y no puede importar de un modulo privado.
+    "metrics",
     # GenAI
     "genai",
     "retrieval",

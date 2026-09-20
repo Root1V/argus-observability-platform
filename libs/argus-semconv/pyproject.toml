@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-semconv"
-version = "1.0.0a4"
+version = "1.0.0a5"
 description = "Convenciones semanticas de Argus. Para LIBRERIAS: depende solo de la API de OpenTelemetry."
 readme = "README.md"
 requires-python = ">=3.11"

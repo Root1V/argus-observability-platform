@@ -98,14 +98,21 @@ GEN_AI_CONTENT_TRUNCATED: Final[str] = "gen_ai.content.truncated"
 # --------------------------------------------------------------------------
 # inference: Detalles de inferencia local que solo conoce el SDK cliente
 # --------------------------------------------------------------------------
-ARGUS_BACKEND_ID: Final[str] = "argus.backend.id"
-ARGUS_BACKEND_CIRCUIT_STATE: Final[str] = "argus.backend.circuit_state"
-ARGUS_BACKEND_CIRCUIT_STATE_VALUES: Final[tuple[str, ...]] = ("closed", "open", "half-open",)
-ARGUS_BACKEND_FALLBACK: Final[str] = "argus.backend.fallback"
-ARGUS_COST_USD: Final[str] = "argus.cost_usd"
-ARGUS_TTFT_MS: Final[str] = "argus.ttft_ms"
-ARGUS_FIRST_TOKEN_MS: Final[str] = "argus.first_token_ms"
-ARGUS_TOKENS_PER_SECOND: Final[str] = "argus.tokens_per_second"
+ARGUS_INFERENCE_BACKEND_ID: Final[str] = "argus.inference.backend_id"
+ARGUS_INFERENCE_CIRCUIT_STATE: Final[str] = "argus.inference.circuit_state"
+ARGUS_INFERENCE_CIRCUIT_STATE_VALUES: Final[tuple[str, ...]] = ("closed", "open", "half-open",)
+ARGUS_INFERENCE_FALLBACK: Final[str] = "argus.inference.fallback"
+ARGUS_INFERENCE_COST_USD: Final[str] = "argus.inference.cost_usd"
+ARGUS_INFERENCE_TTFT_MS: Final[str] = "argus.inference.ttft_ms"
+ARGUS_INFERENCE_FIRST_TOKEN_MS: Final[str] = "argus.inference.first_token_ms"
+ARGUS_INFERENCE_TOKENS_PER_SECOND: Final[str] = "argus.inference.tokens_per_second"
+
+# --------------------------------------------------------------------------
+# platform: Puestos por el Collector, no por quien emite
+# --------------------------------------------------------------------------
+ARGUS_SAMPLING_BASELINE_PCT: Final[str] = "argus.sampling.baseline_pct"
+ARGUS_COLLECTOR_TIER: Final[str] = "argus.collector.tier"
+ARGUS_COLLECTOR_TIER_VALUES: Final[tuple[str, ...]] = ("agent", "gateway",)
 
 # --------------------------------------------------------------------------
 # retrieval: Recuperacion de documentos

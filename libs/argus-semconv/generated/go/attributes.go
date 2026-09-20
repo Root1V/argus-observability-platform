@@ -91,13 +91,19 @@ const (
 
 // inference: Detalles de inferencia local que solo conoce el SDK cliente
 const (
-	ArgusBackendID = "argus.backend.id"
-	ArgusBackendCircuitState = "argus.backend.circuit_state"
-	ArgusBackendFallback = "argus.backend.fallback"
-	ArgusCostUSD = "argus.cost_usd"
-	ArgusTtftMs = "argus.ttft_ms"
-	ArgusFirstTokenMs = "argus.first_token_ms"
-	ArgusTokensPerSecond = "argus.tokens_per_second"
+	ArgusInferenceBackendID = "argus.inference.backend_id"
+	ArgusInferenceCircuitState = "argus.inference.circuit_state"
+	ArgusInferenceFallback = "argus.inference.fallback"
+	ArgusInferenceCostUSD = "argus.inference.cost_usd"
+	ArgusInferenceTtftMs = "argus.inference.ttft_ms"
+	ArgusInferenceFirstTokenMs = "argus.inference.first_token_ms"
+	ArgusInferenceTokensPerSecond = "argus.inference.tokens_per_second"
+)
+
+// platform: Puestos por el Collector, no por quien emite
+const (
+	ArgusSamplingBaselinePct = "argus.sampling.baseline_pct"
+	ArgusCollectorTier = "argus.collector.tier"
 )
 
 // retrieval: Recuperacion de documentos

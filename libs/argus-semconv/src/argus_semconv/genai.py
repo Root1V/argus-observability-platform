@@ -23,8 +23,9 @@ from typing import Any, Literal
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
-from . import _metrics_api as _metrics
+from . import _scope
 from . import attributes as A
+from . import metrics as _metrics
 from ._content import capture_enabled, serialize
 from .guardrails import AgentRun, Budget, GuardrailBreach, current_run, reset_run, set_run, signature
 
@@ -40,7 +41,11 @@ Operation = Literal[
 ]
 
 # El tracer se obtiene de la API global. Si no hay SDK, es un no-op tracer.
-_tracer = trace.get_tracer("argus-semconv", A.SEMCONV_VERSION)
+_tracer = trace.get_tracer(
+    "argus-semconv",
+    _scope.version_paquete(),
+    attributes=_scope.atributos(),
+)
 
 # Mapeo a los tipos de observacion de Langfuse. Su tabla de mapeo es CERRADA y
 # no incluye `retrieval`, asi que sin esto un span de recuperacion RAG no se
@@ -165,13 +170,13 @@ class GenAISpan:
         salud del backend—. Con modelos que razonan dejaron de coincidir, y
         fundirlos en un numero pierde una de las dos preguntas (D-061).
         """
-        self._set(A.ARGUS_BACKEND_ID, backend_id)
-        self._set(A.ARGUS_BACKEND_CIRCUIT_STATE, circuit_state)
-        self._set(A.ARGUS_BACKEND_FALLBACK, fallback)
-        self._set(A.ARGUS_TTFT_MS, ttft_ms)
-        self._set(A.ARGUS_FIRST_TOKEN_MS, first_token_ms)
-        self._set(A.ARGUS_TOKENS_PER_SECOND, tokens_per_second)
-        self._set(A.ARGUS_COST_USD, cost_usd)
+        self._set(A.ARGUS_INFERENCE_BACKEND_ID, backend_id)
+        self._set(A.ARGUS_INFERENCE_CIRCUIT_STATE, circuit_state)
+        self._set(A.ARGUS_INFERENCE_FALLBACK, fallback)
+        self._set(A.ARGUS_INFERENCE_TTFT_MS, ttft_ms)
+        self._set(A.ARGUS_INFERENCE_FIRST_TOKEN_MS, first_token_ms)
+        self._set(A.ARGUS_INFERENCE_TOKENS_PER_SECOND, tokens_per_second)
+        self._set(A.ARGUS_INFERENCE_COST_USD, cost_usd)
 
         # La metrica se alimenta del primer token de cualquier tipo cuando
         # existe: es la que responde "el backend esta lento" y la unica que

@@ -142,7 +142,7 @@ class AgentRun:
         if self.tokens:
             attrs["argus.agent.tokens"] = self.tokens
         if self.cost_usd:
-            attrs[A.ARGUS_COST_USD] = self.cost_usd
+            attrs[A.ARGUS_INFERENCE_COST_USD] = self.cost_usd
         if self.breaches:
             # `argus.guardrail` es lo que el Collector agente filtra hacia el
             # camino caliente: un guardarrail roto llega en segundos.
