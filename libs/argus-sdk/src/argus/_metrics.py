@@ -19,6 +19,15 @@ from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, V
 from ._config import Config
 
 
+def _version_sdk() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("argus-obs-sdk")
+    except Exception:  # noqa: BLE001
+        return "0.0.0.dev0"
+
+
 def _build_exporter(cfg: Config) -> Any:
     if cfg.protocol == "http/json":
         from ._otlp_json import ExportadorMetricasJSON
@@ -86,7 +95,14 @@ class GenAIMetrics:
     __slots__ = ("_cost", "_duration", "_tokens", "_ttft")
 
     def __init__(self) -> None:
-        meter = metrics.get_meter("argus-sdk", A.SEMCONV_VERSION)
+        # La version del SCOPE es la del paquete que emite, no la del modelo de
+        # convenciones: si no, un alfa y una estable declaran lo mismo y en el
+        # almacen no se pueden separar (D-082).
+        meter = metrics.get_meter(
+            "argus-sdk",
+            _version_sdk(),
+            attributes={"argus.semconv.version": A.SEMCONV_VERSION},
+        )
         self._duration = meter.create_histogram(
             A.M_GEN_AI_CLIENT_OPERATION_DURATION,
             unit=A.M_GEN_AI_CLIENT_OPERATION_DURATION_UNIT,

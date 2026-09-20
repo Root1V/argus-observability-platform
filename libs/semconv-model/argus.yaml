@@ -242,34 +242,46 @@ groups:
   # ---------------------------------------------------------------------------
   # Extensiones de plataforma para inferencia local (Axonium / Prometheus).
   # Son cosas que SOLO el SDK de inferencia sabe, y ninguna aplicacion.
+  #
+  # TODAS llevan prefijo `argus.inference.`, y el motivo no es cosmetico. Antes
+  # colgaban de la raiz —`argus.ttft_ms`, `argus.backend.id`— sueltas junto a
+  # cosas que no tienen nada que ver, y `argus.cost_usd` ademas se confundia a
+  # ojo con la METRICA `argus.cost.usd`, que es otra cosa.
+  #
+  # El renombrado sale de un fallo nuestro (D-081): escribimos estos nombres A
+  # MANO en un documento para otro equipo, sin contrastarlos con este fichero,
+  # y los inventamos con el prefijo `argus.inference.`. El equipo los
+  # implemento fielmente y durante dias emitio bajo nombres que nuestro propio
+  # paquete no conocia. Su version era mejor que la nuestra, asi que el modelo
+  # se muda a la suya en vez de pedirles que redesplieguen.
   # ---------------------------------------------------------------------------
   - id: inference
     brief: Detalles de inferencia local que solo conoce el SDK cliente
     attributes:
-      - id: argus.backend.id
+      - id: argus.inference.backend_id
         type: string
         brief: Backend concreto que atendio la peticion.
-      - id: argus.backend.circuit_state
+      - id: argus.inference.circuit_state
         type: enum
         members: [closed, open, half-open]
-      - id: argus.backend.fallback
+      - id: argus.inference.fallback
         type: boolean
         brief: Si se sirvio desde un backend alternativo tras un fallo.
-      - id: argus.cost_usd
+      - id: argus.inference.cost_usd
         type: double
-      - id: argus.ttft_ms
+      - id: argus.inference.ttft_ms
         type: int
         brief: >
           Tiempo hasta el primer token VISIBLE para el usuario. Es la metrica
           de experiencia: cuanto tarda alguien en ver algo aparecer.
-      - id: argus.first_token_ms
+      - id: argus.inference.first_token_ms
         type: int
         brief: >
           Tiempo hasta el primer token de CUALQUIER tipo, razonamiento
           incluido. Es la metrica de salud del backend: cuanto tarda el modelo
           en empezar a trabajar.
 
-          Existe separada de `argus.ttft_ms` porque los modelos que razonan
+          Existe separada de `argus.inference.ttft_ms` porque los modelos que razonan
           rompieron la equivalencia entre ambas. Medido en Prometheus, un
           stream de qwen3-0.6b con max_tokens=32 emite 30 chunks de
           `reasoning_content` antes del primer `content`: el TTFT visible o no
@@ -279,8 +291,31 @@ groups:
           Las alertas de latencia de inferencia usan ESTA, no `ttft_ms`: es la
           unica que esta siempre presente y la que responde "el backend esta
           lento" en vez de "el modelo penso mucho antes de hablar".
-      - id: argus.tokens_per_second
+      - id: argus.inference.tokens_per_second
         type: double
+
+  # ---------------------------------------------------------------------------
+  # Atributos que pone la PLATAFORMA, no la aplicacion.
+  # Ningun SDK los emite: los escribe el Collector gateway. Estan en el modelo
+  # igualmente porque llegan al almacen, alguien los consulta, y un atributo que
+  # nadie ha declarado es un atributo cuyo significado vive solo en un fichero
+  # de configuracion.
+  # ---------------------------------------------------------------------------
+  - id: platform
+    brief: Puestos por el Collector, no por quien emite
+    attributes:
+      - id: argus.sampling.baseline_pct
+        type: int
+        brief: >
+          Porcentaje de muestreo de base aplicado por el gateway. Va en el span
+          porque sin el, cualquier ratio calculado sobre trazas almacenadas
+          esta sesgado y no hay forma de saberlo al consultar.
+      - id: argus.collector.tier
+        type: enum
+        members: [agent, gateway]
+        brief: >
+          Que nivel del Collector trato la senal. El gateway lo pone con
+          `insert` y no `upsert`, para no sellar encima el del agente (D-079).
 
   # ---------------------------------------------------------------------------
   # Recuperacion (RAG).
@@ -325,7 +360,7 @@ metrics:
   - name: gen_ai.server.time_to_first_token
     instrument: histogram
     unit: s
-    attributes: [gen_ai.provider.name, gen_ai.request.model, argus.backend.id]
+    attributes: [gen_ai.provider.name, gen_ai.request.model, argus.inference.backend_id]
 
   - name: argus.step.duration
     instrument: histogram

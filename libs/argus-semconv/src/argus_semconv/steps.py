@@ -20,11 +20,16 @@ from typing import Any, TypeVar
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
+from . import _scope
 from . import attributes as A
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-_tracer = trace.get_tracer("argus-semconv", A.SEMCONV_VERSION)
+_tracer = trace.get_tracer(
+    "argus-semconv",
+    _scope.version_paquete(),
+    attributes=_scope.atributos(),
+)
 
 # Umbral por defecto para marcar un span como candidato a incidente. Lo usa el
 # filtro del Collector agente para enrutar al camino caliente de deteccion.

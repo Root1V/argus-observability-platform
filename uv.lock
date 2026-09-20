@@ -94,7 +94,7 @@ wheels = [
 
 [[package]]
 name = "argus-obs-schemas"
-version = "1.0.0a4"
+version = "1.0.0a5"
 source = { editable = "libs/argus-schemas" }
 dependencies = [
     { name = "argus-obs-semconv" },
@@ -109,7 +109,7 @@ requires-dist = [
 
 [[package]]
 name = "argus-obs-sdk"
-version = "1.0.0a4"
+version = "1.0.0a5"
 source = { editable = "libs/argus-sdk" }
 dependencies = [
     { name = "argus-obs-semconv" },
@@ -200,7 +200,7 @@ provides-extras = ["grpc", "http", "asgi", "client", "sql", "redis", "celery", "
 
 [[package]]
 name = "argus-obs-semconv"
-version = "1.0.0a4"
+version = "1.0.0a5"
 source = { editable = "libs/argus-semconv" }
 dependencies = [
     { name = "opentelemetry-api" },

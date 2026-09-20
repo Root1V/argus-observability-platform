@@ -2411,3 +2411,115 @@ propósito y no de pasada. Queda como `B-19`.
 
 Mientras tanto, `dispatch.send_failed` sigue siendo la señal de que esto ha
 pasado, y ahora dice cuántos intentos se hicieron.
+
+---
+
+## D-081 · El modelo se muda a los nombres que inventamos para otros
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · escribimos nombres de atributo a mano en un documento, otro equipo los implementó fielmente, y nuestro propio paquete no los conocía
+
+Tenemos una fuente de verdad —`libs/semconv-model/argus.yaml`— con generación
+automática de constantes para Python y Go, **precisamente** para que sea
+imposible que dos lenguajes emitan el mismo atributo con nombres distintos.
+
+Y luego escribimos los nombres **a mano en un documento** para el equipo de
+Prometheus, sin contrastarlos con ella:
+
+| Les pedimos | El modelo definía |
+|---|---|
+| `argus.inference.backend_id` | `argus.backend.id` |
+| `argus.inference.ttft_ms` | `argus.ttft_ms` |
+| `argus.inference.first_token_ms` | `argus.first_token_ms` |
+
+Lo implementaron fielmente. Durante días emitieron bajo nombres que nuestro
+paquete no conocía, y **lo descubrimos de la peor forma**: midiendo su ventana
+con *nuestros* nombres y viendo cero. Estuvimos a punto de escribirles que su
+arreglo no había llegado. Volvimos a consultar con los nombres que les pedimos
+y estaban los 689.
+
+**La decisión: el modelo se muda a la versión de ellos.** No porque cueste menos
+—cuesta lo mismo— sino porque **es mejor**. `argus.inference.*` dice de qué
+dominio es el atributo; el nuestro los dejaba sueltos en la raíz junto a cosas
+que no tienen nada que ver, y `argus.cost_usd` además se confundía a ojo con la
+métrica `argus.cost.usd`, que es otra cosa.
+
+Se mueve **el grupo entero**, no solo los tres: dejar `argus.backend.circuit_state`
+donde estaba mientras `backend.id` se va a `argus.inference.*` es peor que
+cualquiera de las dos opciones. Nadie emite los otros cuatro todavía, así que
+mover cuesta cero.
+
+### El guardarraíl, que es lo que de verdad importa
+
+La lección incómoda no es el renombrado: es que **el generador no sirve de nada
+si el contrato que mandas fuera se escribe en otro sitio.**
+
+`test_documentos_vs_modelo.py` recorre `docs/**.md`, extrae todo lo que tenga
+forma de atributo `argus` entre comillas invertidas y falla si no existe en el modelo. Con lista de
+permitidos —cada excepción con su motivo escrito— y un segundo test que falla si
+un permitido deja de hacer falta, porque una excepción caducada es el sitio
+donde se esconde el siguiente error.
+
+Comprobado metiendo en un documento un nombre parecido a `ttft_ms` pero con otro sufijo: falla y dice
+en qué fichero.
+
+Encontró algo de paso: **`argus.sampling.baseline_pct` lo escribe el Collector y
+no estaba declarado en ninguna parte.** Un atributo que llega al almacén y que
+alguien consulta, cuyo significado vivía solo en un fichero de configuración.
+Ahora hay un grupo `platform` para los que pone la plataforma y no la
+aplicación, con ese y con `argus.collector.tier`.
+
+---
+
+## D-082 · Tres defectos que solo se ven desde fuera
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · el equipo que más necesita las métricas GenAI tenía que importarlas de un módulo privado, el TTFT no se podía trocear por operación, y el coste rellenaba con `'unknown'`
+
+Prometheus instaló `1.0.0a3` en un entorno desechable y lo **ejercitó**, métricas
+incluidas contra un `InMemoryMetricReader`. Los tres hallazgos son invisibles
+desde dentro: solo aparecen cuando alguien que sirve inferencia intenta usarlo.
+
+**1 · El módulo que más necesita una plataforma de inferencia era el privado.**
+`_metrics_api` emite exactamente las cuatro métricas que deberían emitir. Y
+nuestro propio docstring dice por qué vive ahí: *«si las métricas hubiera que
+emitirlas a mano, nadie las emitiría»*. Con la puerta marcada como privada, para
+usarlas había que escribir `from argus_semconv._metrics_api import record_ttft`,
+que es justo lo que un consumidor no debe hacer. Ahora es `argus_semconv.metrics`,
+con puente de compatibilidad que avisa y **reexporta en vez de duplicar**: los
+instrumentos tienen que ser los mismos objetos o se emiten dos series.
+
+**2 · `record_ttft` construía la operación y luego la borraba.**
+
+```python
+attrs = _base("chat", provider, model)
+attrs.pop(A.GEN_AI_OPERATION_NAME, None)   # <- deliberado, y equivocado
+```
+
+Duration y tokens sí la llevaban, así que el TTFT era la **única** métrica que no
+se podía pedir por tipo de operación. En un despliegue donde chat, embeddings y
+rerank conviven, ése es el corte que más falta hace.
+
+**3 · `argus.cost.usd` rellenaba con `'unknown'`.** Con eso, «nadie atribuyó esta
+llamada» y «se atribuyó a algo que se llama unknown» son indistinguibles, las dos
+generan serie temporal y las dos cuestan cardinalidad. Es la enfermedad de los
+tres estados —la misma del `DEFAULT 0` de Aeon y del `sum(cost or 0)` de la
+propia factura de Prometheus— ahora en una etiqueta de métrica. Omitir cuesta lo
+mismo y no miente.
+
+**4 · Y uno más, que es el que peor pinta tiene**: `SEMCONV_VERSION` vale `1.0.0`
+—es la versión del *modelo*— y con ella registrábamos el scope del tracer y del
+meter. Así que un prelanzamiento y una estable declaraban exactamente lo mismo,
+`scope: argus-semconv 1.0.0`, y en el almacén no había forma de separarlos: justo
+lo que quieres poder hacer cuando algo no cuadra durante una adopción.
+
+Ahora el scope lleva la versión del **paquete** y la del modelo viaja como
+atributo del scope, que es donde pertenece.
+
+Al arreglarlo apareció una trampa que conviene dejar escrita: el tercer
+posicional de `get_tracer` es el **provider**, no `schema_url`. Pasar los
+atributos por posición mete el diccionario en `schema_url` y el fallo no salta al
+llamar — salta después, al hashear el scope, con un `TypeError: unhashable type:
+'dict'` que no apunta a la causa. Y un proveedor no-op se lo traga entero, así
+que la primera comprobación que hicimos dio verde sin comprobar nada. Hay test de
+firma para eso.
+
+Los cuatro con test que falla sin el arreglo, comprobado quitándolo.

@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-sdk"
-version = "1.0.0a4"
+version = "1.0.0a5"
 description = "SDK de observabilidad de Argus. Para APLICACIONES: configura trazas, metricas y logs con una linea."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,7 @@ classifiers = [
 # audio y ML (D-077). El SDK trae su propio exportador OTLP/HTTP+JSON escrito
 # sobre la biblioteca estandar, asi que el nucleo funciona sin protobuf.
 dependencies = [
-    "argus-obs-semconv>=1.0.0a4,<2",
+    "argus-obs-semconv>=1.0.0a5,<2",
     "opentelemetry-sdk>=1.30,<2",
 ]
 

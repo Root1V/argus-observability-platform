@@ -117,7 +117,7 @@ def test_el_coste_se_acumula_por_EJECUCION(spans) -> None:
                 g.backend(cost_usd=0.02)
 
     padre = next(s for s in spans.get_finished_spans() if s.name == "invoke_agent")
-    assert padre.attributes[A.ARGUS_COST_USD] == pytest.approx(0.06)
+    assert padre.attributes[A.ARGUS_INFERENCE_COST_USD] == pytest.approx(0.06)
     assert A.ARGUS_GUARDRAIL not in padre.attributes
 
 

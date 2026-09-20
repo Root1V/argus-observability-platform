@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-schemas"
-version = "1.0.0a4"
+version = "1.0.0a5"
 description = "Esquemas compartidos de Argus: senal, incidente, severidad."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "argus-obs-semconv>=1.0.0a4,<2",
+    "argus-obs-semconv>=1.0.0a5,<2",
     "pydantic>=2.9",
 ]
 

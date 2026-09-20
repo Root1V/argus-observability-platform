@@ -120,10 +120,10 @@ def test_backend_details_only_the_client_sdk_knows(spans) -> None:
         g.backend(backend_id="llama-0", circuit_state="half-open", fallback=True, ttft_ms=87, cost_usd=0.0)
 
     attrs = spans.get_finished_spans()[0].attributes
-    assert attrs[A.ARGUS_BACKEND_ID] == "llama-0"
-    assert attrs[A.ARGUS_BACKEND_CIRCUIT_STATE] == "half-open"
-    assert attrs[A.ARGUS_BACKEND_FALLBACK] is True
-    assert attrs[A.ARGUS_TTFT_MS] == 87
+    assert attrs[A.ARGUS_INFERENCE_BACKEND_ID] == "llama-0"
+    assert attrs[A.ARGUS_INFERENCE_CIRCUIT_STATE] == "half-open"
+    assert attrs[A.ARGUS_INFERENCE_FALLBACK] is True
+    assert attrs[A.ARGUS_INFERENCE_TTFT_MS] == 87
 
 
 def test_step_emits_wide_event_fields(spans) -> None:
@@ -168,8 +168,8 @@ def test_los_dos_tiempos_de_primer_token_conviven(spans) -> None:
         g.backend(backend_id="llama-cpp-0", first_token_ms=180, ttft_ms=2400)
 
     (finished,) = spans.get_finished_spans()
-    assert finished.attributes[A.ARGUS_FIRST_TOKEN_MS] == 180
-    assert finished.attributes[A.ARGUS_TTFT_MS] == 2400
+    assert finished.attributes[A.ARGUS_INFERENCE_FIRST_TOKEN_MS] == 180
+    assert finished.attributes[A.ARGUS_INFERENCE_TTFT_MS] == 2400
 
 
 def test_la_metrica_de_latencia_prefiere_el_primer_token_de_cualquier_tipo() -> None:

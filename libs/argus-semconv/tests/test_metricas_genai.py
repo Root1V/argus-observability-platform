@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 from argus_semconv import agent, genai, tool
+from argus_semconv import attributes as A
 from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -98,7 +99,11 @@ def test_el_ttft_se_emite_desde_backend(lector) -> None:
 
     puntos = recoger(lector).get("gen_ai.server.time_to_first_token", [])
     assert puntos
-    assert dict(puntos[-1].attributes)["argus.backend.id"] == "llama-0"
+    # Por la CONSTANTE y no por la cadena: escribir el nombre a mano en otro
+    # sitio es literalmente el fallo que obligo a este renombrado (D-081). Un
+    # test que repite el literal no detecta que el modelo ha cambiado, se
+    # limita a romperse.
+    assert dict(puntos[-1].attributes)[A.ARGUS_INFERENCE_BACKEND_ID] == "llama-0"
 
 
 def test_las_herramientas_tambien_emiten_duracion(lector) -> None:
@@ -110,3 +115,45 @@ def test_las_herramientas_tambien_emiten_duracion(lector) -> None:
     operaciones = {dict(p.attributes).get("gen_ai.operation.name") for p in puntos}
     assert "execute_tool" in operaciones
     assert "invoke_agent" in operaciones
+
+
+# ---------------------------------------------------------------------------
+# Lo que un equipo consumidor encontró probando el alfa (P-29 / D-082).
+# ---------------------------------------------------------------------------
+
+
+def test_el_ttft_se_puede_trocear_por_operacion(lector) -> None:
+    """`record_ttft` construía la operación y luego la BORRABA.
+
+    Duration y tokens sí la llevaban, así que el TTFT era la única métrica que
+    no se podía pedir por tipo de operación — y en un despliegue donde chat,
+    embeddings y rerank conviven, ése es el corte que más falta hace.
+    """
+    from argus_semconv import metrics as M
+
+    M.record_ttft(provider="prometheus", model="qwen3-8b", seconds=0.12, operation="embeddings")
+
+    puntos = recoger(lector).get(A.M_GEN_AI_SERVER_TIME_TO_FIRST_TOKEN, [])
+    assert puntos, "nadie emitió el TTFT"
+    attrs = dict(puntos[-1].attributes)
+    assert attrs[A.GEN_AI_OPERATION_NAME] == "embeddings"
+
+
+def test_el_coste_omite_lo_que_no_sabe(lector) -> None:
+    """Rellenar con `'unknown'` hacía indistinguibles dos cosas distintas.
+
+    «Nadie atribuyó esta llamada» y «se atribuyó a algo que se llama unknown»
+    generan las dos serie temporal y cuestan las dos cardinalidad. Es la
+    enfermedad de los tres estados, ahora en una etiqueta de métrica.
+    """
+    from argus_semconv import metrics as M
+
+    M.record_cost(cost_usd=0.02, model="qwen3-8b", app="idp")
+
+    puntos = recoger(lector).get(A.M_ARGUS_COST_USD, [])
+    assert puntos, "nadie emitió el coste"
+    attrs = dict(puntos[-1].attributes)
+    assert attrs[A.ARGUS_APP] == "idp"
+    assert A.ARGUS_FEATURE not in attrs, "volvió a rellenar la funcionalidad"
+    assert A.ARGUS_USE_CASE not in attrs, "volvió a rellenar el caso de uso"
+    assert "unknown" not in attrs.values()
