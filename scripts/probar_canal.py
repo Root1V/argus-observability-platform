@@ -122,7 +122,7 @@ def main() -> int:
         print(f"\n{AMARILLO}El sink está cargado, pero el registro no enruta hacia él.{OFF}")
         print(f"{GRIS}  Configurar un canal son dos cosas, y esta es la segunda.")
         print(f"  En platform/registry/apps.yaml, en la entrada «{APP_PRUEBA}»:")
-        print(f"    canales:")
+        print("    canales:")
         print(f"      page:   [{reales[0]}]")
         print(f"      ticket: [{reales[0]}]")
         print(f"  El registro se recarga solo; no hace falta reiniciar nada.{OFF}\n")
@@ -202,7 +202,7 @@ def main() -> int:
 
     print(f"\n{BOLD}Ahora mira el canal.{OFF}")
     print(f"{GRIS}  Deberías ver UN mensaje, no dos: el aviso inicial y el informe")
-    print(f"  llegan al mismo hilo. Si ves dos, la divulgación progresiva no")
+    print("  llegan al mismo hilo. Si ves dos, la divulgación progresiva no")
     print(f"  está funcionando en ese canal.{OFF}")
 
     if fallidos:

@@ -2322,3 +2322,92 @@ una hipótesis, no un detector — y esta plataforma ya tenía una de esas.
 
 El reloj de 14 días vuelve a **0**. Tres fallos hoy, y el tercero es de los que
 justifican que el reloj exista.
+
+---
+
+## D-080 · Seis incidentes detectados, cero entregados
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · la detección funcionó perfectamente durante el apagón y ninguna de las seis notificaciones llegó
+
+Investigando `D-079` salió la pregunta obvia: la sonda de silencio vigila los
+tres componentes de Prometheus, sus métricas se fueron a cero dos días enteros
+— **¿por qué no avisó?**
+
+Resulta que **sí avisó**. Seis incidentes, correctamente detectados:
+
+```
+2026-09-17T21:22  x3      2026-09-18T16:36  x1
+2026-09-17T22:17  x1      2026-09-19T07:13  x1
+2026-09-18T07:34  x1      2026-09-19T15:55  x1
+```
+
+Y **ninguno se entregó**:
+
+```
+telegram  -> <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED]
+             certificate verify failed: self-signed certificate in certificate chain>
+email, gchat -> notify.channel_not_loaded
+```
+
+Telegram es el único canal humano configurado —de `gchat` y `email` ya sabíamos
+(D-064)—, así que su fallo es el fallo entero.
+
+**La causa del SSL no es un bug nuestro**: un certificado autofirmado en la
+cadena es una red con inspección TLS por el medio. Comprobado ahora desde el
+host y desde el contenedor: las dos funcionan. Es intermitente, y depende de a
+qué wifi esté enganchado el portátil.
+
+### Lo que sí es nuestro, y es lo importante
+
+```python
+try:
+    sink.send(incident, update=update)
+except Exception as exc:
+    log.error("dispatch.send_failed", ...)      # y aqui se acaba
+```
+
+**Un intento. Sin reintento, sin cola, sin nada.** El incidente se pierde.
+
+Y puesto al lado de lo que hacemos con la telemetría, la asimetría no se
+sostiene:
+
+| | si la red falla |
+|---|---|
+| Telemetría (entrada) | cola en disco con WAL, reintentos, sobrevive a un fin de semana |
+| **Notificación (salida)** | **un intento y a la basura** |
+
+Construimos toda la resiliencia en la entrada del sistema y ninguna en la
+salida — cuando la salida es, literalmente, para lo que existe el sistema.
+Da igual lo bien que detectes si nadie se entera.
+
+### El arreglo, y el que casi meto de paso
+
+Tres intentos con retroceso exponencial y jitter (1 s y 2 s). Los fallos reales
+fueron momentos sueltos, no cortes de horas, así que esa ventana los cubre.
+
+**El primer intento estaba mal**, y lo cazó un test que ya existía: dormir el
+retroceso **dentro del hilo trabajador**. Con un solo worker, un canal muerto
+se queda tres segundos reintentando y **retrasa la entrega de todos los demás**
+— que es exactamente la propiedad que esa cola existe para proteger (D-029).
+
+`test_un_canal_caido_no_impide_que_los_demas_reciban` falló, y tenía razón.
+
+El reintento se **reprograma** con un temporizador y devuelve el envío a la
+cola; el hilo sigue trabajando. `drain()` cuenta también los reintentos
+pendientes: con la cola vacía y un temporizador esperando, «drenado»
+significaría «entregado» cuando en realidad significa «todavía no lo he vuelto
+a intentar».
+
+### Lo que queda abierto, dicho claro
+
+Tres intentos en tres segundos cubren un parpadeo de red. **No cubren un
+portátil que pasa la noche en una red con inspección TLS.** Para eso haría falta
+persistir la notificación pendiente, como hace la telemetría.
+
+No se hace ahora porque no es el fallo que hemos visto, y porque una cola
+durable de notificaciones trae su propia pregunta —qué hacer con un aviso de
+hace ocho horas cuando el incidente ya se resolvió— que merece decidirse a
+propósito y no de pasada. Queda como `B-19`.
+
+Mientras tanto, `dispatch.send_failed` sigue siendo la señal de que esto ha
+pasado, y ahora dice cuántos intentos se hicieron.

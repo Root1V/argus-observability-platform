@@ -30,10 +30,10 @@ from .sinks import (
     Dispatcher,
     EmailSink,
     GoogleChatSink,
-    TelegramSink,
     JSONSink,
     MemorySink,
     Sink,
+    TelegramSink,
     WhatsAppSink,
 )
 

@@ -110,7 +110,7 @@ class TelegramSink:
         try:
             with urllib.request.urlopen(peticion, timeout=self._timeout) as r:
                 return json.loads(r.read())
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if silencioso:
                 return None
             # El token va en la URL: NO puede acabar en un log. Se dice el
