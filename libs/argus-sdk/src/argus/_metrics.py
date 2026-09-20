@@ -20,6 +20,11 @@ from ._config import Config
 
 
 def _build_exporter(cfg: Config) -> Any:
+    if cfg.protocol == "http/json":
+        from ._otlp_json import ExportadorMetricasJSON
+
+        return ExportadorMetricasJSON(cfg.endpoint, cfg.headers or None)
+
     if cfg.protocol == "http/protobuf":
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter as HTTPExporter
 

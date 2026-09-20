@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-semconv"
-version = "1.0.0a3"
+version = "1.0.0a4"
 description = "Convenciones semanticas de Argus. Para LIBRERIAS: depende solo de la API de OpenTelemetry."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -45,6 +45,6 @@ packages = ["src/argus_semconv"]
 # reportar. Un paquete sin origen publico es la misma opacidad de cadena de
 # suministro que nos objeto un equipo consumidor (D-075).
 [project.urls]
-Homepage = "https://github.com/Root1V/argus-obs"
-Repository = "https://github.com/Root1V/argus-obs"
-Issues = "https://github.com/Root1V/argus-obs/issues"
+Homepage = "https://github.com/Root1V/argus-observability-platform"
+Repository = "https://github.com/Root1V/argus-observability-platform"
+Issues = "https://github.com/Root1V/argus-observability-platform/issues"

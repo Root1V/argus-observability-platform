@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-schemas"
-version = "1.0.0a3"
+version = "1.0.0a4"
 description = "Esquemas compartidos de Argus: senal, incidente, severidad."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "argus-obs-semconv>=1.0.0a3,<2",
+    "argus-obs-semconv>=1.0.0a4,<2",
     "pydantic>=2.9",
 ]
 
@@ -33,6 +33,6 @@ packages = ["src/argus_schemas"]
 # reportar. Un paquete sin origen publico es la misma opacidad de cadena de
 # suministro que nos objeto un equipo consumidor (D-075).
 [project.urls]
-Homepage = "https://github.com/Root1V/argus-obs"
-Repository = "https://github.com/Root1V/argus-obs"
-Issues = "https://github.com/Root1V/argus-obs/issues"
+Homepage = "https://github.com/Root1V/argus-observability-platform"
+Repository = "https://github.com/Root1V/argus-observability-platform"
+Issues = "https://github.com/Root1V/argus-observability-platform/issues"

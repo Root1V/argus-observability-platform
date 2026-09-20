@@ -94,7 +94,7 @@ wheels = [
 
 [[package]]
 name = "argus-obs-schemas"
-version = "1.0.0a3"
+version = "1.0.0a4"
 source = { editable = "libs/argus-schemas" }
 dependencies = [
     { name = "argus-obs-semconv" },
@@ -109,16 +109,16 @@ requires-dist = [
 
 [[package]]
 name = "argus-obs-sdk"
-version = "1.0.0a3"
+version = "1.0.0a4"
 source = { editable = "libs/argus-sdk" }
 dependencies = [
     { name = "argus-obs-semconv" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
 ]
 
 [package.optional-dependencies]
 all = [
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-aiokafka" },
     { name = "opentelemetry-instrumentation-asgi" },
@@ -152,6 +152,9 @@ dev = [
 genai = [
     { name = "openlit" },
 ]
+grpc = [
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+]
 http = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
 ]
@@ -171,11 +174,11 @@ sql = [
 
 [package.metadata]
 requires-dist = [
-    { name = "argus-obs-sdk", extras = ["http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging"], marker = "extra == 'all'", editable = "libs/argus-sdk" },
+    { name = "argus-obs-sdk", extras = ["grpc", "http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging"], marker = "extra == 'all'", editable = "libs/argus-sdk" },
     { name = "argus-obs-semconv", editable = "libs/argus-semconv" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "openlit", marker = "extra == 'genai'", specifier = ">=1.34" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30,<2" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'grpc'", specifier = ">=1.30,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'http'", specifier = ">=1.30,<2" },
     { name = "opentelemetry-instrumentation-aiokafka", marker = "extra == 'kafka'", specifier = ">=0.51b0" },
     { name = "opentelemetry-instrumentation-asgi", marker = "extra == 'asgi'", specifier = ">=0.51b0" },
@@ -193,11 +196,11 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'dev'", specifier = ">=0.37" },
     { name = "structlog", marker = "extra == 'logging'", specifier = ">=25.1" },
 ]
-provides-extras = ["http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging", "genai", "all", "dev"]
+provides-extras = ["grpc", "http", "asgi", "client", "sql", "redis", "celery", "kafka", "logging", "genai", "all", "dev"]
 
 [[package]]
 name = "argus-obs-semconv"
-version = "1.0.0a3"
+version = "1.0.0a4"
 source = { editable = "libs/argus-semconv" }
 dependencies = [
     { name = "opentelemetry-api" },

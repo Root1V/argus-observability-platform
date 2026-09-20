@@ -102,6 +102,36 @@ class Argus:
                 pass
 
 
+
+# Mapea el nombre del argumento de `init()` al campo de `Config` que fija.
+_CAMPOS_INIT: dict[str, str] = {
+    "service": "service",
+    "namespace": "namespace",
+    "version": "version",
+    "role": "role",
+    "environment": "environment",
+    "endpoint": "endpoint",
+    "propagate_mode": "propagate",
+    "slo_ms": "slo_ms",
+    "disabled": "disabled",
+}
+
+
+def _discrepancias(handle: Argus, argumentos: dict[str, Any]) -> list[str]:
+    """Argumentos de una segunda `init()` que contradicen la configuracion viva.
+
+    Solo miran los argumentos que se pasaron de verdad: `None` significa
+    "leelo del entorno", no "ponlo a nada", asi que no puede discrepar.
+    """
+    fuera = []
+    for nombre, campo in _CAMPOS_INIT.items():
+        valor = argumentos.get(nombre)
+        if valor is None or valor == "":
+            continue
+        if getattr(handle.config, campo, None) != valor:
+            fuera.append(nombre)
+    return fuera
+
 def init(
     service: str | None = None,
     *,
@@ -128,12 +158,39 @@ def init(
     global _HANDLE
 
     if _HANDLE is not None:
-        warnings.warn(
-            "argus.init() ya se habia llamado en este proceso. La segunda "
-            "llamada es un no-op.",
-            RuntimeWarning,
-            stacklevel=2,
+        # Llamar dos veces es NORMAL y no merece un aviso: en una API basta con
+        # que el router importe el modulo de tareas para que el `init()` del
+        # worker se ejecute tambien. Avisar en cada arranque y en cada test
+        # ensena a ignorar los avisos, que es justo lo contrario de lo que
+        # queremos el dia que uno importe (D-078).
+        #
+        # Lo que SI merece aviso es una segunda llamada con argumentos
+        # distintos: esos argumentos se descartan en silencio y el proceso
+        # queda configurado de una forma que quien escribio esa linea no espera.
+        discrepancias = _discrepancias(
+            _HANDLE,
+            {
+                "service": service,
+                "namespace": namespace,
+                "version": version,
+                "role": role,
+                "environment": environment,
+                "endpoint": endpoint,
+                "propagate_mode": propagate_mode,
+                "slo_ms": slo_ms,
+                "disabled": disabled,
+            },
         )
+        if discrepancias:
+            warnings.warn(
+                "argus.init() ya se habia llamado en este proceso con otra "
+                "configuracion. La segunda llamada es un no-op y estos "
+                f"argumentos se descartan: {', '.join(discrepancias)}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        else:
+            _log.debug("argus.init.repetida", extra={"servicio": _HANDLE.config.service})
         return _HANDLE
 
     try:

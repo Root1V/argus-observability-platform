@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-sdk"
-version = "1.0.0a3"
+version = "1.0.0a4"
 description = "SDK de observabilidad de Argus. Para APLICACIONES: configura trazas, metricas y logs con una linea."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,13 +21,20 @@ classifiers = [
 # Nucleo deliberadamente pequeño. Un Temporal activity o un CLI no deben
 # arrastrar Starlette, y una app que no habla con Kafka no debe instalar su
 # instrumentacion. Todo lo demas va en extras.
+# El nucleo NO incluye ningun exportador OTLP oficial, y esto es deliberado:
+# todos ellos —gRPC y HTTP por igual— dependen de `opentelemetry-proto`, que
+# exige `protobuf>=5.0`. Ese rango bloquea la instalacion en cualquier
+# aplicacion anclada a `protobuf<3.20`, y eso ocurre de verdad en la pila de
+# audio y ML (D-077). El SDK trae su propio exportador OTLP/HTTP+JSON escrito
+# sobre la biblioteca estandar, asi que el nucleo funciona sin protobuf.
 dependencies = [
-    "argus-obs-semconv>=1.0.0a3,<2",
+    "argus-obs-semconv>=1.0.0a4,<2",
     "opentelemetry-sdk>=1.30,<2",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.30,<2",
 ]
 
 [project.optional-dependencies]
+# Transportes binarios. Menor sobrecoste que JSON, a cambio de protobuf>=5.
+grpc     = ["opentelemetry-exporter-otlp-proto-grpc>=1.30,<2"]
 http     = ["opentelemetry-exporter-otlp-proto-http>=1.30,<2"]
 asgi     = ["opentelemetry-instrumentation-asgi>=0.51b0", "opentelemetry-instrumentation-fastapi>=0.51b0"]
 client   = ["opentelemetry-instrumentation-httpx>=0.51b0", "opentelemetry-instrumentation-requests>=0.51b0"]
@@ -37,7 +44,7 @@ celery   = ["opentelemetry-instrumentation-celery>=0.51b0"]
 kafka    = ["opentelemetry-instrumentation-aiokafka>=0.51b0"]
 logging  = ["structlog>=25.1"]
 genai    = ["openlit>=1.34"]
-all      = ["argus-obs-sdk[http,asgi,client,sql,redis,celery,kafka,logging]"]
+all      = ["argus-obs-sdk[grpc,http,asgi,client,sql,redis,celery,kafka,logging]"]
 dev      = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "starlette>=0.37", "pyyaml>=6"]
 
 [build-system]
@@ -54,6 +61,6 @@ allow-direct-references = true
 # reportar. Un paquete sin origen publico es la misma opacidad de cadena de
 # suministro que nos objeto un equipo consumidor (D-075).
 [project.urls]
-Homepage = "https://github.com/Root1V/argus-obs"
-Repository = "https://github.com/Root1V/argus-obs"
-Issues = "https://github.com/Root1V/argus-obs/issues"
+Homepage = "https://github.com/Root1V/argus-observability-platform"
+Repository = "https://github.com/Root1V/argus-observability-platform"
+Issues = "https://github.com/Root1V/argus-observability-platform/issues"

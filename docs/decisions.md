@@ -2102,3 +2102,223 @@ Quemar un número es barato; esa ambigüedad se descubre en el peor momento.
 Que Prometheus declinara instalar la rueda **y lo dijera explícitamente** evitó
 el problema. Si la hubieran instalado en silencio, hoy tendrían un `a2` que no
 coincide con el `a2` público.
+
+---
+
+## D-077 · El núcleo del SDK no depende de protobuf
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · nuestro SDK no se podía instalar en una app real por un conflicto de protobuf que no habíamos mirado
+
+Prosodia no pudo declarar `argus-obs-sdk` como dependencia. No es una
+preferencia suya: `uv lock` **falla**, con «your project's requirements are
+unsatisfiable».
+
+```
+argus-obs-sdk[celery] → opentelemetry-exporter-otlp-proto-grpc
+                      → opentelemetry-proto → protobuf >=5.0,<8.0
+
+indextts (motor de doblaje) → descript-audiotools → protobuf >=3.9.2,<3.20
+```
+
+Los rangos son disjuntos. No hay versión que satisfaga a los dos.
+
+**Las dos salidas que parecían obvias no lo son.** Comprobadas contra los
+metadatos reales de PyPI, no supuestas:
+
+| Salida | Por qué no |
+|---|---|
+| Cambiar gRPC por HTTP | `opentelemetry-exporter-otlp-proto-http` depende del **mismo** `opentelemetry-proto`. El límite es del formato, no del transporte. Lo dijo Prosodia antes que nosotros |
+| «Soportar protobuf 3.x» | Exigiría `opentelemetry-proto<1.28`, o sea OTel ≤1.27 (septiembre de 2024), con un solapamiento de un hilo en `protobuf==3.19.x`. Es anclar toda la pila dos años atrás para siempre |
+
+**La decisión: el nucleo no lleva ningún exportador OTLP oficial.** Pasan a
+extras `[grpc]` y `[http]`, y el SDK trae **su propio exportador OTLP/HTTP con
+codificación JSON**, escrito sobre la biblioteca estándar.
+
+Se puede porque **`opentelemetry-sdk` no depende de protobuf** —solo de la API,
+las semconv y `typing-extensions`—, y porque OTLP define JSON sobre HTTP como
+transporte de primera clase. Son unos cientos de líneas de `json` y `urllib`.
+
+El transporte se elige por lo que esté instalado: gRPC si está, HTTP/protobuf si
+está, y JSON si no. **Quien ya tenía el extra no cambia de comportamiento.** El
+puerto por defecto sigue al transporte (4317 gRPC, 4318 HTTP): heredar el de
+gRPC al caer a JSON sería degradar a un exportador que apunta a un puerto que no
+contesta, y eso no da error, da silencio.
+
+**Verificado de punta a punta**, no comprobado de forma. En un venv limpio con
+`protobuf<3.20`, contra el Collector real y consultando ClickHouse:
+
+| | resultado |
+|---|---|
+| Resolución | `protobuf 3.19.6` con OTel 1.44.0, sin `opentelemetry-proto` ni `grpcio` |
+| Trazas | 3 spans, jerarquía padre-hijo, `StatusCode=Error` con su mensaje, evento `exception` |
+| Atributos | `int`, `float`, `bool`, lista y cadena, todos con su tipo intacto |
+| Recurso | `service.namespace`, `argus.component.role`, `service.version` |
+| Logs | cuerpo, severidad y correlación con `trace_id` **y** `span_id` |
+| Métricas | histogramas GenAI en VictoriaMetrics con `gen_ai.token.type` como dimensión |
+
+**Dos defectos salieron solo por ejecutarlo**, y ninguno de los dos habría
+salido de una revisión:
+
+1. **Los logs llegaban con `ServiceName` vacío.** El SDK movió el `Resource` de
+   dentro de `.log_record` al envoltorio del lote. Mirar solo en un sitio no
+   falla: el Collector contesta 200 y los logs llegan sin dueño. Hay un test que
+   falla sin el arreglo — comprobado quitándolo.
+2. **La marca de tiempo de los logs JSON era un literal `.f`.** `formatTime`
+   llama por dentro a `time.strftime`, que no conoce `%f` y lo copia tal cual.
+   Llevábamos así desde el principio: ningún log tenía subsegundo, así que dos
+   líneas de la misma petición no se podían ordenar.
+
+**Lo que esto cuesta**, dicho claro: JSON pesa más que protobuf y no se ha
+medido la diferencia de sobrecoste. Para el camino caliente, gRPC sigue siendo
+lo recomendado y basta con instalar el extra. La prioridad aquí era que
+instalarlo fuera **posible**.
+
+---
+
+## D-078 · Un aviso que sale siempre no es un aviso
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · avisábamos en cada arranque de un caso normal, enseñando a ignorar los avisos
+
+`argus.init()` emitía un `RuntimeWarning` en la segunda llamada. La regla 2 del
+contrato dice «idempotente, con aviso», y eso escribimos.
+
+Prosodia lo señaló con el caso que lo rompe: **en su API se llama dos veces
+siempre**, porque el router importa el módulo de tareas y ese módulo inicializa.
+Así que el aviso sale en cada arranque y en cada corrida de tests.
+
+Un aviso que sale siempre enseña a ignorar los avisos. El día que uno importe de
+verdad, estará entre el ruido que ya nadie lee.
+
+**La distinción que faltaba**: llamar dos veces con la misma configuración es
+*normal*. Llamar dos veces con configuración *distinta* no lo es — esos
+argumentos se descartan en silencio y el proceso queda configurado de una forma
+que quien escribió esa línea no espera.
+
+Así que el aviso ahora es condicional, y **nombra los argumentos que se tiran**:
+
+```
+argus.init() ya se habia llamado en este proceso con otra configuracion.
+La segunda llamada es un no-op y estos argumentos se descartan: endpoint, namespace.
+```
+
+La repetición idéntica pasa a `debug`. La propiedad de seguridad se conserva
+entera: lo que se pierde es solo el ruido.
+
+---
+
+## D-079 · Un fichero derivado con vida propia, y dos días de silencio
+
+> **Fallo de plataforma** · descubierto 2026-09-19 · el Collector agente descartó el 100% de la telemetría durante dos días y la regla que debía avisar miraba métricas inexistentes
+
+El peor fallo de la plataforma hasta la fecha, y salió por casualidad: al probar
+el exportador JSON contra el Collector real, los spans no llegaban a ClickHouse.
+
+**El Collector agente llevaba desde el 17 de septiembre devolviendo 401 en cada
+exportación y descartando el 100% de lo que le mandaban las aplicaciones.**
+Trazas, métricas y logs. Dos días y cinco horas.
+
+### El fallo
+
+`platform/.env.agent` es un fichero **derivado**: se genera a partir de
+`platform/.env` para pasarle el token al contenedor del agente. La receta lo
+generaba así:
+
+```make
+@test -f platform/.env.agent || { ... generar ... }
+```
+
+Solo si faltaba. Al rotar el token del gateway (D-074, antes de publicar el
+repositorio) el gateway se reinició con el nuevo y **el agente siguió con el
+viejo**, porque su fichero derivado ya existía. Un derivado que se cachea deja
+de ser un derivado.
+
+Arreglo: se regenera **siempre**. Es barato y no puede desincronizarse.
+
+### El fallo de verdad: por qué nadie se enteró
+
+Lo del token es un descuido. Que estuviera **dos días sin que nada avisara** es
+un fallo de diseño, y es el que importa.
+
+Y lo peor: **la regla existía.** `ArgusCollectorDroppingData` llevaba en
+`slo.yaml` desde la Fase 2, con el comentario *«La plataforma se vigila a sí
+misma»*. Falló por dos motivos independientes, y cada uno bastaba:
+
+**1. Nadie recogía las métricas.** El Collector las exponía en `:8888` desde el
+primer día, y `otelcol_exporter_send_failed_spans_total` marcaba el problema con
+toda claridad. No estaban en VictoriaMetrics, así que ninguna regla podía
+mirarlas.
+
+**2. Los nombres de métrica no existían.** La regla preguntaba por
+`otelcol_exporter_send_failed_spans` y `otelcol_processor_dropped_spans`. Los
+reales llevan sufijo `_total`. Una regla contra una métrica inexistente **no da
+error**: se queda en «sin datos», que se parece muchísimo a «todo bien».
+
+Es el mismo error que con los atributos `argus.inference.*` que inventamos para
+Prometheus: escribir un nombre plausible y no contrastarlo con lo que el sistema
+emite de verdad.
+
+Ni el canario ni el *dead man's switch* podían cazarlo: el canario prueba que las
+aplicaciones responden, y el interruptor vigila que la plataforma reporte. Las
+dos cosas eran ciertas. Lo que fallaba estaba en medio.
+
+**Es el modo de fallo peor de todos**: no se cae nada, no hay errores en ninguna
+aplicación, y los paneles se quedan tranquilamente vacíos. El silencio parece
+salud — que es exactamente lo que el plan dice que no puede pasar.
+
+### Lo que se perdió, medido
+
+No es una estimación. Es la cuenta de spans por día y por aplicación:
+
+| Día | `prometheus-inference-platform` | `argus` (la propia plataforma) |
+|---|---:|---:|
+| 15/09 | 30.143 | 129 |
+| 16/09 | 5.945 | 197 |
+| 17/09 | **9.921** | 216 |
+| 18/09 | **0** | 19 |
+| 19/09 | **0** | 19 |
+| 20/09 (tras el arreglo) | 123 y subiendo | 3 |
+
+**Dos días completos del tráfico real del piloto, perdidos.** Es justo la
+evidencia sobre la que se estaban midiendo los criterios.
+
+Y la columna de la derecha explica por qué todo parecía en orden: los servicios
+de la propia plataforma exportan **directos al gateway**, sin pasar por el
+agente. Siguieron reportando sus 19 spans al día sin inmutarse. El canario veía
+las aplicaciones responder, el *dead man's switch* veía la plataforma reportar, y
+los dos tenían razón. **La plataforma podía hablar consigo misma, y eso bastaba
+para que nada pareciera roto.**
+
+### El arreglo, y el agujero que tenía el primer intento
+
+1. Cada Collector se raspa a sí mismo (`prometheus/interno` → `127.0.0.1:8888`)
+   y mete sus métricas en su propia tubería. 59 series nuevas en VictoriaMetrics.
+2. `platform/rules/plataforma.yaml`, con los nombres **verificados contra las
+   series reales**, no escritos de memoria. Las dos reglas muertas de `slo.yaml`
+   se retiran: dejar una regla que no puede disparar es peor que no tenerla.
+
+El primer intento de detector tenía el mismo punto ciego que el original, y solo
+salió al reproducir el fallo a propósito: **el agente manda sus propias métricas
+por el mismo exportador que se le rompe.** Cuando falla, sus series dejan de
+llegar — así que `send_failed > 0` nunca puede dispararse por él, porque no hay
+a quien mirar. Solo la **ausencia** lo detecta.
+
+Y la ausencia hay que mirarla **por nivel**, no global: mientras el gateway siga
+reportando, un `absent()` sin filtro no ve nada raro. Un `absent()` global
+habría dejado pasar exactamente este incidente otra vez.
+
+| Regla | Qué caza | Por qué hace falta |
+|---|---|---|
+| `ArgusCollectorDescartaTelemetria` | fallos de exportación sostenidos | Caza al gateway, y al agente solo si aún puede reportar |
+| `ArgusColaDelAgenteCreciendo` | cola por encima del 80% | Mientras quepa no se pierde; cuando se llene, sí |
+| `ArgusAgenteSinAutoMetricas` | el agente calla | **La única que caza este incidente** |
+| `ArgusGatewaySinAutoMetricas` | el gateway calla | Sin sus series, las otras tres están ciegas |
+
+Verificado reproduciendo el fallo: se arrancó el agente con un token equivocado a
+propósito y se comprobó que la expresión de ausencia devuelve `1` con el agente
+roto y **nada** con el agente sano. Una regla que nunca se ha visto disparar es
+una hipótesis, no un detector — y esta plataforma ya tenía una de esas.
+
+### Lo que esto le cuesta al piloto
+
+El reloj de 14 días vuelve a **0**. Tres fallos hoy, y el tercero es de los que
+justifican que el reloj exista.
