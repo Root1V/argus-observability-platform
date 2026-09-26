@@ -216,9 +216,24 @@ processors:
   # Y ojo: esta espera de 30 s es la razon por la que la deteccion NO pasa por
   # aqui. El camino caliente va directo del agente al alert-bus.
   tail_sampling:
+    # 30 s es el presupuesto para que una traza HTTP normal cierre. NO es
+    # suficiente para trabajo asincrono, y subirlo no arregla nada: un doblaje
+    # tarda 21 minutos y nadie va a bufferizar 21 minutos de trazas en memoria.
+    # Lo que arregla el caso asincrono es la politica `async-handoff` de abajo,
+    # que decide con evidencia que SI llega dentro de la ventana (D-083).
     decision_wait: 30s
     num_traces: 100000
     expected_new_traces_per_sec: 500
+
+    # Explicito y no por defecto, porque de esto depende que el caso asincrono
+    # funcione: cuando una traza se marca para conservar, su decision tiene que
+    # seguir en memoria 21 minutos despues, que es cuando cierra el span del
+    # worker. Si la entrada se desaloja antes, el span tardio llega a un
+    # gateway que ya no recuerda haber dicho que si.
+    decision_cache:
+      sampled_cache_size: 100000
+      non_sampled_cache_size: 100000
+
     policies:
       - name: errors
         type: status_code
@@ -250,6 +265,38 @@ processors:
         type: string_attribute
         string_attribute:
           key: argus.investigation.id
+          values: [".*"]
+          enabled_regex_matching: true
+
+      # --- El caso asincrono ---------------------------------------------
+      # Una traza que publica en una cola NO se puede juzgar a los 30 segundos:
+      # a esa altura solo se ha visto la peticion HTTP, que cierra en
+      # milisegundos y no tiene nada interesante. El trabajo de verdad cierra
+      # minutos u horas despues, cuando la suerte de la traza ya esta echada y
+      # el span tardio se tira (D-083).
+      #
+      # La evidencia que SI llega a tiempo es el span del PRODUCTOR: lo crea la
+      # instrumentacion de Celery en el proceso de la API, en el mismo
+      # milisegundo que la peticion. Con el basta para saber que esta traza va
+      # a continuar en otro sitio, y eso es exactamente lo que hay que decidir.
+      #
+      # Cuesta poco: medido sobre 7 dias, 5 de 8640 trazas tocan una cola
+      # (0,06%). Y es el 0,06% que responde "por que tardo tanto esto", que es
+      # la pregunta con la que justificamos el piloto entero.
+      - name: async-handoff
+        type: string_attribute
+        string_attribute:
+          key: messaging.destination
+          values: [".*"]
+          enabled_regex_matching: true
+
+      # La grafia nueva de las semconv. Las instrumentaciones estan migrando de
+      # `messaging.destination` a esta; tener las dos evita que una
+      # actualizacion nos deje sin la politica y sin avisar.
+      - name: async-handoff-semconv-nueva
+        type: string_attribute
+        string_attribute:
+          key: messaging.destination.name
           values: [".*"]
           enabled_regex_matching: true
 
