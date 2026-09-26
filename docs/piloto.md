@@ -89,14 +89,14 @@ Desde PyPI, como cualquier otra dependencia. Nada de `--find-links`, ni de
 índices privados, ni de ruedas pasadas a mano.
 
 ```bash
-pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a4"
+pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a6"
 ```
 
 En el `pyproject.toml` de tu aplicación:
 
 ```toml
 dependencies = [
-  "argus-obs-sdk[asgi,client,sql]==1.0.0a4",
+  "argus-obs-sdk[asgi,client,sql]==1.0.0a6",
 ]
 ```
 
@@ -183,6 +183,51 @@ make query SQL="
 ```
 
 ---
+
+## Paso 3b — Si tus logs no aparecen
+
+Los dos casos que hemos visto de verdad, en este orden.
+
+### El nivel: ya no hay que tocarlo, pero conviene saber qué hace
+
+`argus.init()` baja el logger raíz a `INFO` **si nadie lo ha tocado**. Hasta
+`1.0.0a5` no lo hacía —creíamos que sí— y se perdía todo lo que no fuera
+`warning`, sin un solo aviso (D-084). Si estás en una versión anterior, esto es
+tu problema.
+
+Respeta lo que tú decidas:
+
+| tú haces | queda en |
+|---|---|
+| nada | `INFO` |
+| `argus.init(logging_level="DEBUG")` | `DEBUG` |
+| `ARGUS_LOG_LEVEL=ERROR` | `ERROR` |
+| `logging.basicConfig(level=...)` antes de `init()` | lo tuyo |
+
+### structlog que no pasa por stdlib
+
+**El caso que nos costó 21 minutos de pipeline con cero registros.**
+
+Nuestro puente se engancha al logger **raíz de stdlib**. Si tu configuración de
+structlog termina en un processor que escribe por su cuenta y corta la cadena
+con `DropEvent`, tus logs nunca pasan por ahí y para nosotros no existen. No hay
+nada que podamos hacer desde el SDK: no se puede capturar lo que no pasa.
+
+La salida es un logger de stdlib dedicado que solo exporta:
+
+```python
+exportador = logging.getLogger("miapp.export")
+exportador.setLevel(logging.INFO)   # NO lo heredes: el root puede estar por encima
+exportador.propagate = False        # o cada línea se imprime dos veces
+```
+
+Y emites por ahí en el processor final, en vez de solo por tu salida propia.
+
+> El `setLevel` explícito no es opcional y es la mitad del arreglo. Un logger
+> que hereda el nivel descarta los `INFO` antes de que lleguen a ningún handler,
+> y desde fuera se ve igual que si el puente no funcionara.
+
+Gracias a Prosodia por diagnosticarlo entero y contarlo (S-05).
 
 ## Paso 4 — Registrar la aplicación
 

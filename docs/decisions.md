@@ -2523,3 +2523,142 @@ que la primera comprobación que hicimos dio verde sin comprobar nada. Hay test 
 firma para eso.
 
 Los cuatro con test que falla sin el arreglo, comprobado quitándolo.
+
+---
+
+## D-083 · El muestreo decidía antes de que el trabajo empezara
+
+> **Fallo de plataforma** · descubierto 2026-09-26 · una traza que publica en una cola se juzgaba con 30 segundos de evidencia, y el trabajo de verdad cerraba 21 minutos después
+
+Prosodia corrió un doblaje real de punta a punta —1269 segundos, salida
+correcta— y **no quedó ni un span del worker en el almacén**.
+
+El mecanismo, y no es que los spans tardíos no lleguen:
+
+1. La traza arranca con `POST /api/projects`, que cierra en milisegundos.
+2. A los 30 segundos (`decision_wait`) el tail sampling decide con lo único que
+   tiene delante: una petición HTTP rápida, sin error. Cae en el 10% base y se
+   **descarta**.
+3. El span del worker cierra **21 minutos después**. Llega —lo medimos en el
+   agente— pero ya hay una decisión de descarte registrada para ese `TraceId`.
+
+Ellos lo aislaron con dos experimentos controlados y **lo reprodujimos aquí**
+antes de tocar nada:
+
+| experimento | resultado |
+|---|---|
+| raíz rápida sin error + span que cierra a los 45 s | **se pierden los dos** |
+| raíz con error (decisión: conservar) + span a los 45 s | **se guardan los dos** |
+
+El segundo confirma además que la caché de decisiones funciona: un span tardío
+de una traza conservada entra sin problema. Lo que falla es **la decisión**, no
+el transporte.
+
+### Por qué esto era peor de lo que parece
+
+Suyo, y es el argumento que más duele: buscamos en 41 proyectos quién tenía cola
+y los elegimos a ellos **porque son los únicos con trabajo asíncrono largo**. Es
+decir, nos interesaba exactamente la forma que nuestra ventana de 30 segundos no
+puede ver. Y la pregunta con la que justificamos el piloto entero en A-01
+—*«¿por qué tardó tanto este doblaje?»*— es literalmente la que el muestreo
+dejaba sin muestra.
+
+### El arreglo: decidir con evidencia que sí llega a tiempo
+
+Subir `decision_wait` no vale: nadie va a bufferizar 21 minutos de trazas en
+memoria, y siempre habrá un trabajo más largo.
+
+Lo que sí llega dentro de la ventana es el **span del productor**. La
+instrumentación de Celery lo crea en el proceso de la API, en el mismo
+milisegundo que la petición, y lleva `messaging.destination`. Con eso basta para
+saber que la traza va a continuar en otro sitio, que es justo lo que hay que
+decidir.
+
+```yaml
+- name: async-handoff
+  type: string_attribute
+  string_attribute:
+    key: messaging.destination
+    values: [".*"]
+    enabled_regex_matching: true
+```
+
+**Lo que cuesta, medido y no estimado**: sobre 7 días, 5 de 8640 trazas tocan una
+cola — un 0,06%. Guardarlas enteras no mueve la aguja, y es el 0,06% que
+responde la pregunta del piloto. (El número está medido sobre trazas
+*almacenadas*, que ya pasaron por el muestreo; el real es algo mayor, porque
+justamente estas se estaban tirando. El orden de magnitud no cambia.)
+
+Dos cosas más:
+
+- Se añade la política gemela sobre `messaging.destination.name`, la grafía
+  nueva de las semconv. Las instrumentaciones están migrando; tener las dos
+  evita que una actualización nos deje sin política y sin avisar.
+- `decision_cache` pasa a estar **explícito**. De él depende que el span de los
+  21 minutos encuentre la decisión todavía en memoria, y dejar eso a un valor
+  por defecto que nadie ha mirado es cómo se construye el siguiente D-079.
+
+**Verificado con el arreglo puesto**: una raíz rápida y sin error, pero con salto
+a cola, conserva los tres spans incluido el que cierra a los 45 s. La misma
+traza sin salto a cola se sigue muestreando igual, así que la política
+discrimina en vez de conservarlo todo.
+
+**No hace falta que Prosodia ponga `ARGUS_SLO_MS`.** Preguntaron dónde fijarlo y
+la respuesta es que en ningún sitio: el arreglo es nuestro y ya está.
+
+---
+
+## D-084 · El `elif` que nunca se ejecutó, y todos los INFO que se perdieron
+
+> **Fallo de plataforma** · descubierto 2026-09-26 · `argus.init()` dejaba el logger raíz en WARNING, así que toda aplicación que nos adoptaba perdía el 100% de sus `logger.info()` en silencio
+
+Prosodia avisó de que hay que fijar el nivel a mano, y fueron generosos con la
+explicación: dijeron que solo lo bajamos *«si estaba en NOTSET, cosa que
+agradecemos, respeta la configuración ajena»*.
+
+Al ir a documentarlo resultó ser peor. El código era:
+
+```python
+elif root.level == logging.NOTSET:
+    root.setLevel(logging.INFO)
+```
+
+Y **el logger raíz de Python arranca en `WARNING`, nunca en `NOTSET`**:
+
+```
+nivel del root recien arrancado: 30 = WARNING
+es NOTSET?: False
+```
+
+La rama no se ejecutaba jamás. No es que respetáramos una decisión ajena: es que
+dejábamos el nivel de fábrica y se perdía todo lo que no fuera warning.
+Comprobado emitiendo un `info()` y un `warning()` tras `argus.init()`: solo salía
+el segundo.
+
+**No lo vimos nosotros porque nuestros propios servicios fijan el nivel por su
+cuenta.** Es exactamente el hueco que solo se ve desde fuera, como los cuatro de
+D-082.
+
+La regla ahora distingue el WARNING de fábrica del WARNING elegido:
+
+| situación | qué hace |
+|---|---|
+| argumento `logging_level` o `ARGUS_LOG_LEVEL` | manda eso |
+| root intacto: `NOTSET`, o `WARNING` **sin handlers** | baja a `INFO` |
+| cualquier otra cosa | no se toca |
+
+Lo de «WARNING sin handlers» es heurística y lo es a propósito: `basicConfig()`
+deja WARNING **y** un handler, así que un WARNING deliberado se distingue del de
+fábrica por la huella que deja al configurarse. Pisar una decisión de la
+aplicación sería el error contrario, y también sería nuestro.
+
+### Lo que Prosodia arregló de su lado, y que conviene documentar
+
+Su aplicación escribe con structlog a consola y fichero, con un processor final
+que corta la cadena con `DropEvent` y **nunca pasa por stdlib**. Nuestro puente
+se engancha al logger raíz de stdlib, así que para nosotros sus logs no existían.
+
+No es un fallo nuestro —no hay forma de capturar lo que no pasa por ahí— pero es
+un patrón que va a repetirse, así que va a la guía: quien use structlog con
+`DropEvent` necesita un logger de stdlib dedicado, con `propagate = False` para
+no imprimir dos veces.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import warnings
 from datetime import datetime
@@ -101,6 +102,52 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+def _fijar_nivel(root: logging.Logger, level: int | str | None) -> None:
+    """Deja el root en INFO salvo que alguien haya elegido otra cosa.
+
+    La version anterior solo lo bajaba `if root.level == logging.NOTSET`, con
+    la buena intencion de respetar la configuracion ajena. Pero **el root de
+    Python arranca en WARNING, nunca en NOTSET**, asi que esa rama no se
+    ejecutaba nunca y el nivel se quedaba en WARNING: toda aplicacion que nos
+    adoptaba perdia el 100% de sus `logger.info()` sin un solo aviso (D-084).
+
+    Un equipo consumidor lo encontro con 21 minutos de pipeline y cero
+    registros exportados.
+
+    La regla ahora distingue el WARNING por defecto del WARNING elegido:
+
+    - argumento explicito o `ARGUS_LOG_LEVEL` -> manda eso
+    - root intacto (NOTSET, o WARNING sin handlers) -> INFO, que es lo que
+      espera quien instala una plataforma de observabilidad
+    - cualquier otra cosa -> no se toca, porque alguien decidio
+
+    "WARNING sin handlers" es heuristica, y lo es a proposito: `basicConfig()`
+    deja WARNING **y** un handler, asi que un WARNING deliberado se distingue
+    del de fabrica por la huella que deja al configurarse.
+    """
+    if level is not None:
+        root.setLevel(level if isinstance(level, int) else str(level).upper())
+        return
+
+    del_entorno = os.getenv("ARGUS_LOG_LEVEL")
+    if del_entorno:
+        try:
+            root.setLevel(del_entorno.strip().upper())
+            return
+        except ValueError:
+            warnings.warn(
+                f"ARGUS_LOG_LEVEL={del_entorno!r} no es un nivel valido; se ignora.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+
+    intacto = root.level == logging.NOTSET or (
+        root.level == logging.WARNING and not root.handlers
+    )
+    if intacto:
+        root.setLevel(logging.INFO)
+
+
 def configure_logging(cfg: Config, *, level: int | str | None = None, force_json: bool = True) -> None:
     """Instala el puente de logging.
 
@@ -111,10 +158,7 @@ def configure_logging(cfg: Config, *, level: int | str | None = None, force_json
         return
 
     root = logging.getLogger()
-    if level is not None:
-        root.setLevel(level if isinstance(level, int) else level.upper())
-    elif root.level == logging.NOTSET:
-        root.setLevel(logging.INFO)
+    _fijar_nivel(root, level)
 
     correlation = TraceCorrelationFilter()
 
