@@ -208,3 +208,48 @@ No hay curación automática, a propósito: un reinicio en bucle taparía la cau
 Si se repite, lo que hay que averiguar es **por qué** el reloj de evaluación se
 atrasa —la sospecha es la suspensión del portátil— y no poner un reinicio
 periódico encima.
+
+---
+
+## Tras reiniciar el alert-bus, el tablero de incidentes miente {#tablero-vacio}
+
+**Si acabas de reiniciar `alert-bus`, `/incidents` está vacío y eso NO significa
+que no haya problemas.**
+
+Los incidentes viven en memoria (`self._incidents`, un `dict`). Al reiniciar se
+pierden. Y el canario **no los vuelve a mandar**, porque recuerda en su propio
+`_alertados` lo que ya reportó:
+
+```python
+if objetivo in self._alertados:
+    continue        # ya alertado; no se reenvia
+```
+
+Así que el problema sigue ahí, el tablero está vacío, y las dos mitades creen
+estar en lo correcto (`D-090`).
+
+### Para repoblarlo
+
+Reinicia **también** el canario, que es lo que limpia su memoria de alertados:
+
+```bash
+docker compose -f platform/compose.yaml --env-file platform/.env --profile lean restart canary
+```
+
+En el siguiente ciclo (5 min por defecto) vuelve a reportar lo que siga mal.
+
+### Cómo saber si el tablero es de fiar
+
+Compara la hora de arranque de los dos. Si el alert-bus arrancó **después** del
+canario, el tablero está incompleto:
+
+```bash
+docker inspect argus-alert-bus-1 argus-canary-1 --format '{{.Name}} {{.State.StartedAt}}'
+```
+
+### Por qué no está arreglado todavía
+
+Porque el arreglo bueno no es quitar el dedup —sin él, un servicio caído avisa
+cada cinco minutos para siempre— sino que el canario **reconcilie**: que mande su
+estado completo cada ciclo y el alert-bus decida qué es nuevo. Eso hace irrelevante
+quién se reinicie, y va junto con persistir los incidentes (`B-20` y `F2-15`).
