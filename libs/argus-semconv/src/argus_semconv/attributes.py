@@ -43,6 +43,12 @@ ARGUS_RUN_ID: Final[str] = "argus.run.id"
 ARGUS_TENANT: Final[str] = "argus.tenant"
 
 # --------------------------------------------------------------------------
+# actor: Quien origino la accion, donde el estandar no llega
+# --------------------------------------------------------------------------
+ARGUS_ACTOR_KIND: Final[str] = "argus.actor.kind"
+ARGUS_ACTOR_KIND_VALUES: Final[tuple[str, ...]] = ("user", "service", "unknown",)
+
+# --------------------------------------------------------------------------
 # wide_event: Campos del evento ancho canonico
 # --------------------------------------------------------------------------
 ARGUS_EVENT: Final[str] = "argus.event"

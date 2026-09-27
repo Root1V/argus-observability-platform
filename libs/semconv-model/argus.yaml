@@ -104,6 +104,38 @@ groups:
         brief: Inquilino, si aplica. Viaja en baggage.
 
   # ---------------------------------------------------------------------------
+  # Auditoria: QUIEN hizo algo.
+  #
+  # Aqui hay UN solo atributo nuestro, y es a proposito. Un equipo consumidor
+  # pidio cuatro (`argus.actor.id/kind/email` y `argus.action`) y tres ya
+  # existen en el estandar, asi que inventarlos seria el error de D-081 al
+  # reves: poner nombre propio a algo que ya lo tiene (D-086).
+  #
+  #   quien es            -> `user.id`      (estandar)
+  #   su correo           -> `user.email`   (estandar)
+  #   que se intento      -> `http.request.method` + `http.route`, y `http.route`
+  #                          YA es la plantilla de ruta, no el path resuelto. Lo
+  #                          emite la instrumentacion de ASGI sin pedirlo.
+  #   su seudonimo        -> `enduser.pseudo.id`, que es lo que el gateway
+  #                          escribe al seudonimizar
+  #
+  # Lo unico sin nombre estandar es el TIPO de actor. No existe `user.type` ni
+  # equivalente, y sin el un identificador no se puede interpretar: `svc-7` no
+  # se lee igual si es una persona o una credencial de maquina.
+  # ---------------------------------------------------------------------------
+  - id: actor
+    brief: Quien origino la accion, donde el estandar no llega
+    attributes:
+      - id: argus.actor.kind
+        type: enum
+        members: [user, service, unknown]
+        brief: >
+          Si detras del identificador hay una persona, una credencial de maquina
+          o no se sabe. `unknown` es un valor legitimo y NO un relleno: en un
+          registro de auditoria, "no consta" es un hecho y hay que poder
+          distinguirlo de "nadie lo puso".
+
+  # ---------------------------------------------------------------------------
   # Wide events. Un evento ancho por unidad de trabajo, emitido al cerrar.
   # ---------------------------------------------------------------------------
   - id: wide_event

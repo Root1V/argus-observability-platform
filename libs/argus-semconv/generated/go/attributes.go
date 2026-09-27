@@ -38,6 +38,11 @@ const (
 	ArgusTenant = "argus.tenant"
 )
 
+// actor: Quien origino la accion, donde el estandar no llega
+const (
+	ArgusActorKind = "argus.actor.kind"
+)
+
 // wide_event: Campos del evento ancho canonico
 const (
 	ArgusEvent = "argus.event"

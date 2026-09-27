@@ -2750,3 +2750,96 @@ Y de paso destapó una colisión de estado global: dos módulos de test fijando 
 uno su `MeterProvider`, con el segundo ignorado en silencio. Ahora hay una
 fixture de sesión en `conftest.py`, igual que la que ya existía para trazas y por
 el mismo motivo.
+
+---
+
+## D-086 · La auditoría: el vocabulario es nuestro, el registro no
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · seudonimizábamos `user.id` EN SITIO, así que el span salía con un atributo que prometía un identificador y contenía un hash
+
+Prometheus puso log de auditoría en su gateway y pidió cuatro atributos porque
+nuestras convenciones no podían expresar **quién**: `argus.actor.id`,
+`argus.actor.kind`, `argus.actor.email` y `argus.action`. No los inventaron en
+nuestro namespace — los trajeron a preguntar.
+
+### Tres de los cuatro ya existen, y uno ya lo están emitiendo
+
+Fuimos a mirar el estándar antes de dar nombres, que es la lección de D-081:
+
+| lo que pedían | existe como | nota |
+|---|---|---|
+| `argus.actor.id` | **`user.id`** | del estándar |
+| `argus.actor.email` | **`user.email`** | del estándar |
+| `argus.action` | **`http.request.method` + `http.route`** | **estable**, no experimental |
+| `argus.actor.kind` | — | **no existe. Este sí es nuestro** |
+
+El de `argus.action` es el hallazgo: **`http.route` ya es la plantilla de ruta**,
+no el path resuelto, y es exactamente el argumento que ellos daban para no meter
+el id dentro. Y no hay que añadir nada, porque **ya lo emiten**: comprobado en sus
+propios spans de `manager-api` en nuestro almacén, `http.route = /v1/backends`
+junto a `http.request.method = GET`.
+
+Inventar `argus.action` habría sido D-081 al revés: poner nombre propio a algo
+que ya tiene uno estable y que la instrumentación de ASGI rellena sola.
+
+Del tipo de actor no hay nada —no existe `user.type` ni equivalente— y sin él un
+identificador no se puede interpretar: `svc-7` no se lee igual si es una persona
+o una credencial de máquina. Ese entra como `argus.actor.kind`, con `unknown`
+como valor **legítimo y no relleno**: en un registro de auditoría «no consta» es
+un hecho, y hay que poder distinguirlo de «nadie lo puso». Es la enfermedad de
+los tres estados otra vez, y esta vez la evitamos de entrada.
+
+### El fallo nuestro: el atributo mentía
+
+Al mirar qué le pasa a un actor cuando cruza el gateway salió esto:
+
+```yaml
+set(attributes["user.id"], SHA256(Concat([attributes["user.id"], <sal>], "")))
+```
+
+Se hasheaba **en sitio**. El span salía con `user.id = <64 caracteres hex>`, que
+no es un identificador de usuario. El atributo prometía una cosa y contenía otra,
+y quien lo leyera —una persona o el agente de RCA— concluiría que ese es el id.
+
+El estándar tiene el nombre exacto para esto: **`enduser.pseudo.id`**. Ahora el
+hash va ahí y el original se borra.
+
+Con precedencia explícita entre las cuatro grafías (`user.id`, `user_id`,
+`enduser.id`, `jwt.subject`): si un span trae dos, gana la primera y las demás no
+sobreescriben. Sin eso, dos fuentes pelearían por el mismo destino según el orden
+de llegada.
+
+**Verificado de punta a punta**, emitiendo un actor real y consultando el almacén:
+
+```
+user.id             (vacío)   ← borrado
+user.email          (vacío)   ← borrado
+jwt.subject         (vacío)   ← borrado
+enduser.pseudo.id   a87d91d9057ae000…
+http.route          /admin/api/nodes/{node_id}/deactivate
+argus.actor.kind    user
+```
+
+Salía gratis: nada en paneles, servicios, MCP ni runbooks leía `user.id`, y había
+**cero** spans con él en 14 días. Ningún dato que migrar y ninguna consulta que
+arreglar.
+
+### Y la respuesta a lo que preguntaban, por escrito
+
+Ellos decidieron que **el registro de verdad es su tabla y nosotros recibimos una
+copia**, con el argumento de que un pipeline de observabilidad es con pérdidas por
+diseño y un rastro que puede perder eventos no es un rastro de auditoría.
+
+Es correcto, y la razón de verdad es más dura que la suya: **no es que podamos
+perder eventos, es que destruimos al actor a propósito.** El id se hashea y el
+correo se borra. Nuestra copia puede responder «¿fue el mismo actor?» y nunca
+«quién». Eso no es una limitación que arreglaríamos: es la capa de privacidad
+funcionando.
+
+Así que la línea queda escrita:
+
+- **El vocabulario de auditoría sí es nuestro.** Si no, el siguiente equipo que
+  necesite auditar se inventa otros cuatro nombres, que es exactamente lo que el
+  modelo de convenciones existe para evitar.
+- **El registro de auditoría no.** No somos el sistema de registro de nada
+  auditable, y no queremos serlo.
