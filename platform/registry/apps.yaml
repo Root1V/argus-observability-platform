@@ -36,6 +36,20 @@
     # alert-bus, no un servicio aparte (D-029).
     - {id: alert-bus, rol: api, slo: {p95_ms: 1000}}
     - {id: canary, rol: scheduler}
+    # Los dos Collector, con rol `infra` a proposito.
+    #
+    # Estan aqui porque sus alertas tienen que resolver identidad: sin una
+    # entrada en el registro, un incidente suyo llega como `unregistered`, la
+    # criticidad cae al minimo y un `page` se recorta a `ticket`. Es lo que
+    # estaba pasando con las reglas de D-079 y D-087 (D-089).
+    #
+    # Y con rol `infra` porque `ROLES_SIN_LATIDO` lo excluye de la sonda de
+    # silencio del canario: su ausencia ya la vigilan `ArgusAgenteSinAutoMetricas`
+    # y `ArgusGatewaySinAutoMetricas`, que ademas saben distinguir "callado" de
+    # "el observador acaba de despertar". Dos vigilantes sobre lo mismo son dos
+    # avisos por incidente.
+    - {id: collector-agent, rol: infra}
+    - {id: collector-gateway, rol: infra}
   depende_de: [clickhouse, victoriametrics]
 
 - id: intelligent-document-platform
