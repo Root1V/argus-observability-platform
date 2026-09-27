@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import pathlib
 import re
 import subprocess
 import sys
@@ -64,6 +65,34 @@ def criterios() -> list[tuple[bool | None, str, str]]:
         detalle_v = fila[0].strip() if fila else "no instalado"
     except Exception:  # noqa: BLE001
         vigilante, detalle_v = False, "no se pudo consultar launchctl"
+
+    # Cargado en launchd NO es lo mismo que al dia. Lo que corre es una COPIA
+    # fuera del repositorio, y hoy se descubrio que llevaba once dias sin
+    # actualizarse: el arreglo estaba escrito y no hacia nada (D-088). Es el
+    # mismo patron que `.env.agent` en D-079, y la segunda vez que una copia
+    # derivada nos engana, asi que ahora se compara.
+    if vigilante:
+        import hashlib
+
+        instalado = (
+            pathlib.Path.home()
+            / "Library/Application Support/argus-deadman/deadman.py"
+        )
+        repo = pathlib.Path(__file__).resolve().parents[1] / "deadman/deadman.py"
+        try:
+            h_i = hashlib.sha256(instalado.read_bytes()).hexdigest()[:12]
+            h_r = hashlib.sha256(repo.read_bytes()).hexdigest()[:12]
+            if h_i != h_r:
+                vigilante = False
+                detalle_v = (
+                    f"cargado, pero la copia instalada NO es la del repo "
+                    f"({h_i} vs {h_r}). Ejecuta: make deadman-setup"
+                )
+            else:
+                detalle_v = f"{detalle_v} · al dia ({h_r})"
+        except OSError as exc:
+            vigilante = False
+            detalle_v = f"no se pudo comparar la copia instalada: {exc}"
 
     return [
         (bool(activas), "1 · Una aplicación real emite con identidad correcta",

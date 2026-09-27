@@ -34,6 +34,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import timezone
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -57,6 +58,113 @@ def comprobar(url: str, timeout_s: float) -> tuple[bool, str]:
     if codigo >= 500:
         return False, f"HTTP {codigo} en {ms} ms"
     return True, f"HTTP {codigo} en {ms} ms"
+
+
+
+
+def _leer_rfc3339(cruda: str):
+    """Lee una marca RFC-3339 tolerando NANOsegundos.
+
+    vmalert esta escrito en Go y emite hasta 9 digitos de fraccion
+    (`...48.198507418Z`). El `fromisoformat` de Python 3.9 —el interprete con el
+    que launchd ejecuta esto— solo acepta 3 o 6, asi que revienta con 9.
+
+    Y no falla siempre, que es lo peor: Go recorta los ceros del final, asi que
+    la misma marca tiene 9 digitos unas veces y 6 o 7 otras. El parser funcionaba
+    a ratos, y "a ratos" en un vigilante significa avisos equivocados en momentos
+    aleatorios (D-088).
+
+    Devuelve `None` si no se puede leer, y quien llama DECIDE que hacer con eso
+    en vez de confundirlo con ausencia.
+    """
+    from datetime import datetime
+
+    texto = cruda.strip().replace("Z", "+00:00")
+    # Recorta la fraccion a 6 digitos, que es lo maximo que entiende datetime.
+    if "." in texto:
+        cabeza, resto = texto.split(".", 1)
+        digitos = ""
+        for c in resto:
+            if c.isdigit():
+                digitos += c
+            else:
+                break
+        cola = resto[len(digitos):]
+        texto = f"{cabeza}.{digitos[:6]:<06s}{cola}"
+    try:
+        return datetime.fromisoformat(texto)
+    except ValueError:
+        return None
+
+
+def comprobar_frescura_de_reglas(url: str, timeout_s: float, max_atraso_s: float) -> tuple[bool, str]:
+    """Comprueba que vmalert esta evaluando AHORA y no en el pasado.
+
+    Existe por un fallo que ninguna alerta podia cazar, porque la victima era el
+    propio evaluador: vmalert se quedo evaluando con un reloj **5,4 dias
+    atrasado** (D-087). Seguia diciendo `health: ok`, seguia escribiendo sus
+    reglas de grabacion, y cada muestra caia cinco dias en el pasado — donde
+    ninguna consulta a `now` la encuentra.
+
+    Consecuencias, todas silenciosas:
+      · ninguna regla de grabacion era consultable, asi que las alertas de
+        burn-rate de SLO —que leen `argus:error_ratio:*`— no podian disparar;
+      · las reglas de ausencia se evaluaban contra datos de hace cinco dias, y
+        disparaban por series que en aquel momento aun no existian.
+
+    **Y no se puede detectar desde dentro**: una regla que preguntara "¿estoy
+    evaluando a la hora correcta?" la evaluaria el mismo reloj atrasado, y desde
+    ahi todo parece consistente. Tiene que mirarlo alguien de fuera, que es
+    exactamente para lo que existe este fichero.
+
+    Se compara contra la evaluacion MAS RECIENTE de todas las reglas: basta con
+    que una este al dia para saber que el evaluador no se ha quedado atras.
+    """
+    from datetime import datetime
+
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s) as r:
+            datos = json.loads(r.read().decode())
+    except Exception as exc:  # noqa: BLE001
+        return False, f"no se pudo leer las reglas: {type(exc).__name__}: {exc}"
+
+    marcas = []
+    ilegibles = 0
+    for grupo in datos.get("data", {}).get("groups", []):
+        for regla in grupo.get("rules", []):
+            cruda = regla.get("lastEvaluation")
+            if not cruda:
+                continue
+            fecha = _leer_rfc3339(cruda)
+            if fecha is None:
+                ilegibles += 1
+            else:
+                marcas.append(fecha)
+
+    if ilegibles and not marcas:
+        # NO se calla. La primera version hacia `except ValueError: continue` y
+        # eso convertia "no se parsear la fecha" en "no hay fechas", que es un
+        # diagnostico completamente distinto y mando un aviso equivocado.
+        return False, f"{ilegibles} marcas de tiempo ilegibles: revisa el formato de lastEvaluation"
+
+    if not marcas:
+        # Pasa de verdad, y es transitorio: justo tras arrancar vmalert responde
+        # a `/api/v1/rules` pero aun no ha evaluado nada. Se cuenta como fallo a
+        # proposito —un vmalert que responde y nunca evalua es exactamente el
+        # tipo de averia silenciosa que este fichero existe para cazar— y lo que
+        # absorbe el arranque es `fallos_para_avisar`, que exige varios fallos
+        # consecutivos antes de molestar a nadie.
+        return False, "responde pero ninguna regla ha evaluado aun (¿acaba de arrancar?)"
+
+    atraso = (datetime.now(timezone.utc) - max(marcas)).total_seconds()
+    if atraso > max_atraso_s:
+        horas = atraso / 3600
+        return False, (
+            f"vmalert evalua con {horas:.1f} h de atraso. Sus reglas de grabacion "
+            f"caen en el pasado y las alertas que las leen no pueden disparar. "
+            f"Reinicialo: docker compose restart vmalert"
+        )
+    return True, f"evaluando al dia (atraso {atraso:.0f} s)"
 
 
 # --- Avisos ------------------------------------------------------------------
@@ -221,6 +329,19 @@ def main() -> int:
         print(f"  {marca} {objetivo['nombre']:24} {detalle}")
         if not ok:
             fallos.append(f"{objetivo['nombre']}: {detalle}")
+
+    # Que vmalert RESPONDA no basta: tiene que estar evaluando a la hora que es.
+    reglas = cfg.get("reglas")
+    if reglas:
+        ok, detalle = comprobar_frescura_de_reglas(
+            reglas["url"],
+            float(cfg.get("timeout_s", 10)),
+            float(reglas.get("max_atraso_s", 300)),
+        )
+        marca = "OK " if ok else "MAL"
+        print(f"  {marca} {'frescura de vmalert':24} {detalle}")
+        if not ok:
+            fallos.append(f"frescura de vmalert: {detalle}")
 
     ahora = time.strftime("%Y-%m-%d %H:%M:%S")
 
