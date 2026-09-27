@@ -14,8 +14,6 @@ from __future__ import annotations
 import pytest
 from argus_semconv import agent, genai, tool
 from argus_semconv import attributes as A
-from opentelemetry import metrics
-from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 
