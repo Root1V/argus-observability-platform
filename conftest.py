@@ -48,3 +48,22 @@ def spans(_exporter: InMemorySpanExporter) -> InMemorySpanExporter:
 def exporter(spans: InMemorySpanExporter) -> InMemorySpanExporter:
     """Alias, para tests que prefieren ese nombre."""
     return spans
+
+
+@pytest.fixture(scope="session")
+def lector_metricas():
+    """Un único MeterProvider de sesión, por el mismo motivo que el de trazas.
+
+    OpenTelemetry solo deja fijar el proveedor GLOBAL una vez por proceso: un
+    segundo `set_meter_provider()` se ignora con un aviso, así que si dos módulos
+    montaran el suyo, solo el primero recibiría métricas y el otro fallaría de
+    forma desconcertante — que es exactamente lo que pasó al añadir
+    `test_modelo_vs_emision.py`.
+    """
+    from opentelemetry import metrics
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    lector = InMemoryMetricReader()
+    metrics.set_meter_provider(MeterProvider(metric_readers=[lector]))
+    return lector

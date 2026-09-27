@@ -2662,3 +2662,91 @@ No es un fallo nuestro —no hay forma de capturar lo que no pasa por ahí— pe
 un patrón que va a repetirse, así que va a la guía: quien use structlog con
 `DropEvent` necesita un logger de stdlib dedicado, con `propagate = False` para
 no imprimir dos veces.
+
+---
+
+## D-085 · Qué «primer token», y el modelo que no lo decía
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · el modelo declaraba la métrica de TTFT sin decir cuál de nuestras dos medidas la alimenta, así que el equipo que la emite tuvo que elegir por su cuenta
+
+Prometheus emite `gen_ai.server.time_to_first_token` con
+`argus.inference.first_token_ms` —primer token de cualquier tipo, razonamiento
+incluido— y no con `argus.inference.ttft_ms`, que es el primer token **visible**.
+Nos preguntaron si preferíamos que la métrica siguiera al atributo o al estándar.
+
+**La respuesta es que tienen razón, y la evidencia es nuestra.**
+
+### Lo que dice el estándar, literalmente
+
+```
+gen_ai.server.time_to_first_token
+  "Time to generate first token for successful responses."
+```
+
+Sin adjetivo. No dice visible, ni de contenido. Su lectura es la literal.
+
+### Lo que dicen nuestros propios números
+
+De A-24, medido sobre 689 spans en nuestro almacén:
+
+| | spans | cobertura |
+|---|---|---|
+| `first_token_ms` | 439 | 63,7 % — el **100 %** de las peticiones en streaming |
+| `ttft_ms` (visible) | 30 | 4,4 % |
+
+Y a quién pertenecía ese 4,4 %:
+
+| modelo | con `ttft_ms` | p95 de `first_token_ms` |
+|---|---|---|
+| `gpt-oss-20b-mxfp4` | 26 | 161 ms |
+| `qwen3-0.6b` | 4 | 53 ms |
+| `qwen3-8b-q6` | **0** | **283 ms** |
+
+El modelo de peor cola es exactamente el que nunca aparece. Una métrica estándar
+construida sobre la medida visible se habría llenado de `gpt-oss` y **habría
+declarado sana la plataforma justo mientras el modelo más lento se degradaba.**
+Ese argumento lo escribimos nosotros en A-24; ellos solo lo han aplicado un nivel
+más arriba.
+
+### El estándar no tiene sitio para «visible», y conviene saberlo
+
+Comprobado en los dos candidatos, no supuesto:
+
+| métrica | qué mide | sirve para «visible» |
+|---|---|---|
+| `gen_ai.server.time_to_first_token` | **servidor**: generar el primer token | no, es cualquier token |
+| `gen_ai.client.operation.time_to_first_chunk` | **cliente**: recibir el primer trozo del stream | no — para un modelo que razona, el primer trozo es razonamiento |
+
+Así que la medida visible **no tiene nombre estándar** y no debe forzarse dentro
+de uno. Se queda como atributo por span, donde responde «¿cuánto tardó este
+usuario en ver algo?» sin pretender ser una serie agregable. Si algún día hace
+falta agregada, su nombre tendrá que ser `argus.*` y nunca `gen_ai.*`.
+
+### La parte que es un fallo nuestro
+
+**El modelo no decía cuál de las dos alimenta la métrica.** Solo el nombre, el
+instrumento y la unidad. Con dos medidas casi homónimas en el mismo grupo, eso no
+es una omisión menor: es dejar la decisión en manos de quien emite, que es
+precisamente lo que un modelo de convenciones existe para evitar.
+
+Arreglado con un `brief` explícito y el comentario de por qué.
+
+Y al mirarlo salió otro descolgado: **el modelo declaraba tres atributos para esa
+métrica y se emitían cuatro.** Cuando arreglamos `record_ttft` para que aceptara
+`operation` (D-082) no actualizamos el modelo. Dos versiones declarando una cosa
+y emitiendo otra, sin que nada lo notara.
+
+`test_modelo_vs_emision.py` cierra ese hueco en los dos sentidos: emitir lo que
+el modelo no declara, y declarar lo que nadie emite. Es el mismo guardarraíl que
+`test_documentos_vs_modelo.py` pero por el lado del código en vez del de la
+documentación.
+
+Encontró algo en su primera ejecución: el modelo declara
+`deployment.environment.name` en `argus.cost.usd` y `record_cost` no lo emite —
+viene del Resource. Queda como exención **con el motivo escrito**, y hay un tercer
+test que falla si una exención deja de hacer falta.
+
+Y de paso destapó una colisión de estado global: dos módulos de test fijando cada
+uno su `MeterProvider`, con el segundo ignorado en silencio. Ahora hay una
+fixture de sesión en `conftest.py`, igual que la que ya existía para trazas y por
+el mismo motivo.

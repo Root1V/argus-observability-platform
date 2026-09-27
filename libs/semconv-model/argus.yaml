@@ -357,10 +357,35 @@ metrics:
     attributes: [gen_ai.operation.name, gen_ai.provider.name, gen_ai.request.model, gen_ai.token.type]
     buckets: [1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864]
 
+  # QUE primer token: el de CUALQUIER tipo, razonamiento incluido. O sea
+  # `argus.inference.first_token_ms`, NO `argus.inference.ttft_ms`.
+  #
+  # El modelo no lo decia, y por eso un equipo consumidor tuvo que preguntarlo
+  # (D-085). La especificacion dice literalmente "Time to generate first token
+  # for successful responses", sin adjetivo. Y nuestra medida visible cubre el
+  # 4,4% de los spans excluyendo sistematicamente al modelo de peor cola: una
+  # metrica construida sobre ella declara sana la plataforma justo mientras el
+  # modelo mas lento se degrada (A-24).
+  #
+  # El estandar NO tiene sitio para "primer token visible". Comprobado en los
+  # dos candidatos: esta es de SERVIDOR y mide generacion, y
+  # `gen_ai.client.operation.time_to_first_chunk` es de CLIENTE y mide recepcion
+  # del primer trozo —que para un modelo que razona sigue siendo razonamiento—.
+  # Asi que lo visible se queda como ATRIBUTO por span. Si algun dia hace falta
+  # agregado, su nombre tendra que ser `argus.*` y nunca `gen_ai.*`.
   - name: gen_ai.server.time_to_first_token
     instrument: histogram
     unit: s
-    attributes: [gen_ai.provider.name, gen_ai.request.model, argus.inference.backend_id]
+    brief: >
+      Tiempo hasta generar el primer token, de cualquier tipo. Se alimenta de
+      `argus.inference.first_token_ms`.
+    # `gen_ai.operation.name` va aqui porque `record_ttft` la emite desde
+    # 1.0.0a5: sin ella el TTFT era la unica de las cuatro que no se podia
+    # trocear por operacion (D-082), y el modelo se habia quedado sin
+    # actualizar. Lo caza test_modelo_vs_emision.py.
+    attributes:
+      [gen_ai.operation.name, gen_ai.provider.name, gen_ai.request.model,
+       argus.inference.backend_id]
 
   - name: argus.step.duration
     instrument: histogram
