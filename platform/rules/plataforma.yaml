@@ -13,6 +13,31 @@ groups:
   - name: argus.plataforma
     interval: 15s
     rules:
+      # -------------------------------------------------------------------
+      # EL LATIDO. Vale 1 siempre, y eso es justo el punto.
+      #
+      # Una regla de ausencia no se puede interpretar sin saber cuanto lleva
+      # despierto quien mira. El plano central vive en un portatil: cuando se
+      # cierra la tapa, TODO deja de llegar a la vez —medido, `count(up)` tiene
+      # exactamente los mismos huecos que las metricas del Collector— y al
+      # despertar cualquier `absent()` es cierto durante unos segundos.
+      #
+      # Y `for:` NO protege de eso, que es lo contraintuitivo: se evalua contra
+      # el reloj de pared, asi que un sueno de seis horas hace que `now -
+      # activeAt` supere cualquier `for` en la primera evaluacion tras
+      # despertar. Nuestras dos reglas llevaban cinco dias disparando por esto
+      # (D-087).
+      #
+      # `vector(1)` produce muestra en CADA evaluacion y viaja por
+      # `remoteWrite`, asi que no depende del Collector. Contar sus muestras en
+      # una ventana responde "¿cuanto lleva despierto el observador?", que es la
+      # precondicion para que un silencio signifique algo.
+      #
+      # Es el patron `Watchdog` de kube-prometheus, aplicado hacia dentro: una
+      # alerta que dispara siempre y cuyo valor esta en que deje de hacerlo.
+      - record: argus:observador_despierto
+        expr: vector(1)
+
       # ---------------------------------------------------------------------
       # Un solo fallo de exportacion sostenido ya es telemetria perdida: la
       # cola reintenta, pero un 401 no es reintentable y se descarta. No hay
@@ -67,8 +92,10 @@ groups:
       # `absent()` sin filtro no ve nada raro — que es exactamente como dos
       # dias de perdida total pasaron desapercibidos (D-079).
       - alert: ArgusAgenteSinAutoMetricas
-        expr: absent(otelcol_exporter_sent_spans_total{argus_collector_tier="agent"})
-        for: 5m
+        expr: |
+          absent_over_time(otelcol_exporter_sent_spans_total{argus_collector_tier="agent"}[10m])
+          and on() (count_over_time(argus:observador_despierto[10m]) > 30)
+        for: 2m
         labels:
           severity: page
           argus_app: argus-platform
@@ -82,8 +109,10 @@ groups:
           runbook: docs/runbooks/plataforma.md#collector-descarta
 
       - alert: ArgusGatewaySinAutoMetricas
-        expr: absent(otelcol_exporter_sent_spans_total{argus_collector_tier="gateway"})
-        for: 5m
+        expr: |
+          absent_over_time(otelcol_exporter_sent_spans_total{argus_collector_tier="gateway"}[10m])
+          and on() (count_over_time(argus:observador_despierto[10m]) > 30)
+        for: 2m
         labels:
           severity: page
           argus_app: argus-platform

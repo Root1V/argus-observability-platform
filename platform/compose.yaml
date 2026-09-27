@@ -107,6 +107,15 @@ services:
       # cambio de reglas parezca aplicado sin estarlo.
       - --configCheckInterval=30s
       - --evaluationInterval=10s
+    # Publicado en el loopback del host para que el dead man's switch pueda leer
+    # `/api/v1/rules` y comprobar que vmalert evalua a la hora que es.
+    #
+    # Hace falta porque el fallo de D-087 es INDETECTABLE desde dentro: vmalert
+    # se quedo evaluando con 5,4 dias de atraso, diciendo `health: ok`, y una
+    # regla que preguntara por su propio atraso la habria evaluado el mismo
+    # reloj atrasado. Tiene que mirarlo alguien de fuera del compose.
+    ports:
+      - "127.0.0.1:8880:8880"
     volumes:
       - ./rules:/rules:ro
       - ./secrets/argus_token:/run/secrets/argus_token:ro

@@ -2843,3 +2843,269 @@ Así que la línea queda escrita:
   modelo de convenciones existe para evitar.
 - **El registro de auditoría no.** No somos el sistema de registro de nada
   auditable, y no queremos serlo.
+
+---
+
+## D-087 · vmalert evaluaba con 5,4 días de atraso, y las alertas de SLO no podían disparar
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · el evaluador de reglas se quedó usando un reloj atrasado, diciendo `health: ok`, y todo lo que escribía caía en el pasado
+
+### Empecé con el diagnóstico equivocado
+
+Las dos reglas `*SinAutoMetricas` llevaban cinco días disparando. Miré los huecos
+de las series y encontré que `count(up)` tenía **exactamente los mismos** que las
+métricas del Collector, así que concluí: se para la máquina entera, el portátil
+duerme, y mi regla pagina cada vez que se cierra la tapa.
+
+Era plausible, encajaba con el plan —el plano central es portátil— y era **falso**.
+
+### Lo que pasaba de verdad
+
+Al construir el arreglo añadí una regla de grabación de latido, `vector(1)`, que
+por construcción no puede devolver vacío. No aparecía en VictoriaMetrics.
+
+Y ahí se deshizo el ovillo:
+
+| comprobación | resultado |
+|---|---|
+| `vmalert_remotewrite_sent_rows_total` | 79.647, **0 errores** |
+| `vm_rows_inserted_total{type="promremotewrite"}` | 83,8 millones |
+| `/api/v1/query` de `argus:observador_despierto` | **0 resultados** |
+| `/api/v1/export` de la misma serie | **existe**, 11 muestras |
+| marca de tiempo de esas muestras | **2026-09-22T08:09:30Z** |
+| reloj del host y de los contenedores | idénticos, al día |
+
+Los relojes del sistema coincidían. Lo que estaba atrasado era **el reloj de
+evaluación de vmalert**: escribía sus muestras 5,4 días en el pasado, donde
+ninguna consulta a `now` las encuentra.
+
+Se arregla reiniciándolo. Se comprobó inmediatamente: tras el reinicio, el latido
+pasó a ser consultable en el instante correcto.
+
+### El daño, que era mucho mayor que dos alertas ruidosas
+
+**Ninguna regla de grabación era consultable a `now`.** Y las alertas de burn-rate
+leen justo eso:
+
+```yaml
+expr: argus:error_ratio:rate5m > 0.144 and argus:error_ratio:rate1h > 0.144
+```
+
+Aquí conviene ser exacto, porque la primera conclusión fue demasiado fuerte. **No
+es que las alertas de SLO no pudieran disparar**: `ArgusSLOBurnRateSlow` disparó
+una vez esa semana. vmalert leía *y* escribía en el mismo instante atrasado, así
+que su mundo era internamente consistente.
+
+Lo que pasaba es peor de explicar y igual de malo:
+
+| | |
+|---|---|
+| vmalert evaluaba | contra datos de hace 5,4 días |
+| así que alertaba | sobre condiciones **del pasado**, no de ahora |
+| y cualquier cosa que consultara a `now` | Grafana, un panel, una consulta a mano: **no veía nada** |
+
+O sea: el camino templado seguía funcionando, pero describiendo la semana pasada.
+Un incidente de hoy no lo habría visto, y uno ya resuelto podía seguir
+disparando. Verificado tras el reinicio: las dos series vuelven a responder a
+`now`.
+
+Y explica el síntoma que me llevó por el camino equivocado: las reglas de
+ausencia se evaluaban contra datos de hace cinco días, donde
+`argus_collector_tier="agent"` **todavía no existía** —esa etiqueta nació con el
+arreglo de D-079 la semana pasada—. Así que disparaban con razón, sobre un pasado
+en el que la serie no estaba. No tenía nada que ver con dormir.
+
+### Por qué no lo cazaba nada, y no podía cazarlo
+
+**La víctima era el evaluador.** Una regla que preguntara «¿estoy evaluando a la
+hora correcta?» la habría evaluado el mismo reloj atrasado, y desde ahí todo es
+consistente. No hay expresión PromQL que detecte esto, porque el que la ejecuta
+es el que está mal.
+
+Tiene que mirarlo alguien de fuera. Es el mismo argumento que el *dead man's
+switch*, y la misma razón por la que la industria pone el watchdog fuera: **una
+regla nunca debe preguntarse si ella misma está viva.**
+
+### Los tres arreglos
+
+**1 · El latido y la puerta.** `argus:observador_despierto` vale 1 siempre, y las
+dos reglas de ausencia se condicionan a que haya suficientes muestras recientes:
+
+```promql
+absent_over_time(otelcol_exporter_sent_spans_total{argus_collector_tier="agent"}[10m])
+and on() (count_over_time(argus:observador_despierto[10m]) > 30)
+```
+
+Responde «¿cuánto lleva despierto el observador?», que es la precondición para que
+un silencio signifique algo.
+
+**Y conviene ser preciso sobre qué cubre, porque la primera versión de esta nota
+prometía más de lo que da.** La puerta se cierra cuando el latido tiene pocas
+muestras *relativas al instante en que se evalúa*:
+
+| situación | puerta |
+|---|---|
+| vmalert acaba de arrancar o reiniciarse | **cerrada** ✓ |
+| su reloj salta a un instante anterior a que el latido existiera | **cerrada** ✓ — es lo que pasó hoy |
+| su reloj lleva atrasado de forma estable, con latido ya escrito en ese pasado | **abierta** ✗ |
+
+O sea: cubre la **transición**, no el régimen permanente. Si el atraso se
+estabiliza, vmalert lee su propio latido en el pasado, lo encuentra completo, y la
+puerta se abre otra vez.
+
+Eso **no** es un agujero del diseño: es la razón por la que el arreglo 2 existe y
+no es opcional. El régimen permanente lo cubre el vigilante externo, que es el
+único que mira con un reloj que no es el de vmalert.
+
+Y de paso arregla lo que `for:` **no** puede: `for` se evalúa contra el reloj de
+pared, así que un sueño más largo que el `for` lo supera en la primera evaluación
+tras despertar. Ese sí era un problema real, aunque no fuera el que estaba
+pasando.
+
+**2 · La puerta no puede tapar el fallo.** Si la puerta cierra por vmalert
+atrasado, las alertas callan — que es correcto, pero entonces nadie sabe que
+vmalert está mal. Por eso el *dead man's switch* gana
+`comprobar_frescura_de_reglas()`: lee `/api/v1/rules` desde el host, busca el
+`lastEvaluation` más reciente y avisa si supera el umbral. Sin dependencias y
+fuera del compose, como el resto del fichero.
+
+Comprobado en los tres estados: sano («atraso 3 s»), atrasado, y con vmalert
+inalcanzable.
+
+**3 · El puerto.** vmalert no publicaba el 8880, así que el vigilante del host no
+podía leerlo. Ahora sí, atado al loopback como el resto.
+
+### Lo que cuesta, dicho claro
+
+La detección pasa de ~5 minutos a ~12: `absent_over_time(...[10m])` necesita diez
+minutos sin muestras, más el `for: 2m`.
+
+Es un cambio que vale la pena y conviene razonarlo en vez de asumirlo. El fallo
+que estas reglas existen para cazar —el agente descartando el 100% de la
+telemetría— estuvo **dos días** sin detectarse. Entre 5 y 12 minutos no hay
+diferencia práctica para eso, y a cambio se elimina la clase de falso positivo
+que enseña a ignorar la alerta.
+
+Si algún día hiciera falta detección más rápida, el camino no es estrechar la
+ventana: es que el agente reporte por un canal que no dependa de su propio
+exportador roto. Eso es trabajo de verdad y no está hecho.
+
+### Lo que me llevo
+
+Dos veces hoy el primer diagnóstico era el plausible y no el correcto. La
+diferencia la marcó una regla que **no puede devolver vacío**: en cuanto
+`vector(1)` no apareció, la hipótesis del sueño dejó de sostenerse.
+
+Meter en el sistema algo cuyo valor se conoce de antemano es más barato que
+razonar sobre huecos, y no admite interpretaciones.
+
+---
+
+## D-088 · El vigilante llevaba once días sin actualizarse, y luego lo rompí tres veces
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · el dead man's switch que corre de verdad es una copia fuera del repositorio, y estaba obsoleta: el arreglo de D-087 existía y no hacía nada
+
+Al añadir `comprobar_frescura_de_reglas()` (D-087) fui a comprobar que el
+vigilante la ejecutaba. No la ejecutaba:
+
+```
+~/Library/Application Support/argus-deadman/deadman.py   16 sep
+grep -c comprobar_frescura_de_reglas                     0
+```
+
+**Once días de deriva.** La receta `make deadman-setup` copia siempre y hasta
+avisa por escrito de que hay que reejecutarla — pero nadie lo hizo, y **nada lo
+detectaba**. Es el patrón de `.env.agent` de D-079 por segunda vez: una copia
+derivada que vive fuera del repositorio y se queda atrás en silencio.
+
+`make pilot-status` ahora compara los `sha256` de las dos copias. El criterio 7
+deja de decir «hay red de seguridad» por el hecho de estar cargado en launchd:
+cargado no es lo mismo que al día.
+
+### Y entonces empezaron mis fallos, que son los interesantes
+
+**1 · `ruff --fix` lo rompió y estuvo reventando en cada ejecución.**
+
+Con `target-version = py311`, la regla UP017 cambió `timezone.utc` por
+`datetime.UTC`. Pero **launchd invoca `/usr/bin/python3`, que en este Mac es el
+3.9.6 de Xcode**, y `datetime.UTC` no existe ahí:
+
+```
+ImportError: cannot import name 'UTC' from 'datetime'
+  (.../Python3.framework/Versions/3.9/lib/python3.9/datetime.py)
+```
+
+El error solo aparecía en `/tmp/argus-deadman.err`. `launchctl list` mostraba el
+trabajo cargado y `launchd` registraba salida 1, que nadie mira.
+
+Lo doloroso es lo que contradice: el fichero entero existe bajo la premisa de
+**correr sin nada instalado**, para no compartir modos de fallo con lo que
+vigila. Aplicarle la versión de Python del proyecto rompe exactamente esa
+premisa. Ahora `deadman/**` está exento de `UP` en la configuración de ruff, con
+el motivo escrito, y hay tres tests que lo compilan e importan **con
+`/usr/bin/python3`**, no con el nuestro.
+
+Comprobado volviendo a meter `datetime.UTC`: el test falla.
+
+**2 · Mi parser fallaba a ratos, que es peor que fallar siempre.**
+
+vmalert está escrito en Go y emite nanosegundos:
+
+```
+"lastEvaluation": "2026-09-27T18:16:48.198507418Z"
+```
+
+El `fromisoformat` de Python 3.9 solo acepta 3 o 6 dígitos de fracción. Con 9
+lanza `ValueError`. **Y Go recorta los ceros del final**, así que la misma marca
+tiene 9 dígitos unas veces y 6 o 7 otras: el parser funcionaba a ratos. En un
+vigilante, «a ratos» significa avisos equivocados en momentos aleatorios.
+
+**3 · Y lo callaba, que es el fallo de verdad.**
+
+```python
+except ValueError:
+    continue
+```
+
+Con eso, «no sé leer la fecha» se convertía en «no hay fechas», y de ahí en
+«vmalert no ha evaluado nunca» — tres cosas distintas colapsadas en una. Mandó un
+aviso por Telegram diciendo algo que no era cierto.
+
+Ahora los ilegibles se cuentan aparte y el mensaje dice qué pasó de verdad. Quien
+llama decide; el parser no interpreta.
+
+### Lo que sí funcionó, y conviene anotarlo
+
+La cadena de notificación completa quedó probada sin buscarlo, en los dos
+sentidos: el aviso equivocado **llegó a Telegram**, y al restaurar el agente llegó
+el de recuperación. Los reintentos de D-080 siguen en su sitio.
+
+### Verificación de D-087, de punta a punta
+
+| | |
+|---|---|
+| puerta cerrada tras arrancar | no pagina ✓ |
+| puerta abierta + agente sano | `inactive` — sin falso positivo ✓ |
+| puerta abierta + agente roto a propósito | **`firing` a los 13 min** ✓ |
+| agente restaurado | se apaga y avisa de la recuperación ✓ |
+| vigilante con Python 3.9 | 5 comprobaciones OK, salida 0 ✓ |
+
+### Y una cuarta, ya casi de chiste
+
+Los tres tests que acabo de escribir para que esto no se repita **tampoco se
+ejecutaban**: `testpaths` de pytest lista servicios y librerías, y el vigilante no
+es ninguna de las dos cosas. Estaban escritos, en verde al invocarlos a mano, y
+fuera de la suite.
+
+Lo vi porque el total de tests no subió: 276 antes de escribirlos y 276 después.
+Añadido a `testpaths`, son 279.
+
+### La lección, que es la misma cuatro veces
+
+Hoy he escrito cuatro cosas que parecían correctas y no corrían: un arreglo en una
+copia que nadie actualizó, uno bajo un intérprete que no era el real, un parser
+que solo funcionaba con ciertos datos, y unos tests fuera de la lista.
+
+**Los tres se descubrieron ejecutando la cosa de verdad**, no leyéndola. Y el
+tercero solo porque fui a mirar por qué un aviso decía algo raro en vez de dar por
+bueno que el vigilante funcionaba.

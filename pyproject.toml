@@ -46,6 +46,10 @@ testpaths = [
     "libs/argus-schemas/tests",
     "services/alert-bus/tests",
     "services/canary/tests",
+    # El vigilante NO es un servicio y por eso se quedo fuera de la lista al
+    # principio. Sus tests estuvieron escritos y sin ejecutarse hasta que se
+    # conto: un guardarrail que no corre es un fichero de texto (D-088).
+    "deadman/tests",
 ]
 asyncio_mode = "auto"
 filterwarnings = ["ignore::RuntimeWarning"]
@@ -75,3 +79,13 @@ ignore = [
 # En los ejemplos el `with` anidado es pedagogico: muestra la jerarquia
 # agente -> paso -> llamada, que es justo lo que el lector tiene que ver.
 "examples/**" = ["SIM117"]
+# El dead man's switch corre con el Python del SISTEMA, que en este Mac es el
+# 3.9.6 de Xcode, porque launchd invoca /usr/bin/python3. `target-version =
+# py311` le hizo "modernizar" `timezone.utc` a `datetime.UTC` —que no existe en
+# 3.9— y el vigilante llevaba desde entonces reventando en cada ejecucion con un
+# ImportError que solo se veia en /tmp/argus-deadman.err (D-088).
+#
+# UP es justo el grupo que asume la version del proyecto, y este fichero no la
+# tiene: su requisito es correr en cualquier Python que haya, porque si
+# dependiera de uno instalado compartiria modos de fallo con lo que vigila.
+"deadman/**" = ["UP"]

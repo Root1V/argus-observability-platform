@@ -10,17 +10,23 @@
     "Avisa por TODOS los canales configurados, no por el primero que funcione:",
     "si la plataforma esta caida no se sabe cual sigue en pie."
   ],
-
   "objetivos": [
-    {"nombre": "collector gateway", "url": "http://127.0.0.1:13133/"},
-    {"nombre": "alert-bus",         "url": "http://127.0.0.1:8080/healthz"},
-    {"nombre": "clickhouse",        "url": "http://127.0.0.1:8123/ping"}
+    {
+      "nombre": "collector gateway",
+      "url": "http://127.0.0.1:13133/"
+    },
+    {
+      "nombre": "alert-bus",
+      "url": "http://127.0.0.1:8080/healthz"
+    },
+    {
+      "nombre": "clickhouse",
+      "url": "http://127.0.0.1:8123/ping"
+    }
   ],
-
   "timeout_s": 10,
   "fallos_para_avisar": 2,
   "estado": "~/.argus-deadman-state.json",
-
   "avisos": {
     "telegram": {
       "token": "",
@@ -35,7 +41,9 @@
       "user": "",
       "password": "",
       "from": "argus@localhost",
-      "to": ["tu@correo.com"]
+      "to": [
+        "tu@correo.com"
+      ]
     },
     "whatsapp": {
       "phone_id": "",
@@ -43,5 +51,14 @@
       "to": "+34600000000",
       "template": "argus_incidente"
     }
+  },
+  "reglas": {
+    "_comentario": [
+      "Que vmalert responda no basta: tiene que estar evaluando a la hora",
+      "que es. Se quedo 5,4 dias atrasado sin dejar de decir health:ok, y",
+      "desde dentro es indetectable porque la victima es el evaluador (D-087)."
+    ],
+    "url": "http://127.0.0.1:8880/api/v1/rules",
+    "max_atraso_s": 300
   }
 }

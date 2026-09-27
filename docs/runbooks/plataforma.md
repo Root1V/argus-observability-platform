@@ -90,23 +90,121 @@ capacidad, no de conectividad: mira `ArgusCollectorDescartaTelemetria` primero.
 
 ---
 
-## `ArgusCollectorSinAutoMetricas`
+## `ArgusAgenteSinAutoMetricas` / `ArgusGatewaySinAutoMetricas`
 
-**Esta es la alerta que vigila a las otras dos.** Sin las métricas internas del
-Collector, las dos de arriba no pueden disparar nunca, y volvemos al punto ciego
-exacto de `D-079`: dos días perdiendo el 100% de la telemetría sin que nada
-avise.
+**Son las alertas que vigilan a las otras dos.** Sin las métricas internas del
+Collector, `ArgusCollectorDescartaTelemetria` no puede disparar nunca, y volvemos
+al punto ciego exacto de `D-079`: dos días perdiendo el 100% de la telemetría sin
+que nada avise.
 
-Que no llegue significa una de dos cosas, y las dos son graves:
+Y la del **agente** es la única que puede cazar un agente roto, porque el agente
+manda sus propias métricas por el mismo exportador que se le rompe. Su silencio
+*es* la señal.
+
+### Antes de investigar: ¿llevaba la máquina despierta?
+
+**No debería dispararte por eso**, y si lo hace es un fallo de la regla, no del
+Collector. Las dos llevan una puerta:
+
+```promql
+absent_over_time(otelcol_exporter_sent_spans_total{argus_collector_tier="agent"}[10m])
+and on() (count_over_time(argus:observador_despierto[10m]) > 30)
+```
+
+`argus:observador_despierto` es una regla de grabación que vale **1 siempre**.
+Cuando el portátil duerme, vmalert tampoco evalúa, así que no deja muestras: al
+despertar, `count_over_time(...)` es pequeño y la puerta está cerrada. Se abre
+sola a los ~7 minutos y medio de estar despierta, que es de sobra para que un
+Collector sano haya reportado.
+
+Existe porque `for:` **no** protege de esto: se evalúa contra el reloj de pared,
+así que un sueño de seis horas supera cualquier `for` en la primera evaluación
+tras despertar. Estas dos reglas llevaban cinco días disparando por eso (`D-087`).
+
+Si quieres confirmar que la puerta funciona:
+
+```bash
+docker exec argus-vmalert-1 wget -qO- 'http://127.0.0.1:8880/api/v1/query?query=count_over_time(argus:observador_despierto[10m])'
+```
+
+### Si la puerta estaba abierta, entonces sí hay algo
+
+Dos causas, y las dos son graves:
 
 1. El receptor `prometheus/interno` no está en la tubería de métricas de
    `platform/collector/agent.yaml` o `gateway.yaml`.
 2. El Collector no está corriendo.
 
 ```bash
-grep -n "prometheus/interno" platform/collector/*.yaml   # debe salir 4 veces: 2 receptores, 2 tuberías
-docker exec argus-vmalert-1 wget -qO- http://127.0.0.1:8880/api/v1/rules | grep -c ArgusCollector
+grep -c "prometheus/interno" platform/collector/*.yaml   # 2 en cada fichero: receptor y tubería
+docker ps --format '{{.Names}}\t{{.Status}}' | grep -E "argus-(agent-)?agent|argus-collector"
 ```
 
-Trátala como `page` aunque todo lo demás parezca bien. Es la única regla que
-distingue **«no pasa nada»** de **«no me está llegando nada»**.
+Trátalas como `page` aunque todo lo demás parezca bien. Son las únicas reglas que
+distinguen **«no pasa nada»** de **«no me está llegando nada»**.
+
+### Lo que NO cubren, a propósito
+
+**Que la máquina esté apagada o dormida.** Eso no es un incidente para un plano
+central que vive en un portátil, y detectarlo desde dentro es imposible: si la
+máquina duerme, quien mira duerme con ella.
+
+De eso se encarga el *dead man's switch* de `deadman/`, que corre fuera del
+compose y sin dependencias. Su alcance es «Argus dejó de reportar **mientras la
+máquina vivía**», que es el alcance correcto — y es el mismo patrón que usa la
+industria: un watchdog externo, nunca una regla que se pregunte si ella misma
+está viva.
+
+---
+
+## «frescura de vmalert» en el dead man's switch {#frescura-vmalert}
+
+El vigilante ha avisado de que **vmalert evalúa con horas de atraso**. No es que
+esté caído: responde, dice `health: ok`, y sigue escribiendo. Lo que escribe cae
+en el pasado.
+
+**Esto es grave y no lo parece.** Mientras dure:
+
+- Ninguna regla de grabación es consultable a `now`, así que las **alertas de
+  burn-rate de SLO no pueden disparar** — leen `argus:error_ratio:*`.
+- Las reglas de ausencia se evalúan contra datos viejos y pueden disparar por
+  series que en aquel momento no existían.
+
+### El arreglo
+
+```bash
+docker compose -f platform/compose.yaml --env-file platform/.env --profile lean restart vmalert
+```
+
+Y se comprueba que volvió, en la fuente y no en la alerta:
+
+```bash
+curl -s --get 'http://127.0.0.1:8428/api/v1/query' \
+  --data-urlencode 'query=argus:observador_despierto' | python3 -m json.tool
+```
+
+Tiene que devolver un resultado con una marca de tiempo **de ahora**. Si devuelve
+vacío, vmalert sigue atrasado.
+
+Confirma también que las de SLO vuelven:
+
+```bash
+curl -s --get 'http://127.0.0.1:8428/api/v1/query' \
+  --data-urlencode 'query=argus:error_ratio:rate5m'
+```
+
+### Por qué lo avisa el vigilante y no una alerta
+
+Porque **la víctima es el evaluador**. Una regla que preguntara por su propio
+atraso la evaluaría el mismo reloj atrasado, y desde ahí todo parece consistente.
+No hay expresión PromQL que lo detecte.
+
+Es el mismo motivo por el que el watchdog va fuera: una regla nunca debe
+preguntarse si ella misma está viva (`D-087`).
+
+### Si vuelve a pasar a menudo
+
+No hay curación automática, a propósito: un reinicio en bucle taparía la causa.
+Si se repite, lo que hay que averiguar es **por qué** el reloj de evaluación se
+atrasa —la sospecha es la suspensión del portátil— y no poner un reinicio
+periódico encima.
