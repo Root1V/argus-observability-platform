@@ -3192,3 +3192,92 @@ distingue.
 
 No se puede cerrar un piloto de observabilidad el mismo día que descubres que las
 alertas sobre la propia plataforma no despiertan a nadie.
+
+---
+
+## D-090 · Un reinicio borra el tablero de incidentes y nadie lo repuebla
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · los incidentes viven solo en memoria del alert-bus, y el canario no reenvía lo que ya reportó: tras reiniciar cualquiera de los dos, un problema abierto desaparece sin haberse resuelto
+
+Fui a verificar el criterio 4 —«el silencio de un servicio real abre incidente»—
+con un caso que se dio solo: los tres servicios de Prometheus llevaban **entre 24
+y 38 horas sin emitir**. La sonda debía estar gritando. No había ni un incidente.
+
+### Lo que sí funciona, comprobado paso a paso
+
+No es la sonda. Lo verifiqué de abajo arriba:
+
+| | |
+|---|---|
+| ¿corren las sondas? | sí — 10 POST a ClickHouse en dos ciclos, 200 OK |
+| ¿recargó el registro? | sí — `canary.probes_reloaded` |
+| ¿qué devuelve la consulta para un servicio mudo? | **`0`** |
+| ¿y con 0? | `actividad <= 0` → `Resultado.SILENCIO` |
+
+La sonda detecta el silencio correctamente. El corte está **después**.
+
+### El corte: dos memorias, ninguna persistencia
+
+```python
+# canary/runner.py
+if objetivo in self._alertados:
+    continue        # ya alertado; no se reenvia
+```
+
+```python
+# alert_bus/engine.py
+self._incidents: dict[str, Incident] = {}   # huella -> incidente abierto
+```
+
+Las dos son estructuras **en memoria**. Y encajan mal:
+
+1. El canario reporta el silencio una vez y apunta el objetivo en `_alertados`.
+2. El alert-bus crea el incidente y lo guarda en un `dict`.
+3. **Se reinicia el alert-bus** → el `dict` se vacía.
+4. El canario sigue viendo el problema, pero como está en `_alertados`, **no
+   reenvía nada**.
+
+Resultado: el problema sigue ahí, el tablero de incidentes está vacío, y las dos
+mitades creen estar en lo correcto. La única salida es que el servicio se
+recupere y vuelva a fallar.
+
+Lo descubrí porque **yo mismo lo provoqué**: reinicié el alert-bus para cargar el
+registro nuevo de D-089 y con eso borré la evidencia que estaba buscando. La
+lección es doble — el fallo existe, y por poco no lo veo porque lo causé.
+
+### Por qué cada mitad tiene razón por separado
+
+Ninguna de las dos decisiones es tonta:
+
+- Que el canario no reenvíe cada cinco minutos para siempre es correcto: el
+  comentario en el código lo dice y es cierto.
+- Que el alert-bus guarde en memoria fue deliberado en la Fase 2: sin un almacén
+  de incidentes, arrancar era mucho más simple.
+
+Lo que falla es la **junta**: el dedup del emisor asume que el receptor no olvida,
+y el receptor olvida en cada despliegue.
+
+### Qué se hace, y qué no se hace ahora
+
+**No se arregla con un `dict` más grande ni quitando el dedup del canario.** Sin
+dedup, un servicio caído genera un aviso cada cinco minutos para siempre, que es
+la fatiga de alertas que el propio plan señala como el problema dominante.
+
+La forma correcta es que el emisor **reconcilie** en vez de recordar: el canario
+manda su estado actual completo cada ciclo y el alert-bus decide qué es nuevo.
+Es el modelo de Alertmanager y de Kubernetes, y hace irrelevante quién se
+reinicie.
+
+Queda como `B-20`, y con ella la persistencia de incidentes, que ya estaba abierta
+como `F2-15`. Las dos son la misma pieza y conviene hacerlas juntas.
+
+**Mitigación mientras tanto**, escrita en el runbook porque no es obvia: tras
+reiniciar el alert-bus, el tablero está vacío y **no refleja la realidad**. Para
+repoblarlo hay que reiniciar también el canario, que es lo que limpia
+`_alertados`.
+
+### Lo que esto le hace al criterio 4
+
+Se queda en «?» y con una razón mejor que «verificado a mano el 13/09»: la
+detección está probada, la **entrega sostenida** no. Un incidente que desaparece
+sin resolverse es exactamente el silencio que parece salud.
