@@ -20,15 +20,14 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 
 @pytest.fixture(scope="module")
-def lector() -> InMemoryMetricReader:
-    """Un único MeterProvider de módulo.
+def lector(lector_metricas) -> InMemoryMetricReader:
+    """Delega en el proveedor de SESIÓN del conftest.
 
-    Igual que con las trazas, OpenTelemetry solo deja fijar el proveedor global
-    una vez por proceso.
+    Antes montaba el suyo. Con un solo módulo funcionaba; en cuanto un segundo
+    quiso métricas, el `set_meter_provider()` del segundo se ignoraba y sus
+    tests fallaban sin decir por qué.
     """
-    lector = InMemoryMetricReader()
-    metrics.set_meter_provider(MeterProvider(metric_readers=[lector]))
-    return lector
+    return lector_metricas
 
 
 def recoger(lector: InMemoryMetricReader) -> dict[str, list]:
