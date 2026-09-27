@@ -44,7 +44,7 @@ groups:
       # umbral "aceptable" aqui, solo tolerancia a un pico transitorio.
       - alert: ArgusCollectorDescartaTelemetria
         expr: |
-          sum by (job, exporter) (
+          sum by (argus_collector_tier, exporter) (
             rate(otelcol_exporter_send_failed_spans_total[5m])
             + rate(otelcol_exporter_send_failed_metric_points_total[5m])
             + rate(otelcol_exporter_send_failed_log_records_total[5m])
@@ -52,10 +52,12 @@ groups:
         for: 2m
         labels:
           severity: page
-          argus_app: argus-platform
-          argus_component: collector
+          service_namespace: argus
+          # Derivado, no fijo: esta regla vale para los DOS Collector y poner
+          # uno a mano atribuiria al gateway un fallo del agente.
+          service_name: 'collector-{{ $labels.argus_collector_tier }}'
         annotations:
-          summary: "El Collector esta descartando telemetria ({{ $labels.exporter }})"
+          summary: "El Collector {{ $labels.argus_collector_tier }} esta descartando telemetria ({{ $labels.exporter }})"
           description: >-
             {{ $labels.exporter }} lleva 2 minutos sin poder exportar. Si es
             401, casi seguro el token no coincide con el del gateway: comprueba
@@ -71,10 +73,10 @@ groups:
         for: 10m
         labels:
           severity: ticket
-          argus_app: argus-platform
-          argus_component: collector
+          service_namespace: argus
+          service_name: 'collector-{{ $labels.argus_collector_tier }}'
         annotations:
-          summary: "La cola del Collector va al 80% ({{ $labels.exporter }})"
+          summary: "La cola del Collector {{ $labels.argus_collector_tier }} va al 80% ({{ $labels.exporter }})"
           description: >-
             El destino lleva rato inalcanzable o lento. Mientras quepa no se
             pierde nada; cuando se llene, si.
@@ -98,8 +100,8 @@ groups:
         for: 2m
         labels:
           severity: page
-          argus_app: argus-platform
-          argus_component: collector-agent
+          service_namespace: argus
+          service_name: collector-agent
         annotations:
           summary: "El Collector agente lleva 5 minutos sin reportarse"
           description: >-
@@ -115,8 +117,8 @@ groups:
         for: 2m
         labels:
           severity: page
-          argus_app: argus-platform
-          argus_component: collector-gateway
+          service_namespace: argus
+          service_name: collector-gateway
         annotations:
           summary: "El gateway lleva 5 minutos sin reportarse"
           description: >-

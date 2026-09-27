@@ -3109,3 +3109,86 @@ que solo funcionaba con ciertos datos, y unos tests fuera de la lista.
 **Los tres se descubrieron ejecutando la cosa de verdad**, no leyéndola. Y el
 tercero solo porque fui a mirar por qué un aviso decía algo raro en vez de dar por
 bueno que el vigilante funcionaba.
+
+---
+
+## D-089 · Mis propias alertas de plataforma no podían paginar
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · las reglas de D-079 y D-087 llevaban etiquetas que el normalizador no lee, así que sus incidentes llegaban como `unregistered/unknown` y su `page` se recortaba a `ticket`
+
+Al ir a cerrar el piloto miré los incidentes abiertos y encontré esto:
+
+```
+app=unregistered  componente=unknown  severidad=ticket  "El Collector agente lleva 5 minutos sin reportarse"
+app=unregistered  componente=unknown  severidad=ticket  "El gateway lleva 5 minutos sin reportarse"
+```
+
+Las dos son mías, y las dos declaran `severity: page` en la regla.
+
+### La cadena, entera
+
+Mis reglas llevaban:
+
+```yaml
+labels:
+  severity: page
+  argus_app: argus-platform
+  argus_component: collector
+```
+
+Y el normalizador lee otras:
+
+```python
+app=labels.get("service_namespace") or labels.get("app") or "unregistered",
+component=labels.get("service_name") or labels.get("component") or "unknown",
+```
+
+`argus_app` no está en esa lista. De ahí sale todo lo demás: sin app resuelta la
+criticidad cae al mínimo, y el motor **recorta** la severidad por criticidad —que
+es correcto y lo escribimos nosotros—, así que un `page` acaba en `ticket`.
+
+**Resultado: las alertas que vigilan la salud de la plataforma no podían
+despertar a nadie.** Y llevaban así desde D-079, hace nueve días.
+
+De dónde salió `argus_app`: de `agents.yaml`, donde aparece en un `sum by
+(argus_app, argus_feature, ...)`. Pero ahí es una etiqueta de **métrica**, que
+viene de la telemetría. Una etiqueta de **alerta** es otra cosa. Confundí las dos
+y no lo contrasté con quien las consume — el mismo error que con los nombres de
+atributo de D-081, ahora en el otro extremo del sistema.
+
+### Dos arreglos, no uno
+
+**1 · Las etiquetas que el normalizador lee de verdad.** `service_namespace:
+argus` y `service_name`. Y en las dos reglas que valen para **cualquiera** de los
+dos Collector, el nivel se **deriva** en vez de fijarse:
+
+```yaml
+service_name: 'collector-{{ $labels.argus_collector_tier }}'
+```
+
+Poner uno a mano atribuiría al gateway un fallo del agente, que es peor que no
+atribuirlo.
+
+**2 · Los Collector, en el registro.** No estaban, así que ni con las etiquetas
+buenas habría identidad que resolver. Entran con rol `infra`, y ese rol importa:
+`ROLES_SIN_LATIDO` lo excluye de la sonda de silencio del canario. Su ausencia ya
+la vigilan `ArgusAgenteSinAutoMetricas` y `ArgusGatewaySinAutoMetricas`, que además
+saben distinguir «callado» de «el observador acaba de despertar». Dos vigilantes
+sobre lo mismo son dos avisos por incidente.
+
+**Verificado** mandando una alerta con las etiquetas nuevas al `/api/v2/alerts`
+real:
+
+```
+app=argus  comp=collector-agent  sev=page
+```
+
+### Lo que esto dice del piloto
+
+El criterio 2 —«un incidente real llega a una persona»— estaba en verde, y lo
+está: un incidente de **una aplicación** llega. Lo que no llegaba era un incidente
+de **la plataforma sobre sí misma**, que es una categoría que el criterio no
+distingue.
+
+No se puede cerrar un piloto de observabilidad el mismo día que descubres que las
+alertas sobre la propia plataforma no despiertan a nadie.
