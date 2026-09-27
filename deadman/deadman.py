@@ -167,6 +167,56 @@ def comprobar_frescura_de_reglas(url: str, timeout_s: float, max_atraso_s: float
     return True, f"evaluando al dia (atraso {atraso:.0f} s)"
 
 
+
+def comprobar_latido_en_el_almacen(url: str, timeout_s: float, max_atraso_s: float) -> tuple[bool, str]:
+    """Comprueba que el latido de vmalert SE PUEDE CONSULTAR en el almacen.
+
+    Existe porque `comprobar_frescura_de_reglas` resulto insuficiente el mismo
+    dia que se escribio. Esa mira lo que vmalert DICE de si mismo
+    (`lastEvaluation`), y vmalert puede decir la verdad —"evaluando, atraso de
+    1 s"— mientras cada muestra que escribe aterriza **102 minutos en el
+    pasado**, donde ninguna consulta a `now` la encuentra (D-091).
+
+    Medido: relojes del host y de los contenedores identicos, iteraciones de
+    24 ms, cero errores de escritura, `lastSamples = 1` en cada evaluacion... y
+    la serie ausente al consultarla. Un componente puede informar
+    correctamente de su salud y producir basura.
+
+    Asi que esta mira el OTRO extremo: pregunta al almacen por
+    `argus:observador_despierto`, que vale 1 siempre y no depende de que haya
+    trafico. Si no esta a `now`, la cadena esta rota en algun punto y da igual
+    cual: las reglas que dependen de series grabadas —el burn-rate de SLO, la
+    puerta de las alertas de ausencia— no pueden funcionar.
+
+    Prueba la CADENA, no un eslabon. Es la diferencia entre preguntarle a
+    alguien si esta trabajando y mirar si el trabajo esta hecho.
+    """
+    consulta = f"{url.rstrip('/')}/api/v1/query?query=argus%3Aobservador_despierto"
+    try:
+        with urllib.request.urlopen(consulta, timeout=timeout_s) as r:
+            datos = json.loads(r.read().decode())
+    except Exception as exc:  # noqa: BLE001
+        return False, f"no se pudo consultar el almacen: {type(exc).__name__}: {exc}"
+
+    resultado = (datos.get("data") or {}).get("result") or []
+    if not resultado:
+        return False, (
+            "el latido de vmalert NO esta en el almacen a esta hora. Las reglas de "
+            "grabacion no llegan, asi que el burn-rate de SLO y la puerta de las "
+            "alertas de ausencia estan inertes. Reinicia vmalert."
+        )
+
+    try:
+        marca = float(resultado[0]["value"][0])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return False, "el latido llego con una forma que no se sabe leer"
+
+    atraso = time.time() - marca
+    if atraso > max_atraso_s:
+        return False, f"el latido esta {atraso / 60:.0f} min atrasado en el almacen"
+    return True, f"latido al dia en el almacen (atraso {atraso:.0f} s)"
+
+
 # --- Avisos ------------------------------------------------------------------
 
 
@@ -342,6 +392,19 @@ def main() -> int:
         print(f"  {marca} {'frescura de vmalert':24} {detalle}")
         if not ok:
             fallos.append(f"frescura de vmalert: {detalle}")
+
+    # Y que lo escrito SE PUEDA CONSULTAR, que no es lo mismo (D-091).
+    almacen = cfg.get("latido")
+    if almacen:
+        ok, detalle = comprobar_latido_en_el_almacen(
+            almacen["url"],
+            float(cfg.get("timeout_s", 10)),
+            float(almacen.get("max_atraso_s", 300)),
+        )
+        marca = "OK " if ok else "MAL"
+        print(f"  {marca} {'latido en el almacen':24} {detalle}")
+        if not ok:
+            fallos.append(f"latido en el almacen: {detalle}")
 
     ahora = time.strftime("%Y-%m-%d %H:%M:%S")
 

@@ -60,5 +60,15 @@
     ],
     "url": "http://127.0.0.1:8880/api/v1/rules",
     "max_atraso_s": 300
+  },
+  "latido": {
+    "_comentario": [
+      "Que vmalert diga que evalua no basta: puede decir la verdad y aun",
+      "asi escribir 102 minutos en el pasado (D-091). Esto pregunta al",
+      "ALMACEN si el latido esta ahi a esta hora, que prueba la cadena",
+      "entera en vez de un eslabon."
+    ],
+    "url": "http://127.0.0.1:8428",
+    "max_atraso_s": 300
   }
 }
