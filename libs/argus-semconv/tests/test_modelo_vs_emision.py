@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 from argus_semconv import attributes as A
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 MODELO = Path(__file__).resolve().parents[2] / "semconv-model" / "argus.yaml"
 
