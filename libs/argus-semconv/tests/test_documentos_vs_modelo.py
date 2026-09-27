@@ -43,6 +43,12 @@ PERMITIDOS: dict[str, str] = {
     "argus.first_token_ms": "nombre histórico, citado en decisions.md (D-081)",
     "argus.backend.circuit_state": "nombre histórico, citado en decisions.md (D-081)",
     "argus.cost_usd": "nombre histórico; hoy es argus.inference.cost_usd (D-081)",
+    # Nombres que un equipo PROPUSO y que decidimos NO adoptar porque el
+    # estándar ya los tiene. Se citan en D-086 para poder contar por qué se
+    # rechazaron; no pueden volver a aparecer en material que mandemos fuera.
+    "argus.actor.id": "propuesto y rechazado: es `user.id` (D-086)",
+    "argus.actor.email": "propuesto y rechazado: es `user.email` (D-086)",
+    "argus.action": "propuesto y rechazado: es `http.request.method` + `http.route` (D-086)",
 }
 
 

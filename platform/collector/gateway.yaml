@@ -172,19 +172,43 @@ processors:
         statements:
           - delete_key(attributes, "http.request.header.authorization")
           - delete_key(attributes, "url.query")
-          - set(attributes["user.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
-          - set(attributes["user_id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil
-          - set(attributes["enduser.id"], SHA256(Concat([attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["enduser.id"] != nil
-          - set(attributes["jwt.subject"], SHA256(Concat([attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["jwt.subject"] != nil
+          # El hash va a `enduser.pseudo.id`, que es el nombre que el estandar
+          # tiene EXACTAMENTE para esto, y el original se borra.
+          #
+          # Antes se hasheaba EN SITIO: el span salia con
+          # `user.id = <64 hex>`, que no es un identificador de usuario. El
+          # atributo prometia una cosa y contenia otra, y quien lo leyera
+          # —persona o agente de RCA— concluiria que ese es el id (D-086).
+          #
+          # Precedencia explicita: si un span trae dos de las cuatro grafias,
+          # gana la primera y las demas no sobreescriben. Sin esto, dos fuentes
+          # distintas pelearian por el mismo destino segun el orden de llegada.
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil and attributes["enduser.pseudo.id"] == nil
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["enduser.id"] != nil and attributes["enduser.pseudo.id"] == nil
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["jwt.subject"] != nil and attributes["enduser.pseudo.id"] == nil
+          - delete_key(attributes, "user.id")
+          - delete_key(attributes, "user_id")
+          - delete_key(attributes, "enduser.id")
+          - delete_key(attributes, "jwt.subject")
+          # `session.id` se queda hasheado en sitio: no hay un
+          # `session.pseudo.id` en el estandar, y una sesion no es una persona.
           - set(attributes["session.id"], SHA256(Concat([attributes["session.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["session.id"] != nil
+          # El correo se BORRA, no se hashea: no aporta agrupacion que el
+          # seudonimo no de ya, y es dato personal directo.
           - delete_key(attributes, "user.email")
           - delete_key(attributes, "user_email")
     log_statements:
       - context: log
         statements:
           - delete_key(attributes, "http.request.header.authorization")
-          - set(attributes["user.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
-          - set(attributes["user_id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
+          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil and attributes["enduser.pseudo.id"] == nil
+          - delete_key(attributes, "user.id")
+          - delete_key(attributes, "user_id")
+          # Mismo criterio que en trazas: el correo no viaja al almacen.
+          - delete_key(attributes, "user.email")
+          - delete_key(attributes, "user_email")
 
   # El sesgo del muestreo, escrito EN el dato.
   #
