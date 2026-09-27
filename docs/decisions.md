@@ -3281,3 +3281,84 @@ repoblarlo hay que reiniciar también el canario, que es lo que limpia
 Se queda en «?» y con una razón mejor que «verificado a mano el 13/09»: la
 detección está probada, la **entrega sostenida** no. Un incidente que desaparece
 sin resolverse es exactamente el silencio que parece salud.
+
+---
+
+## D-091 · vmalert dice la verdad sobre sí mismo y escribe 102 minutos en el pasado
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · el desfase de D-087 no era el reloj de evaluación, vuelve solo a las pocas horas, y la comprobación que escribí esta mañana no lo caza
+
+D-087 dijo que vmalert evaluaba con un reloj atrasado y que reiniciarlo lo
+arreglaba. **Cuatro horas después estaba roto otra vez, y el diagnóstico no
+encaja.**
+
+### Lo que se midió, y lo que descarta cada dato
+
+| medida | valor | qué descarta |
+|---|---|---|
+| reloj del host, de vmalert y de VictoriaMetrics | **idénticos** | no es desincronización de relojes |
+| `lastEvaluation` de vmalert | **al segundo** | no es que deje de evaluar |
+| `lastSamples` de cada regla de grabación | **1** | no es que las reglas no produzcan nada |
+| `vmalert_remotewrite_errors_total` / `dropped_rows` | **0 / 0** | no es que falle al escribir |
+| `sent_rows_total` | **avanza** | no está atascado |
+| duración de iteración del grupo | **24 ms** con intervalo de 15 s | no hay *overrun* en operación normal |
+| marca de la última muestra en el almacén | **102 min en el pasado** | ← el síntoma |
+
+**Todo lo que vmalert dice de sí mismo es cierto, y lo que escribe es
+inservible.** La serie existe en `/api/v1/export` y está ausente en
+`/api/v1/query`, porque cae fuera de la ventana que mira una consulta a `now`.
+
+### Hipótesis probada y descartada
+
+Parecía que un fallo del notificador bloqueaba la iteración y desplazaba el
+calendario del grupo: había un `failed to send alerts: context deadline
+exceeded` a las 20:25:58, justo cuando se pararon las escrituras.
+
+**No cuadra con los números.** En las cinco horas de vida de esa instancia hubo
+**tres** errores de notificación. Tres bloqueos no producen 102 minutos de
+desfase salvo que cada uno costara media hora, y el timeout no es de media hora.
+La correlación temporal era casualidad.
+
+### Lo que sí está caracterizado
+
+- El desfase **se acumula**: ~1 min recién arrancado, ~102 min a las cinco horas.
+- Un **reinicio lo resetea**: medido inmediatamente después, 0,9 min y estable
+  durante dos minutos de observación.
+- Afecta a **todas** las reglas de grabación, no solo al latido: ni
+  `argus:error_ratio:*` ni `argus:host_cpu_busy:ratio5m` son consultables.
+- No depende de errores: crece con `vmalert_execution_errors_total = 0`.
+
+**La causa raíz sigue sin identificarse**, y se deja escrito así en vez de
+inventar una. Queda como `B-21`, con la caracterización de arriba, que es lo que
+hace falta para investigarla o para abrir un informe aguas arriba.
+
+### El daño, que es peor de lo que parecía esta mañana
+
+Cuando el desfase crece, las series grabadas desaparecen de `now`. Y eso incluye
+`argus:observador_despierto`, **que es la puerta que yo mismo puse esta mañana
+para que las alertas de ausencia no dieran falsos positivos**.
+
+Puerta cerrada = las alertas no pueden disparar. Así que el arreglo de D-087
+convierte este fallo en un apagado silencioso de la vigilancia del Collector.
+Ahora mismo el agente está genuinamente ausente y no hay nada mirándolo.
+
+Es el acoplamiento que la puerta pretendía evitar, introducido al construirla.
+
+### Y mi comprobación de esta mañana no lo caza
+
+`comprobar_frescura_de_reglas()` mira lo que vmalert **dice de sí mismo**. Con
+este fallo vmalert dice la verdad: «evaluando, atraso de 1 s». La comprobación da
+verde mientras la plataforma está ciega.
+
+Un componente puede informar correctamente de su salud y producir basura.
+
+Por eso el vigilante gana `comprobar_latido_en_el_almacen()`, que pregunta al
+**otro extremo**: ¿está `argus:observador_despierto` en VictoriaMetrics a esta
+hora? Vale 1 siempre y no depende de que haya tráfico, así que su ausencia solo
+puede significar que la cadena está rota — y da igual dónde.
+
+**Prueba la cadena, no un eslabón.** Es la diferencia entre preguntarle a alguien
+si está trabajando y mirar si el trabajo está hecho.
+
+Comprobado en sus tres estados: al día (0 s), almacén inalcanzable, y serie
+ausente.
