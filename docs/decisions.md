@@ -3332,6 +3332,38 @@ La correlación temporal era casualidad.
 inventar una. Queda como `B-21`, con la caracterización de arriba, que es lo que
 hace falta para investigarla o para abrir un informe aguas arriba.
 
+### Corrección: una de las mediciones estaba contaminada
+
+Al seguir investigando medí otras rutas con `/api/v1/export` **sin rango** y salió
+esto:
+
+```
+otelcol_exporter_sent_spans_total    224 min de atraso
+traces_span_metrics_calls_total      350 min
+system_cpu_load_average_1m         21491 min  (15 dias)
+```
+
+Estuve a punto de concluir que el atraso era de toda la plataforma y no de
+vmalert. **Es falso, y el error es de medición**: `export` sin `start`/`end`
+trunca, así que la «última» marca es la última de un trozo antiguo. Con rango
+explícito, esas mismas series tienen **0,2 minutos** de atraso.
+
+Lo que sí es válido de lo medido antes:
+
+| medida | ¿de fiar? |
+|---|---|
+| `query` a `now()` devolviendo **0 series** para las reglas de grabación | **sí** — no depende de `export` |
+| `export` del latido (604 y 809 muestras) | **sí** — por debajo del truncado, y corroborado por el `query` vacío |
+| `export` de series grandes sin rango | **no** — es el artefacto |
+
+Así que el alcance correcto es el que ya estaba escrito arriba: **afecta a las
+reglas de grabación que escribe vmalert**, no a las métricas que empuja el
+Collector. Esas llegan frescas.
+
+**La trampa, para no repetirla**: en VictoriaMetrics, `export` sin ventana no es
+«dame todo». Para preguntar «¿cuándo fue la última muestra?» hay que dar rango, o
+mejor usar `query` a `now()`, que es lo que hacen las reglas de verdad.
+
 ### El daño, que es peor de lo que parecía esta mañana
 
 Cuando el desfase crece, las series grabadas desaparecen de `now`. Y eso incluye
