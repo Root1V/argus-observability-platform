@@ -202,12 +202,30 @@ No hay expresión PromQL que lo detecte.
 Es el mismo motivo por el que el watchdog va fuera: una regla nunca debe
 preguntarse si ella misma está viva (`D-087`).
 
-### Si vuelve a pasar a menudo
+### Por qué pasa, y por qué va a volver a pasar
 
-No hay curación automática, a propósito: un reinicio en bucle taparía la causa.
-Si se repite, lo que hay que averiguar es **por qué** el reloj de evaluación se
-atrasa —la sospecha es la suspensión del portátil— y no poner un reinicio
-periódico encima.
+**El desfase es exactamente el tiempo que la máquina ha dormido.** Medido: 101,6
+minutos dormida contra 101,7 de desfase, en cuatro horas y 26 episodios de
+*Maintenance Sleep* (`D-091`).
+
+vmalert programa con un reloj monótono, que no avanza mientras el portátil
+duerme, y sella sus muestras con esa línea temporal. Cada segundo dormido la
+desplaza un segundo hacia atrás, para siempre.
+
+Así que **en un portátil esto vuelve siempre**, y el ritmo depende de cuánto
+duerma. Con un 40% de sueño son ~25 minutos de desfase por hora de reloj.
+
+Para saber cuánto lleva dormido:
+
+```bash
+pmset -g log | grep "Entering Sleep state" | tail -20
+```
+
+### Qué NO hacer
+
+No pongas un reinicio periódico «por si acaso». Reinicia cuando el vigilante
+avise, que es cuando el desfase ya importa. Un reinicio en bucle esconde el día
+que la causa sea otra.
 
 ---
 

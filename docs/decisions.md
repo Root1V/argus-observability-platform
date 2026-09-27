@@ -3328,9 +3328,57 @@ La correlación temporal era casualidad.
   `argus:error_ratio:*` ni `argus:host_cpu_busy:ratio5m` son consultables.
 - No depende de errores: crece con `vmalert_execution_errors_total = 0`.
 
-**La causa raíz sigue sin identificarse**, y se deja escrito así en vez de
-inventar una. Queda como `B-21`, con la caracterización de arriba, que es lo que
-hace falta para investigarla o para abrir un informe aguas arriba.
+### La causa: el desfase ES el tiempo que la máquina ha dormido
+
+Y la caracterización de arriba fue justo lo que permitió encontrarla. «Se acumula,
+un reinicio lo resetea, no depende de errores» describe un contador que solo
+avanza mientras algo está parado.
+
+```
+ventana medida       13:03 -> 17:06 local  (243 min de reloj)
+episodios de sueño   26
+tiempo dormido total 6096 s = 101,6 min
+desfase observado           101,7 min
+```
+
+**Seis segundos de diferencia en cuatro horas, sobre 26 episodios.** No es
+coincidencia.
+
+Esta MacBook entra en *Maintenance Sleep* continuamente —26 veces en cuatro
+horas, el 42% del tiempo— y vmalert programa sus evaluaciones con un reloj
+**monótono**, que no avanza mientras la máquina duerme. La marca con la que
+escribe cada muestra se deriva de ese calendario, así que cada segundo dormido
+desplaza su línea temporal un segundo hacia atrás, para siempre.
+
+Eso explica **todo** lo observado, sin dejar nada suelto:
+
+| observación | por qué |
+|---|---|
+| `lastEvaluation` correcto | lo reporta con la hora de pared |
+| la muestra escrita, atrasada | la marca sale del calendario monótono |
+| se acumula | cada sueño suma |
+| un reinicio lo resetea | el ticker arranca de cero |
+| no correlaciona con errores | no tiene nada que ver con errores |
+| afecta solo a lo que escribe vmalert | el Collector sella con hora de pared |
+| los 5,4 días de D-087 | una semana de portátil durmiendo |
+
+Y cierra el círculo con lo de esta mañana: mi primer instinto —«esto tiene que ver
+con que la máquina duerme»— **era correcto**, y lo descarté porque el mecanismo
+que había imaginado (un falso positivo al despertar) no era el real. Tenía razón
+sobre la causa y me equivoqué sobre el cómo, así que la abandoné entera.
+
+### Qué se hace con esto
+
+`B-21` deja de ser «investigar» y pasa a ser una decisión con dos opciones:
+
+1. **Que vmalert no acumule**: es comportamiento suyo, así que o hay una opción
+   que no hemos encontrado, o es un informe aguas arriba.
+2. **Reiniciarlo cuando se detecte**: el vigilante ya lo detecta con
+   `comprobar_latido_en_el_almacen()`. Curarlo automáticamente es un paso más, y
+   el runbook ya advierte de no ponerlo en bucle sin entender la causa — que
+   ahora sí se entiende.
+
+Lo que **no** se hace es tratarlo como un misterio: está medido y explicado.
 
 ### Corrección: una de las mediciones estaba contaminada
 
