@@ -3442,3 +3442,149 @@ si está trabajando y mirar si el trabajo está hecho.
 
 Comprobado en sus tres estados: al día (0 s), almacén inalcanzable, y serie
 ausente.
+
+---
+
+## D-092 · El objeto de la acción se llama `argus.target.type` + `argus.target.id`, y buscándole nombre salió un agujero de seudonimización
+
+**Contexto**: en `P-32` Prometheus pide nombre para el único atributo que les
+queda bajo su namespace: **sobre qué** se hizo el cambio administrativo. Lo
+emiten como JSON de los parámetros de ruta y ofrecen dos formas:
+
+```
+target  {"node_id": "8ed68951-d6cb-44f8-9335-6ddba3dde1fc"}     ← lo que hay
+        argus.target.type=node + argus.target.id=8ed68951…      ← lo que ofrecen
+```
+
+### La decisión: el par plano, por su propio argumento
+
+Ellos defendieron —y con razón— que `http.route` va separado del path resuelto
+porque, junto, cada id es una acción distinta y no se puede contar nada. **El
+mismo argumento, un nivel más abajo, decide entre sus dos opciones**: en un JSON,
+tipo e identificador vuelven a ser un solo valor.
+
+| | cardinalidad | para qué sirve |
+|---|---|---|
+| `argus.target.type` | cerrada (`node`, `client`, `api_key`, `user`) | **agrupar**: «cuántas desactivaciones de nodo» |
+| `argus.target.id` | abierta, opaca | **filtrar** un objeto concreto; nunca agrupar |
+
+El JSON además obliga a conocer la forma por ruta —`node_id` aquí, `client_id`
+allá— así que una consulta sobre «el objeto» tendría que enumerar las rutas. Es
+el problema de la plantilla, movido de sitio.
+
+### Y buscándole nombre apareció lo importante
+
+La pregunta «¿y si el objeto es una persona?» llevó a comprobar qué le pasa a un
+identificador que viaja en un **evento de span**. Medido contra ClickHouse:
+
+```
+span    user.id  ->  enduser.pseudo.id = 4a573e50…     correcto
+evento  user.id  ->  usuario-en-el-evento              EN CRUDO
+```
+
+`transform/pseudonymize` cubría `context: span` y `context: log`. **Los atributos
+de un evento de span son un ámbito OTTL distinto (`spanevent`) y no los tocaba
+nadie.**
+
+Importa aquí y no en abstracto porque el registro de auditoría de Prometheus vive
+exactamente ahí: `P-32 §2` cuenta que arreglaron el evento para que cuelgue del
+span de servidor, con el actor en los atributos **del evento**.
+
+Lo que les dijimos en `A-32` era falso justo donde ellos lo aplican:
+
+| les dijimos | de verdad, en el evento |
+|---|---|
+| «mandad `user.id` en crudo, el gateway lo convierte» | no lo convertía: llegaba en crudo al almacén |
+| «consultad `enduser.pseudo.id` para el actor» | el campo no existía en el evento |
+| «el correo se borra en el gateway» | **media verdad**: el `redaction` sí recorre los eventos y lo dejaba en `****`, pero la clave sobrevivía |
+
+El correo, entonces, nunca llegó legible: la capa 2 lo salvó. Lo que sí llegó
+legible fue el identificador de usuario.
+
+### El mismo agujero un nivel más abajo, y por eso el tipo decide
+
+`argus.target.id` es opaco por definición —salvo cuando lo que se administra es
+un usuario—. `/admin/users/{user_id}/disable` metería un identificador de persona
+en un atributo que ninguna regla del actor mira. De ahí que la regla se
+condicione por el tipo, que es el único campo que sabe si el id de al lado es una
+cosa o alguien:
+
+```
+set(spanevent.attributes["argus.target.id"], SHA256(...))
+  where spanevent.attributes["argus.target.type"] == "user"
+```
+
+Verificado con dos eventos de auditoría en la misma traza:
+
+| objeto | `argus.target.id` en ClickHouse |
+|---|---|
+| `node` | `8ed68951-…` en claro — es un objeto |
+| `user` | `78cbcb77…` hasheado, y distinto del hash del actor |
+
+### De paso: la sal estaba en los logs del Collector
+
+OTTL acepta `attributes[...]` sin prefijo de ámbito, lo reescribe solo, y **al
+hacerlo registra la sentencia reescrita** — con `${env:ARGUS_PSEUDONYM_SALT}` ya
+expandido. La sal llevaba en claro en los logs del contenedor desde que existe la
+seudonimización, once veces.
+
+No llegó a ClickHouse porque el agente no tiene receptor `filelog`. Pero el plan
+contempla añadirlo, y ese día sal y hashes acabarían en el mismo almacén, que es
+literalmente lo que la sal existe para impedir. Todas las rutas llevan ya su
+prefijo (`span.`, `spanevent.`, `log.`) y el aviso no vuelve a emitirse.
+
+### El guardarraíl, que es lo que faltaba de verdad
+
+**La configuración del Collector no la leía ninguna prueba.** Es donde vive la
+privacidad entera y solo se comprobaba mirando ClickHouse a mano.
+
+`platform/tests/test_seudonimizacion.py` recorre `transform/pseudonymize` y exige,
+para cada ámbito con atributos, que las cuatro grafías de identificador se
+conviertan **y** se borren, que el correo se borre, que la regla del objeto-persona
+esté, que ningún hash vaya sin sal, y que ninguna ruta vaya sin prefijo.
+
+Comprobado que falla sin el arreglo: 5 de 11 en rojo, incluida la que nombra el
+ámbito que faltaba. `platform/tests` añadido a `testpaths` — la lección de D-088
+es que una prueba fuera de la lista es un fichero de texto.
+
+### El patrón, que ya va tres veces
+
+Una regla escrita para la telemetría que uno **imagina**, no para la que **llega**:
+
+- D-086: `user.id` cubierto, `user_id` y `jwt.subject` no — y Prometheus mandaba ésos
+- D-089: etiquetas `argus_app`/`argus_component` que el normalizador no lee
+- D-092: ámbito `span` cubierto, `spanevent` no — y el evento de auditoría vive ahí
+
+Las tres se descubrieron mirando el otro extremo, ninguna leyendo la configuración.
+Ésta es la primera que deja una prueba detrás.
+
+**Publicado `1.0.0a8`** con `ARGUS_TARGET_TYPE` y `ARGUS_TARGET_ID`, para que
+Prometheus los importe en vez de reteclearlos, como ya hacen con
+`ARGUS_ACTOR_KIND_VALUES`.
+
+### Apéndice: un test intermitente que era un fallo del código
+
+Al correr la suite completa tras lo anterior falló
+`test_un_canal_caido_no_impide_que_los_demas_reciban`, y volvió a pasar al
+repetirla. La tentación evidente era subirle el plazo y seguir.
+
+No era el test. `drain()` consideraba «no queda trabajo» cuando la cola estaba
+vacía y no había reintentos programados, y **se dejaba fuera el envío en vuelo**:
+`_cola.empty()` es cierto desde el instante del `get()`, no desde que el envío
+acaba. Entre sacarlo y entregarlo cabe una llamada de red entera.
+
+Con un canal caído —que es cuando más tarda— la ventana es de segundos. Y lo que
+provoca en el apagado es el fallo exacto que este despachador existe para
+impedir: `drain` devuelve, `stop` mata los hilos, y la notificación que se estaba
+entregando se pierde **sin contarse como fallida** (D-080).
+
+`unfinished_tasks` cubre cola y vuelo a la vez, porque sube en el `put` y solo
+baja en el `task_done`, que va en un `finally`. Un contador aparte tendría su
+propia carrera entre el `get` y el incremento.
+
+La prueba nueva no usa relojes —el canal se bloquea en un `Event` que suelta el
+test— por dos motivos: la fixture del fichero anula `time.sleep`, y un fallo que
+depende de lo cargada que esté la máquina es el que acabas subiéndole el plazo.
+Comprobado que falla sin el arreglo.
+
+**Un test intermitente es una hipótesis sobre el código, no una molestia.**

@@ -50,6 +50,10 @@ testpaths = [
     # principio. Sus tests estuvieron escritos y sin ejecutarse hasta que se
     # conto: un guardarrail que no corre es un fichero de texto (D-088).
     "deadman/tests",
+    # La configuracion del Collector no la leia NINGUNA prueba, y es donde vive
+    # la seudonimizacion. Un ambito OTTL sin cubrir dejaba pasar identificadores
+    # en crudo y solo se vio mirando ClickHouse a mano (D-092).
+    "platform/tests",
 ]
 asyncio_mode = "auto"
 filterwarnings = ["ignore::RuntimeWarning"]

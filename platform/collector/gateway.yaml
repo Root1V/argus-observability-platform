@@ -170,8 +170,8 @@ processors:
     trace_statements:
       - context: span
         statements:
-          - delete_key(attributes, "http.request.header.authorization")
-          - delete_key(attributes, "url.query")
+          - delete_key(span.attributes, "http.request.header.authorization")
+          - delete_key(span.attributes, "url.query")
           # El hash va a `enduser.pseudo.id`, que es el nombre que el estandar
           # tiene EXACTAMENTE para esto, y el original se borra.
           #
@@ -183,32 +183,83 @@ processors:
           # Precedencia explicita: si un span trae dos de las cuatro grafias,
           # gana la primera y las demas no sobreescriben. Sin esto, dos fuentes
           # distintas pelearian por el mismo destino segun el orden de llegada.
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil and attributes["enduser.pseudo.id"] == nil
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["enduser.id"] != nil and attributes["enduser.pseudo.id"] == nil
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["jwt.subject"] != nil and attributes["enduser.pseudo.id"] == nil
-          - delete_key(attributes, "user.id")
-          - delete_key(attributes, "user_id")
-          - delete_key(attributes, "enduser.id")
-          - delete_key(attributes, "jwt.subject")
+          - set(span.attributes["enduser.pseudo.id"], SHA256(Concat([span.attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["user.id"] != nil
+          - set(span.attributes["enduser.pseudo.id"], SHA256(Concat([span.attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["user_id"] != nil and span.attributes["enduser.pseudo.id"] == nil
+          - set(span.attributes["enduser.pseudo.id"], SHA256(Concat([span.attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["enduser.id"] != nil and span.attributes["enduser.pseudo.id"] == nil
+          - set(span.attributes["enduser.pseudo.id"], SHA256(Concat([span.attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["jwt.subject"] != nil and span.attributes["enduser.pseudo.id"] == nil
+          - delete_key(span.attributes, "user.id")
+          - delete_key(span.attributes, "user_id")
+          - delete_key(span.attributes, "enduser.id")
+          - delete_key(span.attributes, "jwt.subject")
           # `session.id` se queda hasheado en sitio: no hay un
           # `session.pseudo.id` en el estandar, y una sesion no es una persona.
-          - set(attributes["session.id"], SHA256(Concat([attributes["session.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["session.id"] != nil
+          - set(span.attributes["session.id"], SHA256(Concat([span.attributes["session.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["session.id"] != nil
           # El correo se BORRA, no se hashea: no aporta agrupacion que el
           # seudonimo no de ya, y es dato personal directo.
-          - delete_key(attributes, "user.email")
-          - delete_key(attributes, "user_email")
+          - delete_key(span.attributes, "user.email")
+          - delete_key(span.attributes, "user_email")
+          # Misma regla del objeto-persona que abajo, por si el emisor pone el
+          # target en el span en vez de en el evento.
+          - set(span.attributes["argus.target.id"], SHA256(Concat([span.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.target.type"] == "user"
+      # --- Los MISMOS atributos, pero en un EVENTO de span -----------------
+      #
+      # `context: span` NO alcanza los atributos de los eventos. Son un ambito
+      # OTTL distinto, y hasta que esto existio un `user.id` colgado de un
+      # evento aterrizaba EN CRUDO en ClickHouse mientras el del span salia
+      # seudonimizado. Medido, no supuesto:
+      #
+      #   span    user.id -> enduser.pseudo.id = 4a573e50...   correcto
+      #   evento  user.id -> usuario-en-el-evento              en crudo
+      #
+      # Importa aqui y no en abstracto porque el registro de auditoria de
+      # Prometheus vive EXACTAMENTE ahi: el evento `audit.admin_action` cuelga
+      # del span de servidor y lleva el actor en sus propios atributos. Les
+      # dijimos en A-32 que mandaran `user.id` en crudo porque el gateway lo
+      # convertiria; era cierto del span y falso del evento, que es donde lo
+      # ponen (D-092).
+      #
+      # El correo SI lo cazaba el `redaction`, que si recorre los eventos:
+      # llegaba como `****`. Aun asi se borra aqui, para que la clave no quede
+      # como un fantasma que sugiere que hubo un correo y no dice cual.
+      #
+      # Se seudonimiza EN EL EVENTO, no se sube al span: un span de servidor
+      # puede llevar varios eventos de auditoria con actores distintos, y
+      # subirlos haria que el ultimo pisara a los demas.
+      - context: spanevent
+        statements:
+          - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["user.id"] != nil
+          - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["user_id"] != nil and spanevent.attributes["enduser.pseudo.id"] == nil
+          - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["enduser.id"] != nil and spanevent.attributes["enduser.pseudo.id"] == nil
+          - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["jwt.subject"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["jwt.subject"] != nil and spanevent.attributes["enduser.pseudo.id"] == nil
+          - delete_key(spanevent.attributes, "user.id")
+          - delete_key(spanevent.attributes, "user_id")
+          - delete_key(spanevent.attributes, "enduser.id")
+          - delete_key(spanevent.attributes, "jwt.subject")
+          - delete_key(spanevent.attributes, "user.email")
+          - delete_key(spanevent.attributes, "user_email")
+          # El OBJETO de la accion, cuando el objeto es una persona.
+          #
+          # `argus.target.id` es opaco por definicion —un id de nodo, de clave,
+          # de cliente— salvo en un caso: cuando lo que se administra es un
+          # usuario. `/admin/users/{user_id}/disable` mete un identificador de
+          # persona en un atributo que ninguna regla de arriba mira, y seria el
+          # mismo agujero otra vez un nivel mas abajo.
+          #
+          # Por eso `argus.target.type` es el que decide: es el unico campo que
+          # sabe si el id de al lado es una cosa o alguien.
+          - set(spanevent.attributes["argus.target.id"], SHA256(Concat([spanevent.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.target.type"] == "user"
+
     log_statements:
       - context: log
         statements:
-          - delete_key(attributes, "http.request.header.authorization")
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user.id"] != nil
-          - set(attributes["enduser.pseudo.id"], SHA256(Concat([attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where attributes["user_id"] != nil and attributes["enduser.pseudo.id"] == nil
-          - delete_key(attributes, "user.id")
-          - delete_key(attributes, "user_id")
+          - delete_key(log.attributes, "http.request.header.authorization")
+          - set(log.attributes["enduser.pseudo.id"], SHA256(Concat([log.attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["user.id"] != nil
+          - set(log.attributes["enduser.pseudo.id"], SHA256(Concat([log.attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["user_id"] != nil and log.attributes["enduser.pseudo.id"] == nil
+          - delete_key(log.attributes, "user.id")
+          - delete_key(log.attributes, "user_id")
           # Mismo criterio que en trazas: el correo no viaja al almacen.
-          - delete_key(attributes, "user.email")
-          - delete_key(attributes, "user_email")
+          - delete_key(log.attributes, "user.email")
+          - delete_key(log.attributes, "user_email")
 
   # El sesgo del muestreo, escrito EN el dato.
   #
@@ -229,7 +280,7 @@ processors:
     trace_statements:
       - context: span
         statements:
-          - set(attributes["argus.sampling.baseline_pct"], 10)
+          - set(span.attributes["argus.sampling.baseline_pct"], 10)
 
   # --- Muestreo --------------------------------------------------------------
   # AVISO: el tail sampling exige que TODOS los spans de una traza lleguen a la

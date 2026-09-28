@@ -150,9 +150,27 @@ class Dispatcher:
     def drain(self, *, timeout_s: float = 5.0) -> None:
         """Espera a que no quede trabajo. Para tests y para el apagado.
 
-        Cuenta tambien los reintentos programados: con la cola vacia pero un
-        temporizador esperando, "drenado" significaria "entregado" cuando en
-        realidad significa "todavia no lo he vuelto a intentar".
+        Tres cosas cuentan como "trabajo", y las tres hacen falta:
+
+        1. Envios en la cola.
+        2. Envios **en vuelo**: uno que un trabajador ya saco de la cola y esta
+           entregando ahora mismo.
+        3. Reintentos programados que aun no han vuelto a la cola.
+
+        La (2) faltaba, y no era teorica. `_cola.empty()` se vuelve cierto en el
+        instante del `get()`, no cuando el envio termina: entre sacarlo y
+        entregarlo hay toda la duracion de una llamada de red, y durante esa
+        ventana `drain` decia "drenado". Con un canal caido —que es cuando el
+        envio tarda mas— la ventana es de segundos.
+
+        Lo que eso provoca en el apagado es exactamente el fallo que esta clase
+        existe para impedir: `drain` devuelve, `stop` mata los hilos, y la
+        notificacion que se estaba entregando se pierde sin contarse (D-080).
+        Se veia como un test intermitente; era el codigo.
+
+        `unfinished_tasks` cubre (1) y (2) de una vez porque se incrementa en el
+        `put` y solo baja en el `task_done`, que va en un `finally`. Contar en
+        vuelo aparte tendria su propia carrera entre el `get` y el contador.
         """
         limite = threading.Event()
         temporizador = threading.Timer(timeout_s, limite.set)
@@ -163,7 +181,7 @@ class Dispatcher:
                 with self._lock:
                     self._pendientes = {t for t in self._pendientes if t.is_alive()}
                     reintentos = len(self._pendientes)
-                if self._cola.empty() and not reintentos:
+                if not self._cola.unfinished_tasks and not reintentos:
                     return
                 threading.Event().wait(0.01)
         finally:
@@ -176,6 +194,10 @@ class Dispatcher:
             except queue.Empty:
                 continue
             if envio is None:
+                # El centinela tambien se marca: si no, `unfinished_tasks` no
+                # vuelve a cero nunca y `drain` esperaria hasta agotar su plazo
+                # en todo apagado.
+                self._cola.task_done()
                 break
             try:
                 envio.sink.send(envio.incident, update=envio.update)

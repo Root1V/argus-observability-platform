@@ -124,7 +124,7 @@ groups:
   # se lee igual si es una persona o una credencial de maquina.
   # ---------------------------------------------------------------------------
   - id: actor
-    brief: Quien origino la accion, donde el estandar no llega
+    brief: Quien origino la accion y sobre que, donde el estandar no llega
     attributes:
       - id: argus.actor.kind
         type: enum
@@ -134,6 +134,25 @@ groups:
           o no se sabe. `unknown` es un valor legitimo y NO un relleno: en un
           registro de auditoria, "no consta" es un hecho y hay que poder
           distinguirlo de "nadie lo puso".
+
+      - id: argus.target.type
+        type: string
+        brief: >
+          QUE CLASE de objeto se administro, en singular y en cardinalidad
+          cerrada: `node`, `client`, `api_key`, `user`. Es la mitad agrupable
+          del par —"cuantas desactivaciones de nodo hubo"— y la que decide si
+          el id de al lado es una cosa o una persona: el gateway seudonimiza
+          `argus.target.id` cuando este campo vale `user`.
+        examples: ["node", "client", "api_key", "user"]
+      - id: argus.target.id
+        type: string
+        brief: >
+          CUAL objeto, como cadena opaca. Alta cardinalidad a proposito: sirve
+          para filtrar un objeto concreto, nunca para agrupar. Va separado del
+          tipo por el mismo motivo por el que `http.route` va separado del path
+          resuelto: junto, cada id es un valor distinto y no se puede contar
+          nada (D-092).
+        examples: ["8ed68951-d6cb-44f8-9335-6ddba3dde1fc"]
 
   # ---------------------------------------------------------------------------
   # Wide events. Un evento ancho por unidad de trabajo, emitido al cerrar.
