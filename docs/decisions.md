@@ -3736,3 +3736,91 @@ Y el hueco no era de detección —de eso va casi todo lo construido— sino de
 notificación no se reintentaba), D-089 (no resolvía identidad), D-094 (no tiene
 destino). La detección está mucho mejor probada que el camino que va de la
 detección a una persona.
+
+---
+
+## D-095 · El contexto no cruza a otro hilo, y eso rompe los logs sin romper la traza
+
+> **Fallo de plataforma** · descubierto 2026-09-28 · el SDK no ofrecía forma de cruzar la frontera de hilo ni la de subproceso, así que los registros emitidos desde un `ThreadPoolExecutor` salían con `trace_id = none` y nadie tenía manera de arreglarlo sin escribirlo a mano
+
+**Contexto**: al verificar el cierre de Prosodia (`S-06`, D-094) quedaron cuatro
+registros sin correlacionar. Ellos los dieron por resto — *«35 de 39»*—. Al
+ordenarlos por tiempo el patrón era inequívoco:
+
+```
+11:25:17.655  SIN TRAZA   mlx_whisper.detected_language
+11:25:17.656  ok          pipeline.stage_finished   stage=transcription
+11:25:31.549  SIN TRAZA   diarization.done
+11:25:31.549  ok          pipeline.stage_finished   stage=diarization
+```
+
+**Un milisegundo de diferencia y uno lleva traza y el otro no.**
+
+### La causa, reproducida antes de arreglar nada
+
+El contexto de OTel vive en un `contextvars.ContextVar`. `asyncio` copia el
+contexto al crear una tarea; **`ThreadPoolExecutor` no lo copia al hilo
+trabajador**. Por eso el pipeline —asíncrono— correlacionaba y solo fallaba lo
+que pasaba por el pool:
+
+```
+en el hilo del pipeline : a0b137c2daae675344d461d8b3ebc27b
+dentro del executor     : none
+```
+
+Es la misma familia que Celery o Kafka, con la frontera más barata de todas: ni
+una máquina, ni un proceso, un hilo.
+
+### Por qué no es cosmético
+
+Los cuatro registros son de **transcripción y diarización**, las dos etapas más
+lentas de un doblaje. Los registros que explican *por qué tardó tanto* son justo
+los que se quedan sin traza — y responder eso era la justificación del piloto
+entero (`A-01`).
+
+Y el fallo es invisible por construcción: no hay error, no falta ningún dato en
+la traza, solo unos logs que no se pueden saltar a su span. Se ve si vas a mirar
+**cuáles** son los huérfanos, no cuántos.
+
+### El arreglo es del SDK, no de su repositorio
+
+`argus/propagate.py` cubría cabeceras, payloads, Celery y CLIs, y **no cubría ni el
+hilo ni el subproceso**. Ese hueco es nuestro: sin él, cada equipo que use un
+pool tiene que escribir el `copy_context()` a mano y acordarse en cada sitio.
+
+| pieza | frontera | cómo se usa |
+|---|---|---|
+| `propagate.Executor` | otro hilo | sustituye a `ThreadPoolExecutor`; `submit` y `map` propagan solos |
+| `propagate.with_context(fn)` | otro hilo | para un pool que ya existe y no se puede cambiar |
+| `propagate.inject_env` / `extract_env` | otro **proceso** | `traceparent` por variables de entorno |
+
+`Executor` es un **reemplazo y no un ayudante** a propósito. Un ayudante hay que
+recordarlo en cada llamada, y el olvido no da error: solo un log huérfano que
+nadie mira hasta que hace falta. Es el principio de «difícil de usar mal» del
+contrato del SDK, aplicado al fallo que acabamos de ver.
+
+`with_context` captura al **envolver**, no al ejecutar. Si capturara al
+ejecutar se ataría al contexto del hilo trabajador —que no tiene ninguno— y no
+arreglaría nada. Hay una prueba solo para eso.
+
+### Verificado en un proceso de verdad
+
+El subproceso no se simula pasando un diccionario: lo que hay que comprobar es
+que la cadena sobrevive al `execve`.
+
+```
+padre  traza: f311093c78a37417723609cd66e0219b
+TRACEPARENT : 00-f311093c78a37417723609cd66e0219b-00eaf127fe2e80d4-03
+hijo   traza: f311093c78a37417723609cd66e0219b
+```
+
+### La prueba que fija el FALLO, no solo el arreglo
+
+`test_el_executor_de_la_libreria_estandar_pierde_la_traza` afirma que
+`ThreadPoolExecutor` devuelve `none`. Si algún día `concurrent.futures` propaga
+contexto por su cuenta, esa prueba se pone roja y avisa de que
+`propagate.Executor` ya no hace falta — en vez de quedarse para siempre
+resolviendo un problema que dejó de existir.
+
+Publicado en `1.0.0a9`. El cambio en el pipeline de Prosodia es suyo y es una
+línea: cambiar la clase del pool.
