@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
@@ -533,7 +534,11 @@ def test_telegram_no_pone_el_token_en_el_log(caplog, incidente: Incident) -> Non
     from alert_bus.sinks import TelegramSink
 
     sink = TelegramSink("TOKEN-SECRETO", "-100", api_base="http://127.0.0.1:1")
-    with caplog.at_level("ERROR"), pytest.raises(Exception):
+    # El puerto 1 no escucha: `urlopen` levanta `URLError`. Se nombra la
+    # excepcion concreta en vez de `Exception` para que la prueba siga fallando
+    # si algun dia el fallo cambia de forma — con `Exception` cualquier error,
+    # incluido un `TypeError` nuestro, la daria por buena.
+    with caplog.at_level("ERROR"), pytest.raises(urllib.error.URLError):
         sink.send(incidente, update=False)
 
     assert "TOKEN-SECRETO" not in caplog.text

@@ -60,7 +60,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
     # 7 · el vigilante corre FUERA de los contenedores
     try:
         launchd = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=5).stdout
-        fila = [l for l in launchd.splitlines() if "com.argus.deadman" in l]
+        fila = [linea for linea in launchd.splitlines() if "com.argus.deadman" in linea]
         vigilante = bool(fila) and fila[0].split()[1] == "0"
         detalle_v = fila[0].strip() if fila else "no instalado"
     except Exception:  # noqa: BLE001
