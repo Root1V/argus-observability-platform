@@ -3498,8 +3498,20 @@ Lo que les dijimos en `A-32` era falso justo donde ellos lo aplican:
 | «consultad `enduser.pseudo.id` para el actor» | el campo no existía en el evento |
 | «el correo se borra en el gateway» | **media verdad**: el `redaction` sí recorre los eventos y lo dejaba en `****`, pero la clave sobrevivía |
 
-El correo, entonces, nunca llegó legible: la capa 2 lo salvó. Lo que sí llegó
-legible fue el identificador de usuario.
+El correo nunca llegó legible: la capa 2 lo salvó.
+
+**Y el identificador tampoco, medido antes de escribirlo.** En treinta días de
+almacén hay **un** evento `audit.admin_action` de Prometheus —el login fallido de
+su verificación— y venía **sin** `user.id`, porque no había claims. Cero
+identificadores en crudo.
+
+La puerta estuvo abierta y no pasó nadie, y el motivo es incómodo: no pasó nadie
+porque el fallo que ellos confiesan en `P-32 §0` —el gateway sin exportar—
+impidió que su auditoría llegara. **Su fallo tapó el nuestro** durante todo el
+tiempo que ambos estuvieron vivos, y los dos se arreglaron el mismo día.
+
+Que no haya daño no cambia nada del arreglo: lo que se corrige es una regla
+falsa, no un incidente.
 
 ### El mismo agujero un nivel más abajo, y por eso el tipo decide
 
