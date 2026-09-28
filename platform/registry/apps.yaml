@@ -119,6 +119,44 @@
   depende_de: [redis-main]
   tipo_ia: [llm-local]
 
+- id: prosodia
+  # Integrada de verdad el 28/09: doblaje real de 462,9 s, traza entera de la
+  # API al worker cruzando Celery, y 61 de 67 registros correlacionados (S-06).
+  #
+  # Estaba entrando como `provisional` por auto-descubrimiento, y eso la dejaba
+  # DOBLEMENTE muda: `provisional` fuerza criticidad `media` —techo `ticket`— y
+  # sin `canales` declarados el enrutamiento cae al `["console"]` por defecto.
+  # Un fallo suyo se escribia en el log del alert-bus y en ningun sitio mas.
+  # Es el mismo modo de fallo de D-089 con otra causa: la alerta funciona, la
+  # entrega no.
+  nombre_visible: Prosodia (doblaje de video)
+  estado: activo
+  criticidad: media
+  dueño: emeric
+  canales:
+    # `media` topa en `ticket`, asi que `page` no se puede alcanzar hoy. Se
+    # declara igual para que subir la criticidad no exija recordar esto.
+    page: [telegram, console]
+    ticket: [telegram, console]
+  componentes:
+    # La API cierra en milisegundos; el SLO que importa es el del worker, y su
+    # unidad no es la peticion sino el doblaje. 21 minutos medidos en un clip
+    # largo, 463 s en uno de dos minutos: el umbral se pone sobre el peor caso
+    # observado con holgura, no sobre la media.
+    #
+    # `latido: false` en los dos: Prosodia es un pipeline que alguien LANZA,
+    # no un servicio que corre. Esta callada la mayor parte del dia y eso es
+    # lo normal — al comprobarlo llevaba 56 minutos sin emitir, con todo
+    # funcionando. La sonda de silencio gritaria cada cinco minutos por algo
+    # sabido, y ahora que sus avisos llegan a Telegram gritaria a una persona.
+    #
+    # Lo que habria que vigilar aqui es un doblaje que empieza y no termina.
+    # Es otra sonda y no existe: F2-16.
+    - {id: prosodia-api, rol: api, latido: false, slo: {p95_ms: 2000}}
+    - {id: prosodia-worker, rol: worker, latido: false, slo: {p95_ms: 1800000}}
+  depende_de: [redis-main]
+  tipo_ia: [asr, diarizacion, traduccion, tts]
+
 - id: aeon-ai
   # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
   estado: planificado
@@ -151,32 +189,53 @@
 # Rol `infra`: no emite telemetria propia a nuestro Collector, asi que una
 # sonda de SILENCIO sobre ella daria falso positivo siempre. Se vigila por
 # sonda HTTP, que es lo que corresponde a algo que no instrumentas.
+#
+# LLEVAN CANALES, y no los llevaban. Se anadieron aqui para que `depende_de`
+# tuviera grafo y para poder sondearlas, y nadie penso en el enrutamiento: con
+# `canales` vacio, `channels_for` cae al `["console"]` por defecto. ClickHouse
+# esta declarada `alta`, tiene sonda HTTP en `probes.yaml`, y su caida —que deja
+# a la plataforma entera sin almacen— se escribia en un log y en ningun sitio
+# mas (D-094).
 - id: postgres-main
   estado: activo
   criticidad: alta
+  canales:
+    page: [telegram, console]
+    ticket: [telegram, console]
   componentes: [{id: postgres-main, rol: infra}]
 
 - id: redis-main
   estado: activo
   criticidad: media
+  canales:
+    ticket: [telegram, console]
   componentes: [{id: redis-main, rol: infra}]
 
 - id: minio-main
   estado: activo
   criticidad: media
+  canales:
+    ticket: [telegram, console]
   componentes: [{id: minio-main, rol: infra}]
 
 - id: clickhouse
   estado: activo
   criticidad: alta
+  canales:
+    page: [telegram, console]
+    ticket: [telegram, console]
   componentes: [{id: clickhouse, rol: infra}]
 
 - id: victoriametrics
   estado: activo
   criticidad: media
+  canales:
+    ticket: [telegram, console]
   componentes: [{id: victoriametrics, rol: infra}]
 
 - id: temporal
   estado: activo
   criticidad: media
+  canales:
+    ticket: [telegram, console]
   componentes: [{id: temporal, rol: infra}]

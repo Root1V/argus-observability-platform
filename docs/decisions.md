@@ -3607,3 +3607,132 @@ depende de lo cargada que esté la máquina es el que acabas subiéndole el plaz
 Comprobado que falla sin el arreglo.
 
 **Un test intermitente es una hipótesis sobre el código, no una molestia.**
+
+---
+
+## D-094 · Prosodia se integró bien y nosotros la teníamos muda: `provisional` sin canales no avisa a nadie
+
+> **Fallo de plataforma** · descubierto 2026-09-28 · siete aplicaciones `activo` —Prosodia y seis de infraestructura, incluida ClickHouse con criticidad `alta` y sonda HTTP— tenían `canales` vacío, así que `channels_for` caía al `["console"]` por defecto y su aviso moría en el log del alert-bus
+
+**Contexto**: Prosodia cierra `S-06` diciendo que la integración está completa.
+Lo comprobamos contra nuestro almacén antes de darlo por bueno, y sus tres
+afirmaciones son ciertas. Lo que no era cierto es que la integración estuviera
+completa **de nuestro lado**.
+
+### Lo suyo: verificado, y con mejor evidencia de la que ellos tenían
+
+| lo que afirman | medido |
+|---|---|
+| una sola traza, tres spans, API → worker por Celery | ✅ `5371c056…`, 3 spans, 1 raíz, 2 servicios |
+| 462,9 s y sin error | ✅ 462 969,4 ms, todos los spans `Unset` |
+| la conserva `async-handoff`, no otra política | ✅ **por contador, no por deducción** |
+| 35 de 39 registros correlacionados | ✅ 61 de 67 sumando las dos corridas |
+
+Su argumento de por qué `async-handoff` era la única política aplicable es
+correcto, pero por una razón más fina que la que dan. Escriben que `slow` no
+aplica *«porque la raíz dura 0 s»*. `slow` está en **3 s** y el span del worker
+duró **463 s**: habría encajado de sobra. No encajó porque **a los 30 segundos
+ese span todavía no existía**, y la política solo ve lo que hay en la ventana.
+
+Es exactamente la asimetría que hace falta `async-handoff`, así que el
+razonamiento llega al sitio correcto por el camino de al lado.
+
+Y no hace falta deducirlo, porque el muestreador lo cuenta:
+
+```
+async-handoff              sampled=true    2     ← las dos corridas de doblaje
+early_releases_from_cache  sampled=true    2     ← los dos spans tardíos del worker
+slow                       sampled=true  943     ← ninguna de las dos
+```
+
+### Lo nuestro, primero: Prosodia no avisaba a nadie
+
+Entraba por auto-descubrimiento como `provisional`, y eso la dejaba **muda dos
+veces**:
+
+- `provisional` fuerza `criticidad: media`, cuyo techo es `ticket`;
+- sin `canales` declarados, `channels_for` devuelve `["console"]`.
+
+La consola es el log del propio alert-bus. Un fallo de un doblaje se detectaba,
+se normalizaba, se correlacionaba y se escribía en un fichero.
+
+Es el modo de fallo de **D-089** con otra causa: allí las etiquetas impedían
+resolver la identidad, aquí la identidad resuelve bien y no hay destino. En los
+dos casos la detección funcionaba y la entrega no.
+
+### Y no era solo Prosodia
+
+Al listar el enrutamiento de las doce aplicaciones salieron **seis más**:
+
+| aplicación | criticidad | iba a |
+|---|---|---|
+| `clickhouse` | **alta** | `["console"]` |
+| `postgres-main` | **alta** | `["console"]` |
+| `victoriametrics`, `redis-main`, `minio-main`, `temporal` | media | `["console"]` |
+
+`clickhouse` y `victoriametrics` **tienen sonda HTTP** en `probes.yaml`. La
+caída del almacén —que deja la plataforma entera sin datos— no avisaba a nadie.
+
+No fue descuido de nadie en concreto: el bloque de infraestructura se añadió
+*«para que `depende_de` tenga grafo y para poder sondearlas»*, y el
+enrutamiento no entró en esa conversación. Lo que convierte el olvido en fallo
+es que **el valor por defecto es silencioso**.
+
+### La distinción que faltaba en el modelo: `activo` significaba dos cosas
+
+Al declarar Prosodia `activo` —necesario para que sus avisos salgan de la
+consola— se encendió su sonda de silencio. Y Prosodia **está callada la mayor
+parte del día**, porque es un pipeline que alguien lanza: al comprobarlo llevaba
+56 minutos sin emitir, con todo funcionando.
+
+`activo` significaba a la vez *«emite hoy»* y *«su silencio es un incidente»*.
+Valen juntas para una API que corre como servicio; no valen para un trabajo bajo
+demanda. Y el registro ya avisa, en su propia cabecera, de lo que pasa cuando se
+confunden: *un canario que grita por cosas que sabes es un canario que se
+silencia*.
+
+Se separan en dos ejes: `estado` decide si está integrada, `latido` por
+componente decide si su silencio es un incidente. Prosodia va `activo` con
+`latido: false`.
+
+Lo que **sí** habría que vigilar en un caso así es un doblaje que empieza y no
+termina. Es otra sonda y no existe: anotada como **F2-16**.
+
+### Lo que casi me hace dar por bueno un arreglo que no corría
+
+Tras el cambio, el canario seguía sondeando `prosodia/prosodia-worker`. El
+registro es datos montados y se recargó solo; el código va **dentro de la
+imagen**, y `docker restart` reejecuta la misma. Las pruebas pasaban y el
+contenedor corría lo de antes.
+
+Es el patrón de **D-090** —la copia instalada del vigilante, once días
+obsoleta—, en otro componente y el mismo día de la semana. Reconstruida la
+imagen:
+
+```
+sondas cargadas   11 -> 9     (las dos de prosodia, fuera)
+menciones a prosodia en el ciclo    2 -> 0
+```
+
+**Una prueba verde dice que el código es correcto, no que sea el que corre.**
+
+### El guardarraíl
+
+`platform/tests/test_enrutamiento.py` exige que toda aplicación `activo` tenga,
+para el techo de severidad que su criticidad permite, al menos un canal que no
+sea la consola; que declare canales para ese techo aunque hoy no lo alcance; y
+que `latido` sea booleano —un `latido: "false"` en YAML es una cadena verdadera y
+la sonda se encendería igual—.
+
+Comprobado que falla sin el arreglo: **12 de 17 en rojo**.
+
+### Lo que esto dice del piloto
+
+De los tres criterios que quedaban abiertos, éste no era ninguno. Prosodia hizo
+su parte y la hizo bien; el hueco estaba en el lado que ya dábamos por hecho.
+
+Y el hueco no era de detección —de eso va casi todo lo construido— sino de
+**entrega**, que es el tercer fallo seguido de la misma familia: D-080 (la
+notificación no se reintentaba), D-089 (no resolvía identidad), D-094 (no tiene
+destino). La detección está mucho mejor probada que el camino que va de la
+detección a una persona.
