@@ -8,13 +8,24 @@ Redis requiere trabajo explicito en cada frontera.
 Es un fallo que no da ningun error. Simplemente el consumidor arranca una traza
 nueva en vez de unirse a la del productor, y acabas con dos trazas donde
 deberia haber una.
+
+Y la frontera no tiene por que ser una maquina ni un proceso: **un hilo basta**.
+El contexto de OTel vive en un `contextvars.ContextVar`, y `ThreadPoolExecutor`
+NO copia el contexto al hilo trabajador —`asyncio` si, por eso `await` no da
+problemas y `pool.submit` si—. Lo que se pierde ahi no suele ser la traza
+entera sino los registros que emite la libreria que corre dentro, que salen con
+`trace_id = none` mientras los de al lado salen bien (D-095).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, MutableMapping
+import contextvars
+import functools
+import os
+from collections.abc import Callable, Iterator, Mapping, MutableMapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 from argus_semconv import attributes as A
 from opentelemetry import baggage, context, propagate, trace
@@ -23,6 +34,8 @@ from opentelemetry.trace import SpanKind
 # Clave con la que viaja el contexto cuando no hay cabeceras y hay que meterlo
 # en el propio payload (colas Redis artesanales, por ejemplo).
 PAYLOAD_KEY = "_argus_ctx"
+
+T = TypeVar("T")
 
 
 def inject_headers(carrier: MutableMapping[str, str] | None = None) -> dict[str, str]:
@@ -125,6 +138,90 @@ def run(name: str, *, run_id: str | None = None, app: str | None = None) -> Iter
             yield span
     finally:
         context.detach(token)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# La frontera mas barata de cruzar mal: otro hilo.
+# ---------------------------------------------------------------------------
+
+
+def with_context(fn: Callable[..., T]) -> Callable[..., T]:
+    """Ata una funcion al contexto ACTIVO AHORA, para ejecutarla en otro hilo.
+
+        ctx_fn = argus.propagate.with_context(transcribir)
+        futuro = pool.submit(ctx_fn, audio)
+
+    Se captura en el momento de envolver, no en el de ejecutar, que es lo
+    correcto: el contexto que importa es el de quien encarga el trabajo.
+
+    Para el caso normal es preferible `Executor`, que no obliga a acordarse en
+    cada llamada.
+    """
+    ctx = contextvars.copy_context()
+
+    @functools.wraps(fn)
+    def dentro_del_contexto(*args: Any, **kwargs: Any) -> T:
+        return ctx.run(fn, *args, **kwargs)
+
+    return dentro_del_contexto
+
+
+class Executor(ThreadPoolExecutor):
+    """`ThreadPoolExecutor` que se lleva el contexto al hilo trabajador.
+
+    Cambiar la clase es todo lo que hay que hacer: `submit` y `map` propagan
+    solos. Es deliberadamente un reemplazo y no un ayudante, porque un ayudante
+    hay que recordarlo en cada sitio y el olvido no da error — solo un log
+    huerfano que nadie mira hasta que lo necesita.
+
+    Lo que NO cubre: un subproceso. Ahi no hay contexto que copiar y hace falta
+    pasar el `traceparent` explicitamente (`inject_env` / `extract_env`).
+    """
+
+    def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
+        return super().submit(with_context(fn), *args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Subprocesos: no hay contexto que copiar, solo una cadena que pasar.
+# ---------------------------------------------------------------------------
+
+
+def inject_env(env: MutableMapping[str, str] | None = None) -> dict[str, str]:
+    """Mete el contexto en variables de entorno, para lanzar un subproceso.
+
+        hijo = subprocess.run(cmd, env=argus.propagate.inject_env(dict(os.environ)))
+
+    Va en MAYUSCULAS porque es lo que espera un entorno de proceso, y la
+    contraparte acepta las dos grafias: la cabecera HTTP llega en minusculas y
+    mas de una vez alguien copia una en el sitio de la otra.
+    """
+    destino: MutableMapping[str, str] = {} if env is None else env
+    for clave, valor in inject_headers().items():
+        destino[clave.upper().replace("-", "_")] = valor
+    return dict(destino)
+
+
+@contextmanager
+def extract_env(
+    env: Mapping[str, str] | None = None,
+    *,
+    name: str,
+    kind: SpanKind = SpanKind.CONSUMER,
+) -> Iterator[trace.Span]:
+    """Contraparte de `inject_env`, para el arranque del subproceso.
+
+        with argus.propagate.extract_env(name="diarization.run"):
+            ...
+    """
+    origen = os.environ if env is None else env
+    carrier = {
+        clave.lower().replace("_", "-"): valor
+        for clave, valor in origen.items()
+        if clave.upper() in ("TRACEPARENT", "TRACESTATE", "BAGGAGE")
+    }
+    with extract_headers(carrier, name=name, kind=kind) as span:
+        yield span
 
 
 def instrument_celery() -> bool:
