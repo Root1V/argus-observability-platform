@@ -3447,6 +3447,8 @@ ausente.
 
 ## D-092 · El objeto de la acción se llama `argus.target.type` + `argus.target.id`, y buscándole nombre salió un agujero de seudonimización
 
+> **Fallo de plataforma** · descubierto 2026-09-27 · `transform/pseudonymize` no cubría el ámbito `spanevent`, así que un identificador de persona en un evento de auditoría llegaba en crudo al almacén; y OTTL dejaba la sal en claro en los logs del Collector
+
 **Contexto**: en `P-32` Prometheus pide nombre para el único atributo que les
 queda bajo su namespace: **sobre qué** se hizo el cambio administrativo. Lo
 emiten como JSON de los parámetros de ruta y ofrecen dos formas:
@@ -3574,9 +3576,14 @@ Las tres se descubrieron mirando el otro extremo, ninguna leyendo la configuraci
 Prometheus los importe en vez de reteclearlos, como ya hacen con
 `ARGUS_ACTOR_KIND_VALUES`.
 
-### Apéndice: un test intermitente que era un fallo del código
+---
 
-Al correr la suite completa tras lo anterior falló
+## D-093 · Un test intermitente que era un fallo del código: `drain()` no contaba el envío en vuelo
+
+> **Fallo de plataforma** · descubierto 2026-09-27 · `drain()` daba por drenado el reparto mientras un canal seguía entregando, así que en el apagado `stop()` podía matar una notificación a medio entregar sin contarla como fallida
+
+Sale de lo de D-092 y se cuenta aparte, porque es un fallo distinto y en otro
+componente. Al correr la suite completa tras lo anterior falló
 `test_un_canal_caido_no_impide_que_los_demas_reciban`, y volvió a pasar al
 repetirla. La tentación evidente era subirle el plazo y seguir.
 
