@@ -104,11 +104,12 @@ def _sondas_silencio(settings: Settings) -> list[SondaSilencio]:
         for componente in app.get("componentes", []):
             # El registro admite `[{id: x, rol: y}]` y tambien `[{id: x}]`.
             if isinstance(componente, str):
-                comp_id, rol, estado = componente, "api", "activo"
+                comp_id, rol, estado, latido = componente, "api", "activo", True
             else:
                 comp_id = componente["id"]
                 rol = componente.get("rol", "api")
                 estado = componente.get("estado", "activo")
+                latido = componente.get("latido", True)
 
             if rol in ROLES_SIN_LATIDO:
                 continue
@@ -120,6 +121,27 @@ def _sondas_silencio(settings: Settings) -> list[SondaSilencio]:
             # algo que ya sabes, y es como se ensena a la guardia a ignorar al
             # canario.
             if estado != "activo":
+                continue
+
+            # Integrada no es lo mismo que siempre encendida, y el registro no
+            # sabia distinguirlo.
+            #
+            # `activo` significaba dos cosas a la vez: "emite telemetria hoy" y
+            # "su silencio es un incidente". Valen juntas para una API que corre
+            # como servicio; no valen para Prosodia, que es un pipeline de
+            # doblaje que alguien lanza cuando quiere doblar algo. Esta callada
+            # la mayor parte del dia, y eso es lo normal.
+            #
+            # Sin esto, declararla `activo` —que es lo que hace falta para que
+            # sus avisos lleguen a una persona— encendia una sonda que gritaria
+            # cada cinco minutos por algo sabido. Y un canario que grita por
+            # cosas que sabes es un canario que se silencia, que es como se
+            # pierde el unico que avisa de verdad (D-094).
+            #
+            # Lo que SI habria que vigilar en un caso asi es un doblaje que
+            # empieza y no termina, no la ausencia de trafico. Es otra sonda y
+            # no existe todavia: anotado como F2-16.
+            if not latido:
                 continue
 
             sondas.append(
