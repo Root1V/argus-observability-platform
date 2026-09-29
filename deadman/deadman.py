@@ -349,6 +349,39 @@ def guardar_estado(ruta: Path, estado: dict) -> None:
 # --- Principal ---------------------------------------------------------------
 
 
+# Las claves que el vigilante entiende. Existe esta lista porque escribi
+# `umbral_fallos` en una configuracion de prueba, el vigilante la IGNORO en
+# silencio y aplico su valor por defecto — detecto el objetivo caido y salio
+# diciendo que todo bien.
+#
+# Es el mismo modo de fallo que llevo toda la semana arreglando en otros
+# sitios, y aqui duele mas: este proceso existe para ser lo unico creible
+# cuando lo demas calla. Una config con una errata que se aplica a medias es
+# peor que una que no arranca (D-101).
+CLAVES_CONOCIDAS = frozenset({
+    "objetivos", "reglas", "latido", "avisos",
+    "estado", "timeout_s", "fallos_para_avisar",
+})
+
+
+def revisar_config(cfg):
+    """Avisa de claves que no se entienden. NO impide arrancar.
+
+    Negarse a correr por una errata convertiria el vigilante en otra cosa que
+    se puede caer, y su premisa es correr siempre. Asi que avisa fuerte y
+    sigue con los valores por defecto, que es lo que hacia antes en silencio.
+    """
+    desconocidas = sorted(set(cfg) - CLAVES_CONOCIDAS)
+    if desconocidas:
+        print(
+            "  AVISO  claves de configuracion que no entiendo y se IGNORAN: "
+            + ", ".join(desconocidas)
+            + "\n         (conocidas: " + ", ".join(sorted(CLAVES_CONOCIDAS)) + ")",
+            file=sys.stderr,
+        )
+    return desconocidas
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path(__file__).parent / "deadman.json")
@@ -361,6 +394,7 @@ def main() -> int:
         return 2
 
     cfg = json.loads(args.config.read_text())
+    revisar_config(cfg)
     estado_path = Path(cfg.get("estado", ESTADO_POR_DEFECTO)).expanduser()
 
     if args.test:

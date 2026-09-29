@@ -4326,3 +4326,87 @@ habría sido peor.
 
 Queda anotado como lo siguiente que hay que construir antes de la próxima
 verificación de este tipo.
+
+---
+
+## D-101 · El tablero marcaba en rojo al vigilante justo cuando acababa de funcionar
+
+> **Fallo de plataforma** · descubierto 2026-09-29 · `pilot_status` leía el código de salida 1 del dead man's switch como «está roto», cuando es lo que devuelve al **detectar** un objetivo caído; y el propio vigilante ignoraba en silencio las claves de configuración que no conoce
+
+**Contexto**: al revisar el estado del piloto, el criterio 7 —*«hay red de
+seguridad externa»*— salía en **NO**.
+
+No estaba roto. Había detectado un problema real: `argus:observador_despierto`
+no estaba en el almacén, o sea **D-091 otra vez** — la máquina durmió de
+madrugada (904 s y 597 s en dos episodios) y vmalert volvió a escribir en el
+pasado. El vigilante hizo exactamente aquello para lo que existe.
+
+```
+MAL  latido en el almacen   el latido de vmalert NO esta en el almacen a esta hora
+1 objetivo(s) caido(s)
+```
+
+### Por qué es el peor sitio posible para este error
+
+El criterio pregunta si **hay** red de seguridad, no si esa red no ha
+encontrado nada. `launchctl list` da el código de la última ejecución, y el
+contrato del vigilante es:
+
+| código | significa |
+|---|---|
+| `0` | ejecutó y todo bien |
+| `1` | ejecutó y **hay algo caído** — el vigilante funciona |
+| `2+` | no pudo ejecutarse — el vigilante está roto |
+
+Leer el 1 como rojo enseña a desconfiar del único componente cuya credibilidad
+sostiene todo lo demás. Un tablero que marca en rojo al vigilante por
+funcionar es peor que no tener tablero.
+
+Y se aprende rápido: si el criterio 7 parpadea en rojo cada vez que el
+vigilante encuentra algo, en dos semanas nadie lo mira.
+
+### El contrato se fija en los dos lados
+
+Una prueba **ejecuta** el vigilante contra un puerto muerto y exige salida 1;
+otra exige que `pilot_status` acepte `("0", "1")` como sano. Un solo lado no
+basta: el error estaba en que las dos mitades tenían ideas distintas de lo
+mismo, que es el patrón de D-089 y D-100.
+
+La prueba ejecuta en vez de leer la fuente a propósito — un `grep` de
+`return 1` pasaría aunque esa rama fuera inalcanzable.
+
+### Y escribiendo esa prueba salió lo otro
+
+Puse `umbral_fallos` en la config de prueba. El nombre real es
+`fallos_para_avisar`. **El vigilante ignoró la clave en silencio**, aplicó su
+defecto de 2, detectó el objetivo caído, y salió con **0** — diciendo que todo
+bien.
+
+Tardé un rato en entender que lo roto era mi prueba y no el contrato, y ése es
+justamente el coste: una configuración con una errata que se aplica a medias es
+peor que una que no arranca.
+
+Es el modo de fallo que llevo toda la semana arreglando en otros sitios —el
+ámbito OTTL, las etiquetas de las alertas, el `filelog` que no existe— y aquí
+duele más, porque este proceso existe para ser lo único creíble cuando lo demás
+calla.
+
+`revisar_config()` avisa de las claves que no entiende y **no impide arrancar**:
+negarse a correr por una errata convertiría al vigilante en otra cosa que se
+puede caer, y su premisa es correr siempre.
+
+```
+AVISO  claves de configuracion que no entiendo y se IGNORAN: umbral_fallos
+       (conocidas: avisos, estado, fallos_para_avisar, latido, objetivos, reglas, timeout_s)
+```
+
+### Lo que queda abierto de B-21
+
+El desfase de vmalert se resolvió reiniciándolo, como dice el runbook. Que la
+máquina duerma va a seguir pasando, así que la decisión de `B-21` sigue en pie:
+informar aguas arriba, o que el vigilante reinicie vmalert al detectarlo.
+
+Hoy tiene un argumento más a favor de automatizarlo: **la detección funciona y
+la reparación es un reinicio de un contenedor**, que es reversible y acotado.
+Pero un vigilante que actúa deja de ser solo un observador, y eso merece
+decidirse aparte y no de pasada.

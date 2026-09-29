@@ -61,8 +61,28 @@ def criterios() -> list[tuple[bool | None, str, str]]:
     try:
         launchd = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=5).stdout
         fila = [linea for linea in launchd.splitlines() if "com.argus.deadman" in linea]
-        vigilante = bool(fila) and fila[0].split()[1] == "0"
-        detalle_v = fila[0].strip() if fila else "no instalado"
+        # El criterio pregunta si HAY red de seguridad externa, no si esa red
+        # no ha encontrado nada.
+        #
+        # `launchctl list` da el codigo de salida de la ultima ejecucion, y el
+        # vigilante sale con 1 cuando DETECTA un objetivo caido. Leerlo como
+        # "roto" ponia el criterio en NO justo cuando el vigilante acababa de
+        # hacer su trabajo — y el unico componente cuya credibilidad sostiene
+        # todo lo demas es precisamente ese (D-101).
+        #
+        # Los codigos que importan:
+        #   0  ejecuto y todo bien
+        #   1  ejecuto y hay algo caido      <- el vigilante FUNCIONA
+        #   2+ no pudo ejecutarse            <- el vigilante esta roto
+        SALIDAS_SANAS = ("0", "1")
+        codigo = fila[0].split()[1] if fila else None
+        vigilante = codigo in SALIDAS_SANAS
+        if not fila:
+            detalle_v = "no instalado"
+        elif codigo == "1":
+            detalle_v = f"{fila[0].strip()} · corriendo, y su ultima pasada DETECTO algo"
+        else:
+            detalle_v = fila[0].strip()
     except Exception:  # noqa: BLE001
         vigilante, detalle_v = False, "no se pudo consultar launchctl"
 
