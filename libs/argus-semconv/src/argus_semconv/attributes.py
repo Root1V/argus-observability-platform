@@ -48,6 +48,7 @@ ARGUS_TENANT: Final[str] = "argus.tenant"
 ARGUS_ACTOR_KIND: Final[str] = "argus.actor.kind"
 ARGUS_ACTOR_KIND_VALUES: Final[tuple[str, ...]] = ("user", "service", "unknown",)
 ARGUS_TARGET_TYPE: Final[str] = "argus.target.type"
+ARGUS_TARGET_TYPE_PRINCIPALS: Final[tuple[str, ...]] = ("user", "client",)
 ARGUS_TARGET_ID: Final[str] = "argus.target.id"
 
 # --------------------------------------------------------------------------

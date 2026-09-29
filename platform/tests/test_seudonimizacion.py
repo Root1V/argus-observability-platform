@@ -128,3 +128,47 @@ def test_las_rutas_ottl_llevan_su_prefijo(seudonimizador: dict) -> None:
                 f"en `{ambito}`, ruta sin prefijo `{ambito}.`: {s}\n"
                 f"OTTL la reescribira y dejara la sal en el log del Collector."
             )
+
+
+# ---------------------------------------------------------------------------
+# El objeto-principal: la regla del gateway contra el modelo.
+# ---------------------------------------------------------------------------
+
+
+def _tipos_que_el_gateway_hashea(proc: dict, ambito: str) -> set[str]:
+    patron = re.compile(
+        rf'set\({ambito}\.attributes\["argus\.target\.id"\].*'
+        rf'where {ambito}\.attributes\["argus\.target\.type"\] == "([a-z_]+)"'
+    )
+    return {m.group(1) for s in _sentencias_por_ambito(proc)[ambito] if (m := patron.search(s))}
+
+
+@pytest.mark.parametrize("ambito", ["span", "spanevent"])
+def test_el_gateway_hashea_exactamente_los_tipos_principales(seudonimizador: dict, ambito: str) -> None:
+    """La lista de OTTL no puede recorrer el modelo, asi que esta enumerada.
+
+    Lo que si puede hacerse es comprobar que la enumeracion coincide, que es lo
+    que convierte una duplicacion silenciosa en un fallo de build.
+
+    Nace de un punto ciego que encontro Prometheus (P-33): la regla cubria
+    `user` y no `client`, y en su plataforma el mismo `client_id` sale con los
+    dos tipos segun la ruta. El almacen acababa con el hash de un sujeto en una
+    fila y su identificador en claro en otra — y un seudonimo vale lo que vale
+    el sitio menos protegido donde aparece ese sujeto (D-098).
+    """
+    from argus_semconv import attributes as A
+
+    esperados = set(A.ARGUS_TARGET_TYPE_PRINCIPALS)
+    reales = _tipos_que_el_gateway_hashea(seudonimizador, ambito)
+    assert reales == esperados, (
+        f"en `{ambito}` el gateway hashea {sorted(reales)} y el modelo declara "
+        f"{sorted(esperados)} como principales"
+    )
+
+
+def test_hay_mas_de_un_tipo_principal(seudonimizador: dict) -> None:
+    """Si la lista se quedara en uno, la prueba de arriba pasaria vacia de
+    contenido y volveriamos al punto ciego original."""
+    from argus_semconv import attributes as A
+
+    assert len(A.ARGUS_TARGET_TYPE_PRINCIPALS) >= 2

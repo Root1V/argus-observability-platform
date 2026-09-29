@@ -137,6 +137,19 @@ groups:
 
       - id: argus.target.type
         type: string
+        # Tipos cuyo identificador PUEDE designar a una persona. El gateway
+        # seudonimiza `argus.target.id` exactamente para estos.
+        #
+        # La clasificacion es de la plataforma y no del emisor: basta con que
+        # un tipo pueda designar a alguien en UNA aplicacion para que haya que
+        # hashearlo en todas, porque el almacen es compartido y un seudonimo
+        # vale lo que vale el sitio menos protegido donde aparece ese sujeto.
+        #
+        # `client` esta aqui por Prometheus (P-33): en su plataforma un
+        # principal se autentica con contrasena o con secreto de maquina y el
+        # identificador es el mismo, asi que `client` puede ser una persona
+        # (D-098).
+        principals: [user, client]
         brief: >
           QUE CLASE de objeto se administro, en singular y en cardinalidad
           cerrada: `node`, `client`, `api_key`, `user`. Es la mitad agrupable

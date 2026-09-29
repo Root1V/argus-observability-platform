@@ -161,6 +161,10 @@
           "id": "argus.target.type",
           "type": "string",
           "brief": "QUE CLASE de objeto se administro, en singular y en cardinalidad cerrada: `node`, `client`, `api_key`, `user`. Es la mitad agrupable del par —\"cuantas desactivaciones de nodo hubo\"— y la que decide si el id de al lado es una cosa o una persona: el gateway seudonimiza `argus.target.id` cuando este campo vale `user`.",
+          "principals": [
+            "user",
+            "client"
+          ],
           "examples": [
             "node",
             "client",
