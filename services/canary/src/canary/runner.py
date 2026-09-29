@@ -51,10 +51,20 @@ class Runner:
 
         # objetivo -> fallos consecutivos. Es lo que implementa la confirmacion.
         self._consecutivos: dict[str, int] = defaultdict(int)
-        # objetivos que ya generaron alerta, para no repetir y para poder cerrar.
+        # Objetivos en estado de alerta. Ya NO es una puerta que suprime el
+        # reenvio —eso era D-100— sino la marca de transicion: sirve para
+        # contar alertas nuevas aparte de reenvios y para detectar la
+        # recuperacion.
         self._alertados: set[str] = set()
 
-        self.stats = {"rondas": 0, "sondas_ok": 0, "sondas_fallidas": 0, "alertas": 0, "recuperaciones": 0}
+        self.stats = {
+            "rondas": 0, "sondas_ok": 0, "sondas_fallidas": 0,
+            # `alertas` cuenta transiciones a fallo; `reenvios`, las
+            # reconciliaciones de algo ya alertado. Separarlas importa: si se
+            # sumaran, el numero crece cada ciclo mientras nada cambia y deja
+            # de poder leerse como "cuantas veces ha fallado algo".
+            "alertas": 0, "reenvios": 0, "recuperaciones": 0,
+        }
 
     async def ronda(self) -> list[Medicion]:
         """Ejecuta todas las sondas una vez, en paralelo."""
@@ -105,13 +115,35 @@ class Runner:
                 )
                 continue
 
-            # Ya alertado: el alert-bus deduplica igualmente, pero no tiene
-            # sentido mandarle la misma senal cada cinco minutos para siempre.
-            if objetivo in self._alertados:
-                continue
-
-            self._alertados.add(objetivo)
-            self.stats["alertas"] += 1
+            # RECONCILIACION: se manda el estado actual COMPLETO cada ciclo,
+            # no solo lo que acaba de cambiar.
+            #
+            # Antes esto era una puerta: si el objetivo ya estaba en
+            # `_alertados` no se reenviaba nada. El razonamiento era correcto
+            # —no tiene sentido molestar cada cinco minutos para siempre— y la
+            # conclusion no, porque quien decide si molesta es el alert-bus y
+            # no nosotros.
+            #
+            # Lo que rompia es la JUNTA: el dedup del emisor asumia que el
+            # receptor no olvida, y el receptor guarda los incidentes en
+            # memoria. Al reiniciarlo, su tablero se vaciaba, nosotros
+            # seguiamos viendo el problema y no reenviabamos nada. El problema
+            # abierto desaparecia sin haberse resuelto, y las dos mitades
+            # creian estar en lo correcto (D-100).
+            #
+            # Reenviar no produce ruido: el alert-bus absorbe la senal en el
+            # incidente existente y `needs_notification` exige que no se haya
+            # notificado ya. Lo que SI hace es refrescar `last_seen_at`, que es
+            # de lo que depende su `sweep()` para no cerrarlo.
+            #
+            # Es el modelo de Alertmanager y de Kubernetes: el emisor declara
+            # lo que observa, el receptor decide. Hace irrelevante quien se
+            # reinicie.
+            if objetivo not in self._alertados:
+                self._alertados.add(objetivo)
+                self.stats["alertas"] += 1
+            else:
+                self.stats["reenvios"] += 1
             senales.append(self._a_senal(medicion))
 
         if senales:

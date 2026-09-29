@@ -4217,3 +4217,112 @@ fichero y no solo para esta política.
 
 **Editar configuración es programar sin compilador.** La única verificación
 disponible es leer el resultado parseado, y hay que hacerla siempre.
+
+---
+
+## D-100 · El canario reconcilia en vez de recordar (cierra `B-20`)
+
+**Contexto**: el fallo estaba descrito y pendiente desde `B-20`. El canario
+reportaba un problema **una vez** y lo apuntaba en `_alertados`; el alert-bus
+guardaba el incidente en un `dict` en memoria. Al reiniciar el alert-bus, su
+tablero se vaciaba, el canario seguía viendo el problema y **no reenviaba
+nada**. El problema abierto desaparecía sin haberse resuelto.
+
+### Lo que había que cambiar era menos de lo que parecía
+
+El receptor **ya reconciliaba**: `Engine.sweep()` cierra por `last_seen_at`, así
+que una señal repetida mantiene vivo el incidente y su ausencia lo cierra. Lo
+que faltaba era que el emisor la mandara.
+
+Así que el arreglo es quitar una puerta, no construir un mecanismo:
+
+```python
+# antes
+if objetivo in self._alertados:
+    continue          # <- el problema
+
+# ahora
+if objetivo not in self._alertados:
+    self._alertados.add(objetivo)
+    self.stats["alertas"] += 1
+else:
+    self.stats["reenvios"] += 1
+senales.append(self._a_senal(medicion))   # SIEMPRE
+```
+
+`_alertados` deja de ser una puerta y pasa a ser la marca de transición: sirve
+para contar alertas nuevas aparte de reenvíos, y para detectar la recuperación.
+
+### La premisa de la que dependía todo
+
+Reenviar cada ciclo solo es correcto si **no produce ruido**, o el arreglo sería
+peor que el fallo: sería exactamente la fatiga de alertas que el dedup del
+canario evitaba.
+
+Lo es, y por dos mecanismos que ya existían: `_absorb()` mete la señal repetida
+en el incidente que ya está abierto, y `needs_notification` exige
+`notified_at is None`. Hay una prueba solo para esa premisa, porque si algún día
+deja de cumplirse el resto se convierte en un generador de spam.
+
+### Verificado contra el sistema vivo, no solo en tests
+
+Ejecutando el `Runner` real contra el alert-bus real, con una sonda a un puerto
+muerto:
+
+```
+antes del reinicio          1 incidente del canario
+justo tras el reinicio      0 — el tablero esta vacio
+tras un ciclo del canario   1 — repoblado, sin tocar el canario
+                            intelligent-document-platform/idp-ocr no responde
+```
+
+La tercera línea es lo que no pasaba. Y **se puede retirar del runbook la
+mitigación** que decía que, tras reiniciar el alert-bus, hay que reiniciar
+también el canario para repoblar el tablero.
+
+### Una prueba verde que fijaba el fallo
+
+`test_no_repite_la_alerta_mientras_siga_caido` afirmaba que un objetivo caído se
+reporta **una sola vez**, con el argumento de que no tiene sentido molestar cada
+cinco minutos para siempre.
+
+El argumento es correcto. La conclusión no: **quien decide si molesta es el
+receptor**. La prueba estaba verde, era razonable, y fijaba el comportamiento
+que rompía la junta.
+
+Sustituida por cuatro que fijan el contrato nuevo: se reenvía cada ciclo, el
+reenvío no cuenta como alerta, la transición vuelve a contar si recae, y lo
+recuperado deja de reenviarse — esta última importa porque seguir mandando algo
+que ya funciona impediría al `sweep()` cerrarlo nunca.
+
+### Lo que esto NO arregla, y hay que decirlo
+
+Tras un reinicio el incidente es **nuevo** para el receptor, así que **vuelve a
+notificar**. Es ruido, y es preferible al silencio.
+
+Quitarlo necesita persistir los incidentes (`F2-15`), para que el receptor
+reconozca el que ya tenía y conserve su `opened_at`, su acuse y el informe del
+agente. **Reconciliar da la corrección; persistir dará la educación.** Hay una
+prueba que fija el re-aviso como comportamiento esperado, para que el día que se
+implemente la persistencia se vea que cambia.
+
+### El criterio 4 del piloto
+
+Pasa de «?» a comprobable: la entrega sostenida ya no depende de que nadie
+reinicie nada. Lo que queda para darlo por bueno es verlo sobrevivir a un
+reinicio real en la ventana de catorce días, no en una prueba provocada.
+
+### Y un efecto que debí anticipar
+
+La verificación contra el sistema vivo **mandó cuatro notificaciones reales por
+Telegram**: la del incidente falso que provoqué y las que se re-notificaron al
+repoblarse el tablero tras el reinicio.
+
+Es la consecuencia directa de lo que acababa de escribir dos párrafos más
+arriba —repoblar re-notifica— aplicada a mí mismo sin verla venir. Para probar
+esto en el sistema vivo hace falta un modo que enrute a `console` sin tocar el
+registro; hoy no existe y la única alternativa era no probarlo en vivo, que
+habría sido peor.
+
+Queda anotado como lo siguiente que hay que construir antes de la próxima
+verificación de este tipo.
