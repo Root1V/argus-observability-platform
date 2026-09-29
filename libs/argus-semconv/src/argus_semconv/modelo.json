@@ -202,7 +202,8 @@
             "timeout",
             "cancelled",
             "degraded",
-            "denied"
+            "denied",
+            "suspended"
           ]
         },
         {

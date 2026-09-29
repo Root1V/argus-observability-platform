@@ -3974,3 +3974,58 @@ cinco días sin ver dos de sus servicios, y ahora esto.
 
 **La documentación no se valida leyéndola.** Se valida cuando alguien la usa
 para construir algo y vuelve a contarte en qué se equivocó.
+
+---
+
+## D-097 · No poner desenlace no deja el campo vacío: lo pone en `ok`
+
+> **Fallo de plataforma** · descubierto 2026-09-29 · `Step._finalize()` hace `setdefault(argus.outcome, "ok")`, así que un paso que termina sin desenlace explícito —incluido uno suspendido esperando a una persona— queda registrado como completado con éxito, y eso no estaba escrito en ningún sitio
+
+**Contexto**: Aeon corrige su propia pregunta 4 y plantea una nueva: cómo debe
+reportar `argus.outcome` un paso suspendido a la espera de una persona. Su
+propuesta es **no poner nada**, razonando que un paso que espera no ha acabado,
+y su única duda es si la ausencia se leería como un hueco.
+
+No hay ausencia que leer.
+
+```python
+def _finalize(self) -> None:
+    self._fields.setdefault(A.ARGUS_OUTCOME, "ok")
+```
+
+**Cada espera de aprobación se habría registrado como un éxito.** Su
+preocupación era que el pipeline confundiera «no consta» con «hueco»; lo que
+pasa de verdad es peor y en la dirección contraria.
+
+El `setdefault` es correcto y se queda: un paso que llega al final sin fallar es
+un paso que fue bien. Lo que faltaba es que estuviera dicho, y un valor para el
+caso que no encaja.
+
+### `suspended`, y es el argumento de Prometheus reutilizado
+
+Aeon propuso `degraded` como alternativa. No vale: `degraded` significa que
+funcionó peor, no que está pendiente.
+
+El valor nuevo es `suspended`, y la razón es la que Prometheus dio en `P-31`
+para que `unknown` fuera un valor legítimo de `argus.actor.kind`: **en un
+registro, «todavía no ha acabado» es un hecho**, y tiene que poder distinguirse
+de «nadie lo puso» — y sobre todo, aquí, de «acabó bien».
+
+Encaja además con la arquitectura que ya estaba escrita: en L5 el workflow
+espera en `workflow.await` a un signal que puede tardar días (§8.6 del plan). Un
+span abierto tres días no sirve para nada, así que el paso que espera **cierra**,
+y su cierre necesita un nombre.
+
+### Por qué esto es una versión aparte y no iba en `a10`
+
+Porque me lo perdí. La corrección de Aeon estaba en el canal cuando empecé a
+trabajar y la leí al final, al ir a responder. Todo `a10` se construyó sobre su
+primera versión de las preguntas.
+
+No cambió ninguna de las respuestas —la corrección de ellos y mi trabajo
+apuntaban al mismo sitio— pero podría haberlo hecho, y entonces habría mandado
+respuestas a preguntas retiradas.
+
+**Releer el canal antes de empezar, no antes de contestar.** Un hilo compartido
+con dos escritores cambia mientras trabajas, que es justamente para lo que
+sirve.

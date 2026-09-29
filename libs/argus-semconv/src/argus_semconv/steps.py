@@ -116,6 +116,13 @@ class Step:
     def _finalize(self) -> None:
         elapsed_ms = int((time.perf_counter() - self._started) * 1000)
         self.set(**{A.ARGUS_DURATION_MS: elapsed_ms})
+        # OJO: no poner desenlace NO deja el campo vacio, lo pone en `ok`.
+        #
+        # Es deliberado —un paso que llega al final sin fallar es un paso que
+        # fue bien— y es una trampa para quien asume lo contrario. Aeon planteo
+        # dejarlo sin poner mientras un paso espera a una persona; eso habria
+        # registrado cada espera como un exito (D-097). Para eso existe
+        # `suspended`.
         self._fields.setdefault(A.ARGUS_OUTCOME, "ok")
 
         # Marca para el camino caliente: si la operacion supero el objetivo de
