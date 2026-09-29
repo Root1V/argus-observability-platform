@@ -8,7 +8,10 @@ es que la confianza sea de RED.
 
 from __future__ import annotations
 
+import pytest
+from argus._config import Config
 from argus.asgi import ASGIMiddleware
+from opentelemetry import trace
 
 REMOTE_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
 TRACEPARENT = f"00-{REMOTE_TRACE_ID}-00f067aa0ba902b7-01"
@@ -135,3 +138,32 @@ async def test_health_endpoints_are_not_traced(exporter) -> None:
         send,
     )
     assert exporter.get_finished_spans() == ()
+
+
+# ---------------------------------------------------------------------------
+# `ARGUS_PROPAGATE` gobierna la ENTRADA y solo la entrada.
+#
+# Aeon lo pregunto porque su propiedad central es que un run sea UNA traza
+# cruzando Python -> Go, y depende de que `never` —el valor por defecto— no
+# toque la inyeccion saliente. Lo era, y no lo fijaba ninguna prueba: el dia
+# que alguien "endureciera" `never` para cubrir tambien la salida, todas las
+# trazas distribuidas se partirian y los siete tests de arriba seguirian en
+# verde (D-096).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("modo", ["never", "trusted", "always"])
+def test_la_inyeccion_saliente_no_depende_del_modo_de_confianza(modo) -> None:
+    """La confianza es sobre lo que RECIBES. Lo que emites es tuyo."""
+    from argus import propagate
+
+    cfg = Config.from_env("saliente", propagate=modo)
+    assert cfg.propagate == modo
+
+    tracer = trace.get_tracer("pruebas-confianza")
+    with tracer.start_as_current_span("saliente") as span:
+        esperado = format(span.get_span_context().trace_id, "032x")
+        cabeceras = propagate.inject_headers()
+
+    assert "traceparent" in cabeceras, f"con propagate={modo} no se inyecto nada"
+    assert cabeceras["traceparent"].split("-")[1] == esperado

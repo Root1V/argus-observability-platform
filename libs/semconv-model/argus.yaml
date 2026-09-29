@@ -169,7 +169,14 @@ groups:
         examples: ["document.process", "inference.complete", "ocr.extract"]
       - id: argus.outcome
         type: enum
-        members: [ok, error, timeout, cancelled, degraded]
+        # `denied` lo trajo Aeon: un paso rechazado por politica o por una
+        # persona no es un error —el sistema hizo lo correcto— ni un
+        # `cancelled`, que sugiere que alguien se arrepintio. Sin el, una
+        # denegacion se contaba como fallo y ensuciaba cualquier tasa de error.
+        #
+        # Una aprobacion que caduca SI es `timeout`, y una concedida es `ok`:
+        # no hacen falta valores propios para el ciclo de aprobacion.
+        members: [ok, error, timeout, cancelled, degraded, denied]
       - id: argus.duration_ms
         type: int
       - id: argus.step.depth
@@ -195,9 +202,34 @@ groups:
       - id: argus.slo.threshold_ms
         type: int
       - id: argus.guardrail
-        type: string
-        brief: Guardarrail incumplido, si lo hubo.
-        examples: ["cost-per-run", "tool-call-loop", "token-budget"]
+        type: enum
+        members:
+          # Presupuestos. Los emite `guardrails.py` de este paquete.
+          - tool-call-budget
+          - tool-call-loop
+          - token-budget
+          - cost-budget
+          # Gobierno. Los emite quien aplica politica fuera del modelo; el
+          # primero lo trajo Aeon (`aeon-ai`) y los tres describen un run que
+          # NO continuo, igual que un presupuesto agotado.
+          - fan-out-budget
+          - policy-denied
+          - destination-not-declared
+        brief: >
+          Guardarrail incumplido, si lo hubo. Lista separada por comas: una
+          ejecucion puede romper varios.
+
+          CARDINALIDAD CERRADA, y la lista es compartida a proposito: el valor
+          de este campo es `GROUP BY` sobre todo el portafolio, y prefijarlo
+          por equipo (`aeon.policy-denied`) daria un cubo distinto por equipo
+          para el mismo concepto.
+
+          ESTE CAMPO ENCIENDE EL CAMINO CALIENTE. El Collector agente enruta a
+          `traces/hot` cualquier span donde exista, asi que ponerlo equivale a
+          pedir una notificacion en ~2 s. Solo va en lo que hay que mirar ya:
+          un run que se paro. Una espera de aprobacion es operacion normal y
+          NO va aqui — va en `argus.outcome` (D-096).
+        examples: ["cost-budget", "tool-call-loop,token-budget"]
 
   # ---------------------------------------------------------------------------
   # Errores. Cardinalidad cerrada a proposito: es lo que hace que

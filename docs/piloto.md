@@ -89,14 +89,14 @@ Desde PyPI, como cualquier otra dependencia. Nada de `--find-links`, ni de
 índices privados, ni de ruedas pasadas a mano.
 
 ```bash
-pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a9"
+pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a10"
 ```
 
 En el `pyproject.toml` de tu aplicación:
 
 ```toml
 dependencies = [
-  "argus-obs-sdk[asgi,client,sql]==1.0.0a9",
+  "argus-obs-sdk[asgi,client,sql]==1.0.0a10",
 ]
 ```
 

@@ -15,6 +15,7 @@ import importlib.util
 import os
 import socket
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
@@ -57,6 +58,81 @@ def _protocolo_por_defecto() -> Protocolo:
         return "http/protobuf"
     return "http/json"
 
+
+
+# ---------------------------------------------------------------------------
+# Dos comprobaciones de arranque. Las dos existen porque un equipo perdio una
+# tarde con ellas, y las dos fallaban EN SILENCIO: la aplicacion funciona, el
+# exportador reintenta de fondo, y no llega un solo span. No hay excepcion ni
+# log de error, solo ausencia — que es justo lo que nadie mira despues de
+# montar el trazado (D-096).
+#
+# Avisan, no levantan. El contrato es no tumbar nunca la aplicacion; lo que se
+# corrige es que el fallo sea invisible, no que sea fatal.
+# ---------------------------------------------------------------------------
+
+# 4317 es gRPC y 4318 es HTTP. No es convencion nuestra, es la del estandar.
+_PUERTO_DE = {"grpc": "4317", "http/protobuf": "4318", "http/json": "4318"}
+
+
+def _en_contenedor() -> bool:
+    """Heuristica, y basta con que lo sea.
+
+    Un falso positivo cuesta un aviso de mas; un falso negativo devuelve el
+    fallo silencioso que esto viene a quitar.
+    """
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", encoding="utf-8") as f:
+            return any(m in f.read() for m in ("docker", "kubepods", "containerd"))
+    except OSError:
+        return False
+
+
+def _avisar_de_la_configuracion(endpoint: str, protocol: str) -> None:
+    # `http://otel-collector:4318/v1/traces` -> ("otel-collector", "4318")
+    autoridad = endpoint.rsplit("//", 1)[-1].split("/")[0]
+    host, _, puerto = autoridad.rpartition(":")
+    if not host:                      # sin puerto: "otel-collector"
+        host, puerto = autoridad, ""
+
+    # 1. `localhost` desde dentro de un contenedor.
+    #
+    # La convencion "las aplicaciones exportan a localhost" es correcta y se
+    # lee en el sitio equivocado: el agente publica sus puertos en el
+    # 127.0.0.1 del HOST, asi que desde una red de Docker es inalcanzable.
+    if host in ("localhost", "127.0.0.1", "::1", "[::1]") and _en_contenedor():
+        warnings.warn(
+            f"Argus: el endpoint es {endpoint!r} y este proceso parece estar en un "
+            "contenedor. `localhost` ahi es el propio contenedor, no el host donde "
+            "corre el Collector agente: no llegara ni un span, y sin ningun error. "
+            "Usa la direccion del host (`host.docker.internal` en Docker Desktop) "
+            "o pon el agente en la misma red.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+    # 2. Protocolo resuelto contra puerto configurado.
+    #
+    # El protocolo se autodetecta segun lo instalado. Una imagen que arrastre
+    # gRPC por otra dependencia elige gRPC y lo habla contra el 4318, que es
+    # HTTP: `StatusCode.UNAVAILABLE` en bucle de reintentos, para las tres
+    # senales.
+    # Solo si el puerto es el OTRO puerto OTLP. Un 8080 o un 14318 es una
+    # eleccion deliberada —un proxy, un sidecar, un mapeo del host— y avisar
+    # ahi seria ruido en todos para proteger de ninguno.
+    esperado = _PUERTO_DE.get(protocol)
+    otros = [p for p, n in _PUERTO_DE.items() if n == puerto]
+    if puerto and esperado and puerto != esperado and puerto in set(_PUERTO_DE.values()):
+        warnings.warn(
+            f"Argus: protocolo {protocol!r} contra el puerto {puerto}, que es el de "
+            f"{' o '.join(otros) if otros else 'otro transporte'} ({protocol} usa el "
+            f"{esperado}). Si no lo has elegido a proposito, el protocolo se "
+            f"autodetecto por los paquetes instalados: fija ARGUS_PROTOCOL.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 def _flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -138,6 +214,8 @@ class Config:
             propagate = "never"
 
         cidrs = tuple(c.strip() for c in os.getenv("ARGUS_TRUSTED_CIDRS", "").split(",") if c.strip())
+
+        _avisar_de_la_configuracion(endpoint, protocol)
 
         cfg = cls(
             service=resolved_service,

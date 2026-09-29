@@ -16,6 +16,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import sys
@@ -119,9 +120,48 @@ def render_go(model: dict) -> str:
     return "\n".join(lines)
 
 
+def render_json(model: dict) -> str:
+    """El modelo entero, legible por maquina, DENTRO del paquete instalado.
+
+    Existe por una peticion de Aeon: cuatro de sus seis servicios son Go y
+    emiten nuestros atributos a mano, copiando nombres y formas de valor desde
+    nuestro codigo Python. Eso funciona y es la duplicacion que deriva — el dia
+    que cambie un nombre, su lado se queda atras y nada falla.
+
+    Va en JSON y no en YAML porque la biblioteca estandar de Go trae uno y no
+    el otro, y el objetivo es que puedan validarse sin anadir dependencias.
+
+    Y va DENTRO del paquete, no solo en el repositorio: lo que hay que poder
+    comprobar es el modelo de la version que tienes instalada. Un fichero en
+    `main` describe lo que habra, no lo que corre (D-096).
+    """
+    grupos = []
+    for grupo in model["groups"]:
+        atributos = []
+        for attr in grupo.get("attributes", []):
+            entrada = {
+                "id": attr["id"],
+                "type": attr.get("type", "string"),
+                "brief": " ".join((attr.get("brief") or "").split()),
+            }
+            if attr.get("members"):
+                entrada["members"] = list(attr["members"])
+            if attr.get("examples"):
+                entrada["examples"] = list(attr["examples"])
+            atributos.append(entrada)
+        grupos.append({
+            "id": grupo["id"],
+            "brief": " ".join((grupo.get("brief") or "").split()),
+            "attributes": atributos,
+        })
+    return json.dumps({"groups": grupos}, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+
+
 TARGETS = {
     ROOT / "libs" / "argus-semconv" / "src" / "argus_semconv" / "attributes.py": render_python,
     ROOT / "libs" / "argus-semconv" / "generated" / "go" / "attributes.go": render_go,
+    # Se empaqueta con la libreria: ver `[tool.hatch.build]` en su pyproject.
+    ROOT / "libs" / "argus-semconv" / "src" / "argus_semconv" / "modelo.json": render_json,
 }
 
 

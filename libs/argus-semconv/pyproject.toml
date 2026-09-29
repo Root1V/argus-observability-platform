@@ -1,6 +1,6 @@
 [project]
 name = "argus-obs-semconv"
-version = "1.0.0a9"
+version = "1.0.0a10"
 description = "Convenciones semanticas de Argus. Para LIBRERIAS: depende solo de la API de OpenTelemetry."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,6 +40,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus_semconv"]
+
+# El modelo viaja DENTRO de la rueda. Lo pidio Aeon para poder validar sus
+# binarios Go contra la version instalada en vez de contra la rama principal.
+artifacts = ["src/argus_semconv/modelo.json"]
 
 # Quien encuentre esto en PyPI tiene derecho a saber de donde sale y donde
 # reportar. Un paquete sin origen publico es la misma opacidad de cadena de

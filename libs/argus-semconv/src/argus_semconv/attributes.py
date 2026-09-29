@@ -55,7 +55,7 @@ ARGUS_TARGET_ID: Final[str] = "argus.target.id"
 # --------------------------------------------------------------------------
 ARGUS_EVENT: Final[str] = "argus.event"
 ARGUS_OUTCOME: Final[str] = "argus.outcome"
-ARGUS_OUTCOME_VALUES: Final[tuple[str, ...]] = ("ok", "error", "timeout", "cancelled", "degraded",)
+ARGUS_OUTCOME_VALUES: Final[tuple[str, ...]] = ("ok", "error", "timeout", "cancelled", "degraded", "denied",)
 ARGUS_DURATION_MS: Final[str] = "argus.duration_ms"
 ARGUS_STEP_DEPTH: Final[str] = "argus.step.depth"
 
@@ -66,6 +66,7 @@ ARGUS_HOT: Final[str] = "argus.hot"
 ARGUS_SLO_BREACHED: Final[str] = "argus.slo.breached"
 ARGUS_SLO_THRESHOLD_MS: Final[str] = "argus.slo.threshold_ms"
 ARGUS_GUARDRAIL: Final[str] = "argus.guardrail"
+ARGUS_GUARDRAIL_VALUES: Final[tuple[str, ...]] = ("tool-call-budget", "tool-call-loop", "token-budget", "cost-budget", "fan-out-budget", "policy-denied", "destination-not-declared",)
 
 # --------------------------------------------------------------------------
 # errors: Clasificacion de errores
