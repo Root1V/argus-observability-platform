@@ -1,0 +1,536 @@
+{
+  "groups": [
+    {
+      "id": "identity",
+      "brief": "Identidad de aplicacion y componente",
+      "attributes": [
+        {
+          "id": "service.namespace",
+          "type": "string",
+          "brief": "La APLICACION. Agrupa todos sus sub-componentes.",
+          "examples": [
+            "intelligent-document-platform",
+            "aeon-ai"
+          ]
+        },
+        {
+          "id": "service.name",
+          "type": "string",
+          "brief": "El SUB-COMPONENTE concreto.",
+          "examples": [
+            "idp-api",
+            "idp-worker",
+            "idp-ocr"
+          ]
+        },
+        {
+          "id": "service.version",
+          "type": "string",
+          "brief": "",
+          "examples": [
+            "0.4.2"
+          ]
+        },
+        {
+          "id": "service.instance.id",
+          "type": "string",
+          "brief": "",
+          "examples": [
+            "idp-worker-3"
+          ]
+        },
+        {
+          "id": "deployment.environment.name",
+          "type": "string",
+          "brief": "Entorno de despliegue.",
+          "examples": [
+            "mac-dev",
+            "imac",
+            "server-1",
+            "ci"
+          ]
+        },
+        {
+          "id": "argus.component.role",
+          "type": "enum",
+          "brief": "Forma del componente. Determina los SLO por defecto.",
+          "members": [
+            "api",
+            "worker",
+            "scheduler",
+            "cli",
+            "model-server",
+            "frontend",
+            "library"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "langfuse_bridge",
+      "brief": "Atributos que Langfuse interpreta de forma especial",
+      "attributes": [
+        {
+          "id": "langfuse.environment",
+          "type": "string",
+          "brief": "Espejo de deployment.environment.name."
+        },
+        {
+          "id": "langfuse.release",
+          "type": "string",
+          "brief": "Espejo de service.version."
+        },
+        {
+          "id": "langfuse.observation.type",
+          "type": "string",
+          "brief": "Tipo de observacion. NECESARIO para RAG: la tabla de mapeo de Langfuse es CERRADA y no incluye la operacion `retrieval` de las semconv OTel. Sin esto, un span de recuperacion no se renderiza como tal.",
+          "examples": [
+            "retriever",
+            "generation",
+            "agent",
+            "tool"
+          ]
+        },
+        {
+          "id": "langfuse.trace.name",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "langfuse.trace.tags",
+          "type": "string[]",
+          "brief": ""
+        }
+      ]
+    },
+    {
+      "id": "attribution",
+      "brief": "Etiquetas de atribucion para FinOps y analisis",
+      "attributes": [
+        {
+          "id": "argus.app",
+          "type": "string",
+          "brief": "Aplicacion propietaria. Viaja en baggage entre procesos."
+        },
+        {
+          "id": "argus.feature",
+          "type": "string",
+          "brief": "Funcionalidad de producto que origino la llamada.",
+          "examples": [
+            "document-extraction",
+            "chat-support"
+          ]
+        },
+        {
+          "id": "argus.use_case",
+          "type": "string",
+          "brief": "Caso de uso, para agrupar coste por proposito.",
+          "examples": [
+            "ocr",
+            "summarization",
+            "rca-investigation"
+          ]
+        },
+        {
+          "id": "argus.run.id",
+          "type": "string",
+          "brief": "Unidad de trabajo de negocio. Viaja en baggage."
+        },
+        {
+          "id": "argus.tenant",
+          "type": "string",
+          "brief": "Inquilino, si aplica. Viaja en baggage."
+        }
+      ]
+    },
+    {
+      "id": "actor",
+      "brief": "Quien origino la accion y sobre que, donde el estandar no llega",
+      "attributes": [
+        {
+          "id": "argus.actor.kind",
+          "type": "enum",
+          "brief": "Si detras del identificador hay una persona, una credencial de maquina o no se sabe. `unknown` es un valor legitimo y NO un relleno: en un registro de auditoria, \"no consta\" es un hecho y hay que poder distinguirlo de \"nadie lo puso\".",
+          "members": [
+            "user",
+            "service",
+            "unknown"
+          ]
+        },
+        {
+          "id": "argus.target.type",
+          "type": "string",
+          "brief": "QUE CLASE de objeto se administro, en singular y en cardinalidad cerrada: `node`, `client`, `api_key`, `user`. Es la mitad agrupable del par —\"cuantas desactivaciones de nodo hubo\"— y la que decide si el id de al lado es una cosa o una persona: el gateway seudonimiza `argus.target.id` cuando este campo vale `user`.",
+          "examples": [
+            "node",
+            "client",
+            "api_key",
+            "user"
+          ]
+        },
+        {
+          "id": "argus.target.id",
+          "type": "string",
+          "brief": "CUAL objeto, como cadena opaca. Alta cardinalidad a proposito: sirve para filtrar un objeto concreto, nunca para agrupar. Va separado del tipo por el mismo motivo por el que `http.route` va separado del path resuelto: junto, cada id es un valor distinto y no se puede contar nada (D-092).",
+          "examples": [
+            "8ed68951-d6cb-44f8-9335-6ddba3dde1fc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wide_event",
+      "brief": "Campos del evento ancho canonico",
+      "attributes": [
+        {
+          "id": "argus.event",
+          "type": "string",
+          "brief": "Nombre del evento, de CARDINALIDAD CERRADA. Es lo que permite al agente de RCA hacer GROUP BY con resultados accionables, en vez de hacer grep sobre texto libre.",
+          "examples": [
+            "document.process",
+            "inference.complete",
+            "ocr.extract"
+          ]
+        },
+        {
+          "id": "argus.outcome",
+          "type": "enum",
+          "brief": "",
+          "members": [
+            "ok",
+            "error",
+            "timeout",
+            "cancelled",
+            "degraded",
+            "denied"
+          ]
+        },
+        {
+          "id": "argus.duration_ms",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "argus.step.depth",
+          "type": "int",
+          "brief": "Profundidad de anidamiento, para detectar trayectorias anomalas."
+        }
+      ]
+    },
+    {
+      "id": "hotpath",
+      "brief": "Marcas que enrutan al camino caliente de deteccion",
+      "attributes": [
+        {
+          "id": "argus.hot",
+          "type": "boolean",
+          "brief": "Marcado por el SDK cuando el span es candidato a incidente: error, o duracion por encima del umbral de SLO de su componente. El filtro del Collector agente lo usa para el camino de ~2 segundos."
+        },
+        {
+          "id": "argus.slo.breached",
+          "type": "boolean",
+          "brief": "La operacion supero el objetivo de latencia de su componente."
+        },
+        {
+          "id": "argus.slo.threshold_ms",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "argus.guardrail",
+          "type": "enum",
+          "brief": "Guardarrail incumplido, si lo hubo. Lista separada por comas: una ejecucion puede romper varios. CARDINALIDAD CERRADA, y la lista es compartida a proposito: el valor de este campo es `GROUP BY` sobre todo el portafolio, y prefijarlo por equipo (`aeon.policy-denied`) daria un cubo distinto por equipo para el mismo concepto. ESTE CAMPO ENCIENDE EL CAMINO CALIENTE. El Collector agente enruta a `traces/hot` cualquier span donde exista, asi que ponerlo equivale a pedir una notificacion en ~2 s. Solo va en lo que hay que mirar ya: un run que se paro. Una espera de aprobacion es operacion normal y NO va aqui — va en `argus.outcome` (D-096).",
+          "members": [
+            "tool-call-budget",
+            "tool-call-loop",
+            "token-budget",
+            "cost-budget",
+            "fan-out-budget",
+            "policy-denied",
+            "destination-not-declared"
+          ],
+          "examples": [
+            "cost-budget",
+            "tool-call-loop,token-budget"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "errors",
+      "brief": "Clasificacion de errores",
+      "attributes": [
+        {
+          "id": "error.type",
+          "type": "string",
+          "brief": "Clase de error, de un catalogo cerrado. Nunca el mensaje.",
+          "examples": [
+            "timeout",
+            "backend-unavailable",
+            "upstream-error"
+          ]
+        },
+        {
+          "id": "argus.error.retryable",
+          "type": "boolean",
+          "brief": "Si reintentar es una remediacion valida. El agente remediador lo lee: reintentar un error no transitorio es hacer daño, no arreglar."
+        },
+        {
+          "id": "argus.error.retry_policy",
+          "type": "string",
+          "brief": "",
+          "examples": [
+            "exponential-backoff",
+            "none",
+            "operator-action"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "genai",
+      "brief": "Convenciones GenAI de OpenTelemetry",
+      "attributes": [
+        {
+          "id": "gen_ai.operation.name",
+          "type": "enum",
+          "brief": "",
+          "members": [
+            "chat",
+            "text_completion",
+            "embeddings",
+            "generate_content",
+            "retrieval",
+            "execute_tool",
+            "invoke_agent",
+            "create_agent"
+          ]
+        },
+        {
+          "id": "gen_ai.provider.name",
+          "type": "string",
+          "brief": "Sustituye a `gen_ai.system`, que esta OBSOLETO.",
+          "examples": [
+            "openai",
+            "anthropic",
+            "ollama",
+            "vllm",
+            "aws.bedrock"
+          ]
+        },
+        {
+          "id": "gen_ai.request.model",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.response.model",
+          "type": "string",
+          "brief": "Modelo realmente servido. Puede diferir del pedido por alias o routing, y esa diferencia explica incidentes."
+        },
+        {
+          "id": "gen_ai.response.id",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.response.finish_reasons",
+          "type": "string[]",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.usage.input_tokens",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.usage.output_tokens",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.usage.cache_read.input_tokens",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.request.temperature",
+          "type": "double",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.request.max_tokens",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.request.top_p",
+          "type": "double",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.conversation.id",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.agent.name",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.agent.id",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.tool.name",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.tool.type",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.tool.call.id",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.input.messages",
+          "type": "string",
+          "brief": "JSON serializado. Gated por ARGUS_CAPTURE_CONTENT."
+        },
+        {
+          "id": "gen_ai.output.messages",
+          "type": "string",
+          "brief": "JSON serializado. Gated por ARGUS_CAPTURE_CONTENT."
+        },
+        {
+          "id": "gen_ai.system_instructions",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.tool.call.arguments",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.tool.call.result",
+          "type": "string",
+          "brief": ""
+        },
+        {
+          "id": "gen_ai.content.truncated",
+          "type": "boolean",
+          "brief": ""
+        }
+      ]
+    },
+    {
+      "id": "inference",
+      "brief": "Detalles de inferencia local que solo conoce el SDK cliente",
+      "attributes": [
+        {
+          "id": "argus.inference.backend_id",
+          "type": "string",
+          "brief": "Backend concreto que atendio la peticion."
+        },
+        {
+          "id": "argus.inference.circuit_state",
+          "type": "enum",
+          "brief": "",
+          "members": [
+            "closed",
+            "open",
+            "half-open"
+          ]
+        },
+        {
+          "id": "argus.inference.fallback",
+          "type": "boolean",
+          "brief": "Si se sirvio desde un backend alternativo tras un fallo."
+        },
+        {
+          "id": "argus.inference.cost_usd",
+          "type": "double",
+          "brief": ""
+        },
+        {
+          "id": "argus.inference.ttft_ms",
+          "type": "int",
+          "brief": "Tiempo hasta el primer token VISIBLE para el usuario. Es la metrica de experiencia: cuanto tarda alguien en ver algo aparecer."
+        },
+        {
+          "id": "argus.inference.first_token_ms",
+          "type": "int",
+          "brief": "Tiempo hasta el primer token de CUALQUIER tipo, razonamiento incluido. Es la metrica de salud del backend: cuanto tarda el modelo en empezar a trabajar. Existe separada de `argus.inference.ttft_ms` porque los modelos que razonan rompieron la equivalencia entre ambas. Medido en Prometheus, un stream de qwen3-0.6b con max_tokens=32 emite 30 chunks de `reasoning_content` antes del primer `content`: el TTFT visible o no existe o mide casi el total, y solo aparecia en 13 de 247 peticiones, sesgado hacia las respuestas largas. Las alertas de latencia de inferencia usan ESTA, no `ttft_ms`: es la unica que esta siempre presente y la que responde \"el backend esta lento\" en vez de \"el modelo penso mucho antes de hablar\"."
+        },
+        {
+          "id": "argus.inference.tokens_per_second",
+          "type": "double",
+          "brief": ""
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "brief": "Puestos por el Collector, no por quien emite",
+      "attributes": [
+        {
+          "id": "argus.sampling.baseline_pct",
+          "type": "int",
+          "brief": "Porcentaje de muestreo de base aplicado por el gateway. Va en el span porque sin el, cualquier ratio calculado sobre trazas almacenadas esta sesgado y no hay forma de saberlo al consultar."
+        },
+        {
+          "id": "argus.collector.tier",
+          "type": "enum",
+          "brief": "Que nivel del Collector trato la senal. El gateway lo pone con `insert` y no `upsert`, para no sellar encima el del agente (D-079).",
+          "members": [
+            "agent",
+            "gateway"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retrieval",
+      "brief": "Recuperacion de documentos",
+      "attributes": [
+        {
+          "id": "argus.retrieval.store",
+          "type": "string",
+          "brief": "",
+          "examples": [
+            "pgvector",
+            "qdrant",
+            "chroma"
+          ]
+        },
+        {
+          "id": "argus.retrieval.top_k",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "argus.retrieval.doc_count",
+          "type": "int",
+          "brief": ""
+        },
+        {
+          "id": "argus.retrieval.score_min",
+          "type": "double",
+          "brief": ""
+        },
+        {
+          "id": "argus.retrieval.score_max",
+          "type": "double",
+          "brief": ""
+        }
+      ]
+    }
+  ]
+}

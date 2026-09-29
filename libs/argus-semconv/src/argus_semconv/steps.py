@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import functools
 import time
+import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, TypeVar
@@ -74,6 +75,32 @@ class Step:
         return self
 
     def outcome(self, value: str) -> Step:
+        """Como acabo el paso. Vocabulario CERRADO, y ahora comprobado.
+
+        `argus.outcome` estaba declarado `enum` en el modelo desde el principio
+        y aqui se aceptaba cualquier cadena. El modelo afirmaba una cosa y el
+        codigo hacia otra, que es la forma exacta de defecto que un equipo
+        consumidor nos describio el mismo dia que preguntaba por este campo
+        (D-096).
+
+        El coste no era teorico: un campo de cardinalidad cerrada existe para
+        poder agregarlo, y si cada equipo mete sus propios valores el campo
+        esta ahi y no se puede agrupar. Nadie se entera, porque un valor
+        inventado se escribe igual de bien que uno bueno.
+
+        AVISA, no levanta. El contrato del SDK es no tumbar nunca la
+        aplicacion: un desenlace mal escrito es un dato peor, no un motivo para
+        romper un proceso en produccion. El valor se escribe igualmente para no
+        perder la informacion.
+        """
+        if value not in A.ARGUS_OUTCOME_VALUES:
+            warnings.warn(
+                f"argus.outcome={value!r} no esta en el vocabulario: "
+                f"{', '.join(A.ARGUS_OUTCOME_VALUES)}. Se escribe igual, pero no "
+                f"agrupara con el resto del portafolio.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         return self.set(**{A.ARGUS_OUTCOME: value})
 
     def error(self, error_type: str, *, retryable: bool | None = None) -> Step:

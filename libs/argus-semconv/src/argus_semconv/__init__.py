@@ -35,7 +35,25 @@ except Exception:  # noqa: BLE001
 #: Version del MODELO de convenciones (libs/semconv-model/argus.yaml).
 SEMCONV_VERSION = attributes.SEMCONV_VERSION
 
+
+def modelo() -> dict:
+    """El modelo de convenciones de ESTA version instalada, como diccionario.
+
+    Para quien no emite desde Python —Aeon tiene cuatro binarios en Go— el
+    fichero se lee directo:
+
+        python -c "import argus_semconv,pathlib;print(pathlib.Path(argus_semconv.__file__).parent/'modelo.json')"
+
+    La gracia es que describe la version que tienes instalada. Un fichero en la
+    rama principal describe lo que habra, no lo que corre.
+    """
+    import json
+    from pathlib import Path
+
+    return json.loads((Path(__file__).parent / "modelo.json").read_text(encoding="utf-8"))
+
 __all__ = [
+    "modelo",
     # Convenciones generadas
     "attributes",
     # Metricas GenAI, emitidas desde la API. Publico desde 1.0.0a5: quien

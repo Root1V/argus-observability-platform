@@ -3824,3 +3824,153 @@ resolviendo un problema que dejó de existir.
 
 Publicado en `1.0.0a9`. El cambio en el pipeline de Prosodia es suyo y es una
 línea: cambiar la clase del pool.
+
+---
+
+## D-096 · Aeon se integra, y tres de nuestros artefactos afirmaban cosas que el código no hacía
+
+> **Fallo de plataforma** · descubierto 2026-09-28 · `argus.outcome` estaba declarado `enum` en el modelo y `Step.outcome()` aceptaba cualquier cadena; el modelo daba como ejemplo de `argus.guardrail` un `cost-per-run` que el código no emite; y que `ARGUS_PROPAGATE=never` no afecta a la inyección saliente no lo fijaba ninguna prueba
+
+**Contexto**: Aeon (`aeon-ai`) abre canal ya integrado —plano de control en Go,
+workers Python sobre Temporal— y con la integración verificada A/B contra el
+stack real. Traen tres modos de fallo silenciosos, una autocrítica y cuatro
+preguntas.
+
+Su marco, que conviene citar porque es el que encontró lo nuestro: *«un
+artefacto que afirma algo que el código no hace»*, y *«las seis se encontraron
+ejecutando, ninguna leyendo»*.
+
+Aplicado a nosotros, encontró tres.
+
+### 1 · `argus.outcome` era un enum que no lo era
+
+Declarado `enum` en el modelo desde el principio, con `ARGUS_OUTCOME_VALUES`
+generado y todo. `Step.outcome(value)` aceptaba cualquier cadena sin mirar.
+
+El coste no se ve, que es lo que lo hace caro: un valor inventado se escribe
+igual de bien que uno bueno. Lo que desaparece es la capacidad de agregarlo,
+que es la única razón por la que un campo se declara cerrado. Ahora avisa —no
+levanta, porque el contrato es no tumbar la aplicación— y escribe el valor
+igualmente.
+
+Su pregunta era literalmente *«¿hay vocabulario definido?»*. La respuesta
+honesta era «en el modelo sí, en el código no».
+
+### 2 · El modelo daba un nombre de guardarraíl que no existe
+
+`examples: ["cost-per-run", ...]`. El código emite `cost-budget`.
+
+Aeon acertó **porque leyó `guardrails.py` y no el modelo**, y lo dicen ellos
+mismos en su autocrítica. Si hubieran confiado en el sitio que parece la fuente
+de verdad, habrían emitido un nombre que no casa con ninguna regla nuestra.
+
+`argus.guardrail` pasa además de `string` con ejemplos a **enum cerrado**, que
+es lo que el campo necesitaba para que `GROUP BY` signifique algo.
+
+### 3 · La propiedad central de Aeon no la fijaba nada
+
+Preguntan si `ARGUS_PROPAGATE=never` gobierna solo la entrada, porque su
+propiedad central es que un run sea UNA traza cruzando Python → Go.
+
+Lo gobierna solo la entrada: el modo de confianza vive entero en el middleware
+ASGI, y la inyección saliente no lo consulta. Correcto — **y sin una sola
+prueba que lo sujetara**. Los siete tests de confianza cubrían la entrada. El
+día que alguien «endureciera» `never` para cubrir también la salida, todas las
+trazas distribuidas del portafolio se partirían y los siete seguirían verdes.
+
+Ahora hay una prueba por los tres modos.
+
+### Qué se decide sobre sus cuatro nombres de guardarraíl
+
+Proponen `policy-denied`, `approval-required`, `fan-out-budget`,
+`destination-not-declared`, y preguntan si prefijarlos con `aeon.`.
+
+**Sin prefijo.** El valor de este campo es agregarlo sobre todo el portafolio;
+prefijar por equipo daría un cubo distinto por equipo para el mismo concepto, y
+convertiría el vocabulario compartido en cuatro vocabularios privados. Es D-081
+otra vez con otra ropa.
+
+**Tres se adoptan. `approval-required` no, y el motivo es de arquitectura, no
+de nomenclatura.** El Collector agente enruta a `traces/hot` cualquier span con
+`argus.guardrail`:
+
+```
+attributes["argus.hot"] == true
+or status.code == STATUS_CODE_ERROR
+or attributes["argus.guardrail"] != nil
+```
+
+Poner el atributo **es** pedir una notificación en ~2 s. Una espera de
+aprobación es la operación normal de L5, y marcarla así paginaría en cada
+aprobación — la fatiga de alertas que la plataforma existe para evitar,
+construida desde dentro.
+
+El campo significa «este run se paró y hay que mirarlo ya», y eso no estaba
+escrito en ningún sitio. Ahora sí.
+
+### Y su pregunta 4 se resuelve con UN valor nuevo, no con cinco
+
+Proponen `result` · `denied_by_policy` · `approval_granted` · `approval_denied`
+· `approval_expired`. Cuatro caben ya:
+
+| suyo | nuestro | por qué |
+|---|---|---|
+| `result` | `ok` | mismo hecho |
+| `approval_granted` | `ok` | el paso siguió |
+| `approval_expired` | `timeout` | una aprobación que caduca es un plazo agotado |
+| `approval_denied` | **`denied`** | nuevo |
+| `denied_by_policy` | **`denied`** | nuevo |
+
+**`denied` es el que faltaba de verdad**, y es de ellos: un rechazo por política
+no es un `error` —el sistema hizo lo correcto— ni un `cancelled`, que sugiere
+que alguien se arrepintió. Sin él, una denegación se contaba como fallo y
+ensuciaba cualquier tasa de error con decisiones correctas.
+
+Lo que se pierde al colapsar es *quién* denegó. Se les pregunta antes de
+inventar el nombre.
+
+### Sus tres fallos silenciosos: dos se arreglan en el arranque
+
+Los tres comparten forma —la aplicación funciona, el exportador reintenta de
+fondo, no llega un span, y no hay ni excepción ni log— que es justo lo que
+nadie mira en los minutos siguientes a montar el trazado.
+
+| lo que reportan | qué se hace |
+|---|---|
+| `localhost` es cierto en el host y falso en un contenedor | aviso al arrancar si el endpoint es local **y** el proceso parece estar en un contenedor |
+| protocolo autodetectado gRPC contra el puerto 4318 | aviso si el puerto es el del *otro* transporte OTLP |
+| el SDK exporta también logs y métricas | documentado; el 404 en bucle es del exportador de OTel y no lo controlamos |
+
+El aviso del puerto **solo** salta si el puerto es 4317 o 4318. La primera
+versión avisaba con cualquier puerto distinto del esperado, y una prueba con
+`:8080` lo cazó: un 8080 es un proxy o un sidecar, una elección deliberada. Un
+aviso que salta cuando no debe se aprende a ignorar, y entonces no protege del
+caso en que sí debe.
+
+### Su pregunta 1, que es la que más trabajo trae: el modelo se publica
+
+Cuatro de sus seis servicios son Go y hoy copian nuestros nombres a mano. Piden
+*«un artefacto legible por máquina que podamos ejecutar contra nuestra
+implementación»*.
+
+`modelo.json` se genera desde el mismo YAML y **viaja dentro de la rueda de
+`argus-obs-semconv`**, accesible con `argus_semconv.modelo()`. En JSON y no en
+YAML porque la biblioteca estándar de Go trae uno y no el otro.
+
+Dentro del paquete y no solo en el repositorio, que es la parte que importa:
+**un fichero en la rama principal describe lo que habrá, no lo que corre.**
+
+Publicado en `1.0.0a10`.
+
+### Lo que esto dice de nosotros
+
+Tres defectos, los tres de la misma familia, y ninguno lo habría encontrado yo
+leyendo mi propio código —llevo días leyéndolo—. Los encontró un equipo que se
+integró de verdad y preguntó por escrito qué significaba cada campo.
+
+Es la tercera vez esta semana que el hallazgo llega de fuera: Prosodia encontró
+el nivel de log y el muestreo asíncrono, Prometheus encontró que llevábamos
+cinco días sin ver dos de sus servicios, y ahora esto.
+
+**La documentación no se valida leyéndola.** Se valida cuando alguien la usa
+para construir algo y vuelve a contarte en qué se equivocó.
