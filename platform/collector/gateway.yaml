@@ -411,11 +411,30 @@ processors:
         type: ottl_condition
         ottl_condition:
           error_mode: ignore
+          #
+          # Los desenlaces de GOBIERNO van en los dos ambitos. Son registros
+          # igual que una accion administrativa: `denied` dice que el sistema
+          # se nego y `suspended` que un run espera a una persona. Los dos son
+          # raros por construccion y los dos hay que poder reconstruirlos.
+          #
+          # Se anadieron tras medir que el consejo que le dimos a Aeon era
+          # contraproducente: les recomendamos emitir `argus.outcome=denied`
+          # SIN `argus.guardrail` —para no paginar en cada denegacion de
+          # politica— y medir la tasa una semana. Con solo eso no aplicaba
+          # ninguna politica: 0 de 8 denegaciones sobrevivieron al baseline en
+          # la prueba (D-099).
+          #
+          # Cambiaba una notificacion de mas por un registro incompleto al
+          # 90%, que es peor: el ruido se nota y un registro con huecos no.
           spanevent:
             - 'name == "audit.admin_action"'
             - 'attributes["argus.target.type"] != nil'
+            - 'attributes["argus.outcome"] == "denied"'
+            - 'attributes["argus.outcome"] == "suspended"'
           span:
             - 'attributes["argus.target.type"] != nil'
+            - 'attributes["argus.outcome"] == "denied"'
+            - 'attributes["argus.outcome"] == "suspended"'
 
       - name: baseline
         type: probabilistic
