@@ -4574,3 +4574,107 @@ sobre un fichero que tenía trabajo sin confirmar. Perdí los tres cambios y los
 rehice. No hay daño más allá del tiempo, pero queda escrito: **un `checkout`
 de limpieza sobre un fichero con cambios sin confirmar es un `rm` con otro
 nombre.**
+
+---
+
+## D-104 · El criterio 6 no esperaba una segunda máquina: esperaba poder distinguirla
+
+**Contexto**: el criterio 6 del piloto —*«un segundo host manda telemetría»*—
+llevaba semanas en «?» con la nota «un solo agente desplegado». Suena a que
+falta hardware.
+
+Al ir a medirlo apareció otra cosa:
+
+```
+host.name       nivel   servicios   spans
+2a3bc2822dfb    agent          16   22377
+eb3f7dd3361d    agent           1       1
+```
+
+**Todo el almacén llevaba un id de contenedor como `host.name`.** Dieciséis
+servicios distintos bajo un identificador que cambia en cada recreación.
+
+Así que el criterio no estaba bloqueado por la máquina que falta: aunque
+hubiera existido, **no habría forma de distinguir su telemetría de la de esta**.
+
+### La causa
+
+`resourcedetection` con `hostname_sources: [os]` devuelve, dentro de un
+contenedor, el nombre del sistema — que es el id del contenedor. El agente
+corre en uno, así que sellaba el suyo sobre todo lo que pasaba.
+
+Y `override: false` no salvaba nada: una aplicación en un contenedor tampoco
+conoce su máquina, cree ser su propio contenedor. Fue lo que le encontramos a
+Prosodia hace dos días sin ver que era nuestro, no suyo.
+
+### El arreglo, y por qué es obligatorio y no un defecto
+
+El agente **sí** sabe en qué máquina está, porque hay uno por host y alguien
+tuvo que desplegarlo ahí. Ahora sella `host.name` con `ARGUS_HOST`, en
+`upsert`: pisa lo que traiga la aplicación, precisamente porque la aplicación
+no lo sabe.
+
+`ARGUS_HOST` **no tiene valor por defecto** en `compose.agent.yaml`. Adivinarlo
+es lo que trajo todo esto: un defecto «razonable» habría seguido sellando algo
+inútil sin que nadie lo notara. Nombrar la máquina es parte de desplegar un
+agente.
+
+El `make agent` local sí lo resuelve con `hostname -s`, y la diferencia
+importa: **preguntar al sistema estando en la máquina no es adivinar**;
+adivinar era dejar que contestara el contenedor.
+
+### Lo que sí se pudo verificar sin segunda máquina
+
+Se desplegó un agente que se comporta como remoto: **sin la red compartida**,
+alcanzando al gateway por el puerto publicado del host y con token — el camino
+real de un agente remoto, donde lo único que cambiaría en una máquina de verdad
+es un nombre de Tailscale en vez de `host.docker.internal`.
+
+| | |
+|---|---|
+| autenticación por token sobre el puerto publicado | ✅ |
+| identidad propia, distinguible del host local | ✅ `imac-simulado` junto a `MacBook-Pro-…` |
+| cola persistente con el plano central caído | ✅ **0/5 con el gateway parado, 5/5 al volver** |
+
+Queda exactamente una cosa: una máquina de verdad y un nombre estable de red
+privada. Todo lo demás del camino está ejercitado.
+
+### Y el agente simulado se retiró, a propósito
+
+Dejarlo corriendo habría dejado el criterio 6 en verde sobre una premisa falsa
+—las dos «máquinas» eran la misma— y eso es fabricar deliberadamente el
+artefacto que miente que llevo toda la semana arreglando. El criterio dice
+ahora `NO · un solo host identificado`, que es la verdad.
+
+### Al retirarlo apareció el hallazgo de verdad
+
+Con el contenedor borrado, sus métricas **seguían llegando con marca de tiempo
+actual**. No era retraso: `spanmetrics` mantiene y reemite cada serie que ha
+visto, para siempre.
+
+Lo que eso rompe no es un panel. Es **cualquier cosa que cuente «qué está
+vivo»** a partir de métricas derivadas de spans: una aplicación retirada, un
+host que ya no existe o un endpoint que se dejó de servir parecen activos
+indefinidamente. Y *parecer vivo* es justo lo que esta plataforma existe para
+no creerse.
+
+Dos cambios, y hacen falta los dos:
+
+- `metrics_expiration: 15m` en el conector, para que una serie sin spans deje
+  de emitirse.
+- El criterio 6 cuenta **métricas internas del Collector** (`otelcol_*`), no
+  derivadas de spans. Las de un agente paran cuando el agente para, sin
+  depender de la configuración de ningún conector.
+
+### Y una medición que era mala de otra forma
+
+La primera versión contaba hosts en **trazas y 24 h**. Una sola petición de
+prueba desde un host cumplía el criterio y lo dejaba verde un día entero,
+aunque ese host ya no existiera.
+
+*«Manda telemetría» es presente.* Una prueba puntual no es un host.
+
+### Lo que queda escrito a mano
+
+Ninguno: los criterios 1–7 se recalculan en cada ejecución. El 8 es un contador
+sobre este mismo fichero.
