@@ -117,3 +117,42 @@ def test_un_guardarrail_marca_el_camino_caliente() -> None:
     attrs = corredor.attributes()
     assert A.ARGUS_GUARDRAIL in attrs
     assert attrs[A.ARGUS_HOT] is True
+
+
+# --- Un paso que no acaba ---------------------------------------------------
+
+
+def test_no_poner_desenlace_lo_pone_en_ok() -> None:
+    """La trampa que hay que dejar fijada, no solo documentada.
+
+    Aeon planteo dejar `argus.outcome` sin poner mientras un paso espera a una
+    persona, razonando que la ausencia se leeria como "todavia no". No hay
+    ausencia: `_finalize` hace `setdefault("ok")` y cada espera se habria
+    registrado como un exito (D-097).
+    """
+    with step("x") as s:
+        pass
+    assert s.fields[A.ARGUS_OUTCOME] == "ok"
+
+
+def test_suspended_existe_para_un_paso_que_espera() -> None:
+    """Es el argumento de Prometheus sobre `unknown` en P-31, aqui: "todavia no
+    ha acabado" es un hecho, y tiene que distinguirse de "acabo bien"."""
+    assert "suspended" in A.ARGUS_OUTCOME_VALUES
+    with warnings.catch_warnings(record=True) as avisos:
+        warnings.simplefilter("always")
+        with step("espera") as s:
+            s.outcome("suspended")
+    assert not [a for a in avisos if "argus.outcome" in str(a.message)]
+    assert s.fields[A.ARGUS_OUTCOME] == "suspended"
+
+
+def test_un_paso_suspendido_no_es_un_guardarrail() -> None:
+    """Esperar a una persona es operacion normal de L5. `argus.guardrail`
+    enciende el camino caliente, asi que marcarlo asi paginaria en cada
+    aprobacion — la fatiga de alertas construida desde dentro."""
+    assert "approval-required" not in A.ARGUS_GUARDRAIL_VALUES
+    with step("espera") as s:
+        s.outcome("suspended")
+    assert A.ARGUS_GUARDRAIL not in s.fields
+    assert A.ARGUS_HOT not in s.fields

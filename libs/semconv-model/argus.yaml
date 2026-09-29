@@ -176,7 +176,16 @@ groups:
         #
         # Una aprobacion que caduca SI es `timeout`, y una concedida es `ok`:
         # no hacen falta valores propios para el ciclo de aprobacion.
-        members: [ok, error, timeout, cancelled, degraded, denied]
+        #
+        # `suspended` lo trajo tambien Aeon, preguntando como reportar un paso
+        # que espera a una persona. Su propuesta era no poner nada, y no poner
+        # nada NO da ausencia: `_finalize` hace `setdefault("ok")`, asi que un
+        # paso suspendido se registraria como completado con exito.
+        #
+        # Es el argumento de Prometheus en P-31 sobre `unknown`, aplicado aqui:
+        # "todavia no ha acabado" es un HECHO y tiene que poder distinguirse de
+        # "nadie lo puso" — y sobre todo de "acabo bien".
+        members: [ok, error, timeout, cancelled, degraded, denied, suspended]
       - id: argus.duration_ms
         type: int
       - id: argus.step.depth
