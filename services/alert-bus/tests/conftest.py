@@ -77,3 +77,20 @@ def sink() -> MemorySink:
 @pytest.fixture
 def engine(registry: Registry, sink: MemorySink) -> Engine:
     return Engine(registry, [sink], group_window_s=60, resolve_after_s=900)
+
+
+@pytest.fixture
+def sink_nuevo() -> MemorySink:
+    """Un segundo sink, para el motor que simula un receptor recien arrancado."""
+    return MemorySink()
+
+
+@pytest.fixture
+def engine_nuevo(registry: Registry, sink_nuevo: MemorySink) -> Engine:
+    """Un `Engine` con la memoria vacia: es lo que hay tras un reinicio.
+
+    Se construye aparte y no se reutiliza `engine` porque lo que se comprueba
+    es justamente que el receptor NO recuerda nada, y compartir instancia haria
+    que la prueba pasara por el motivo equivocado.
+    """
+    return Engine(registry, [sink_nuevo], group_window_s=60, resolve_after_s=900)

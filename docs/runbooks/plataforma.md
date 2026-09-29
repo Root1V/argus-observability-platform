@@ -229,45 +229,43 @@ que la causa sea otra.
 
 ---
 
-## Tras reiniciar el alert-bus, el tablero de incidentes miente {#tablero-vacio}
+## Tras reiniciar el alert-bus, el tablero se repuebla solo {#tablero-vacio}
 
-**Si acabas de reiniciar `alert-bus`, `/incidents` está vacío y eso NO significa
-que no haya problemas.**
+**Ya no hay nada que hacer. Esta sección se conserva porque el runbook decía lo
+contrario hasta el 29/09 y alguien puede recordar la instrucción vieja.**
 
-Los incidentes viven en memoria (`self._incidents`, un `dict`). Al reiniciar se
-pierden. Y el canario **no los vuelve a mandar**, porque recuerda en su propio
-`_alertados` lo que ya reportó:
+Los incidentes siguen viviendo en memoria, así que al reiniciar el alert-bus
+`/incidents` **queda vacío durante un momento**. La diferencia es que ahora el
+canario **reconcilia**: manda su estado completo en cada ciclo en vez de
+recordar lo que ya reportó, así que el siguiente ciclo repuebla el tablero
+(`D-100`).
 
-```python
-if objetivo in self._alertados:
-    continue        # ya alertado; no se reenvia
+```
+antes del reinicio          1 incidente
+justo tras el reinicio      0 — vacío
+tras un ciclo (≤5 min)      1 — repoblado solo
 ```
 
-Así que el problema sigue ahí, el tablero está vacío, y las dos mitades creen
-estar en lo correcto (`D-090`).
+vmalert hace lo mismo con sus alertas, que se reenvían en cada evaluación.
 
-### Para repoblarlo
+### Lo que hay que saber igualmente
 
-Reinicia **también** el canario, que es lo que limpia su memoria de alertados:
+**Durante la ventana entre el reinicio y el siguiente ciclo el tablero está
+incompleto.** Si necesitas saber si es de fiar, mira cuánto lleva arrancado:
 
 ```bash
-docker compose -f platform/compose.yaml --env-file platform/.env --profile lean restart canary
+docker inspect argus-alert-bus-1 --format '{{.State.StartedAt}}'
 ```
 
-En el siguiente ciclo (5 min por defecto) vuelve a reportar lo que siga mal.
+Si han pasado menos de 5 minutos, espera.
 
-### Cómo saber si el tablero es de fiar
+**Y el repoblado vuelve a notificar.** Para el alert-bus recién arrancado el
+incidente es nuevo, así que lo avisa otra vez. Es ruido conocido y preferible al
+silencio; quitarlo necesita persistir los incidentes (`F2-15`), que sigue
+pendiente.
 
-Compara la hora de arranque de los dos. Si el alert-bus arrancó **después** del
-canario, el tablero está incompleto:
+### Lo que ya NO hay que hacer
 
-```bash
-docker inspect argus-alert-bus-1 argus-canary-1 --format '{{.Name}} {{.State.StartedAt}}'
-```
+Reiniciar también el canario. Era la mitigación mientras `_alertados` suprimía
+el reenvío, y ya no suprime nada.
 
-### Por qué no está arreglado todavía
-
-Porque el arreglo bueno no es quitar el dedup —sin él, un servicio caído avisa
-cada cinco minutos para siempre— sino que el canario **reconcilie**: que mande su
-estado completo cada ciclo y el alert-bus decida qué es nuevo. Eso hace irrelevante
-quién se reinicie, y va junto con persistir los incidentes (`B-20` y `F2-15`).

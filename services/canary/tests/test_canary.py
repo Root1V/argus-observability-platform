@@ -220,13 +220,72 @@ async def test_un_fallo_intermitente_reinicia_la_cuenta(servidor) -> None:
     assert srv.recibidas == []
 
 
-async def test_no_repite_la_alerta_mientras_siga_caido(servidor) -> None:
-    """El alert-bus deduplica igual, pero no tiene sentido mandarle la misma
-    señal cada cinco minutos para siempre."""
+async def test_reconcilia_el_estado_completo_en_cada_ciclo(servidor) -> None:
+    """Se manda lo que se observa AHORA, no solo lo que acaba de cambiar.
+
+    Esta prueba decía lo contrario hasta D-100: afirmaba que un objetivo caído
+    se reporta **una sola vez**, con el argumento de que no tiene sentido
+    molestar cada cinco minutos para siempre. El argumento es correcto y la
+    conclusión no, porque **quien decide si molesta es el alert-bus**, no
+    nosotros: absorbe la señal en el incidente que ya existe y no vuelve a
+    notificar.
+
+    Lo que rompía era la junta. El dedup del emisor asumía que el receptor no
+    olvida, y el receptor guarda los incidentes en memoria: al reiniciarlo su
+    tablero se vaciaba, el canario seguía viendo el problema, y no reenviaba
+    nada. El problema abierto desaparecía sin haberse resuelto.
+
+    Una prueba puede estar verde y fijar el fallo. Ésta lo estuvo.
+    """
     url, srv = servidor
     runner = Runner([SondaFija(Resultado.CAIDO)], alertbus_url=url, fallos_para_alertar=1)
 
     for _ in range(5):
+        await runner.ronda()
+
+    assert len(srv.recibidas) == 5, "el estado tiene que reenviarse cada ciclo"
+
+
+async def test_el_reenvio_no_cuenta_como_alerta_nueva(servidor) -> None:
+    """Si se sumaran, el contador crecería cada ciclo sin que nada cambie y
+    dejaría de poder leerse como «cuántas veces ha fallado algo»."""
+    url, _ = servidor
+    runner = Runner([SondaFija(Resultado.CAIDO)], alertbus_url=url, fallos_para_alertar=1)
+
+    for _ in range(5):
+        await runner.ronda()
+
+    assert runner.stats["alertas"] == 1
+    assert runner.stats["reenvios"] == 4
+
+
+async def test_tras_recuperarse_y_volver_a_caer_vuelve_a_contar_alerta(servidor) -> None:
+    """La transición es lo que se cuenta, y tiene que poder repetirse."""
+    url, _ = servidor
+    sonda = SondaFija(Resultado.CAIDO)
+    runner = Runner([sonda], alertbus_url=url, fallos_para_alertar=1)
+
+    await runner.ronda()
+    sonda.resultado = Resultado.OK
+    await runner.ronda()
+    sonda.resultado = Resultado.CAIDO
+    await runner.ronda()
+
+    assert runner.stats["alertas"] == 2
+    assert runner.stats["recuperaciones"] == 1
+
+
+async def test_lo_recuperado_deja_de_reenviarse(servidor) -> None:
+    """La reconciliación es del estado ACTUAL. Seguir mandando algo que ya
+    funciona impediría al alert-bus cerrarlo nunca, porque su `sweep()` decide
+    por `last_seen_at`."""
+    url, srv = servidor
+    sonda = SondaFija(Resultado.CAIDO)
+    runner = Runner([sonda], alertbus_url=url, fallos_para_alertar=1)
+
+    await runner.ronda()
+    sonda.resultado = Resultado.OK
+    for _ in range(3):
         await runner.ronda()
 
     assert len(srv.recibidas) == 1
