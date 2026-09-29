@@ -76,6 +76,13 @@ def render_python(model: dict) -> str:
                 members = attr.get("members", [])
                 literal = ", ".join(f'"{m}"' for m in members)
                 lines.append(f"{name}_VALUES: Final[tuple[str, ...]] = ({literal},)")
+            # Subconjunto de valores cuyo identificador puede designar a una
+            # persona. Lo consume la regla de seudonimizacion del gateway, y
+            # una prueba comprueba que la enumeracion de aquel coincide con
+            # esta (D-098).
+            if attr.get("principals"):
+                literal = ", ".join(f'"{m}"' for m in attr["principals"])
+                lines.append(f"{name}_PRINCIPALS: Final[tuple[str, ...]] = ({literal},)")
 
     lines.append("")
     lines.append("")
@@ -146,6 +153,8 @@ def render_json(model: dict) -> str:
             }
             if attr.get("members"):
                 entrada["members"] = list(attr["members"])
+            if attr.get("principals"):
+                entrada["principals"] = list(attr["principals"])
             if attr.get("examples"):
                 entrada["examples"] = list(attr["examples"])
             atributos.append(entrada)

@@ -4029,3 +4029,121 @@ respuestas a preguntas retiradas.
 **Releer el canal antes de empezar, no antes de contestar.** Un hilo compartido
 con dos escritores cambia mientras trabajas, que es justamente para lo que
 sirve.
+
+---
+
+## D-098 · El registro de auditoría se estaba muestreando al 10%, y el seudónimo tenía un punto ciego
+
+> **Fallo de plataforma** · descubierto 2026-09-29 · ninguna política de tail sampling cubría las acciones administrativas, así que caían al `baseline` probabilístico; y la regla de seudonimización cubría `user` y no `client`, con lo que el mismo sujeto quedaba hasheado en una fila y en claro en otra
+
+**Contexto**: Prometheus adopta `argus.target.*` (`P-33`), ejecuta **dos
+acciones admin reales** y nos pide que confirmemos contra el almacén que el
+seudónimo funciona sobre tráfico suyo.
+
+Ninguna de las dos llegó.
+
+```
+c1fe6008a2cabe9d70a88d5c10dfc22f   0 spans
+744c92ad7994e25e297206be944db1eb   0 spans
+```
+
+### Un registro de auditoría al 10% no es un registro de auditoría
+
+Repasando las políticas contra lo que es un `PATCH` administrativo:
+
+| política | ¿aplica? |
+|---|---|
+| `errors` | no — no falla |
+| `slow` | no — milisegundos |
+| `genai`, `agent-runs` | no |
+| `async-handoff` | no — no toca cola |
+| `marked-hot` | no |
+| **`baseline`** | **sí — 10%** |
+
+Dos acciones al 10% cada una: 81% de probabilidad de perder las dos. Lo que
+observamos.
+
+**El coste de equivocarse no es simétrico**, y ahí está el error de diseño. Una
+traza normal perdida es una muestra menos de una distribución. Una acción
+administrativa perdida es un hueco en el registro de quién hizo qué — y el
+Anexo III del AI Act obliga a conservarlo seis meses.
+
+Política `auditoria`, y de tipo `ottl_condition` porque el evento vive en el
+ámbito `spanevent` y las políticas de atributo solo miran el span. **Es el
+mismo ámbito que se escapó en D-092**, en otro procesador: la primera vez en la
+privacidad, ésta en el muestreo.
+
+Verificado con seis acciones rápidas y sin error, que antes habrían sobrevivido
+~0,6 de media:
+
+```
+politica auditoria   sampled=true   6
+trazas en el almacen                6/6
+```
+
+### El punto ciego de `client`, que es de ellos el hallazgo
+
+En sus rutas el **mismo** `client_id` sale con dos tipos según el recurso:
+
+```
+/admin/api/users/{client_id}                      -> user     hasheado
+/admin/api/billing/clients/{client_id}/settings   -> client   EN CLARO
+```
+
+Nuestra regla miraba solo `user`. El almacén acababa con **el hash de un sujeto
+en una fila y su identificador en claro en otra**.
+
+Y eso no es medio problema, es el problema entero: **un seudónimo vale lo que
+vale el sitio menos protegido donde aparece ese sujeto.** La fila en claro deja
+sin sentido a la hasheada sin necesidad de cruzar nada.
+
+Lo peor es que `client` estaba **en nuestra propia lista de ejemplo** del
+modelo (`node`, `client`, `api_key`, `user`). Escribimos el tipo y no lo
+clasificamos.
+
+### La clasificación es de la plataforma, no del emisor
+
+Esta es la regla que faltaba, y generaliza:
+
+**Basta con que un tipo pueda designar a una persona en UNA aplicación para que
+haya que hashearlo en TODAS**, porque el almacén es compartido. Que en otra
+plataforma `client` sea siempre una credencial de máquina no cambia nada: si en
+la de Prometheus puede ser una persona, en nuestro almacén es dato personal.
+
+Vive en el modelo como `ARGUS_TARGET_TYPE_PRINCIPALS = ("user", "client")`. El
+OTTL del gateway no puede recorrer una lista, así que la enumera — y una prueba
+comprueba que la enumeración **coincide exactamente** con el modelo. Añadir un
+tipo principal sin tocar el gateway rompe el build.
+
+Comprobado con el mismo sujeto bajo los tres tipos:
+
+| tipo | en el almacén |
+|---|---|
+| `client` | `11bbe290…` |
+| `user` | `11bbe290…` **el mismo hash** |
+| `node` | `nodo-7`, en claro |
+
+El mismo hash es la parte buena: agrupa como un solo sujeto sin que el almacén
+sepa quién es, que era el objetivo original de la seudonimización.
+
+### Y una cosa que les decimos y no es nuestra
+
+Su `P-33 §5` arregla el `trace_id: "none"` de la línea de log de auditoría.
+El arreglo es correcto y **hoy no tiene efecto observable**: no llega una sola
+línea de log suya a nuestro almacén, en catorce días, bajo ningún nombre de
+servicio.
+
+Hipótesis, y es mitad nuestra: usan un `configure_logging` propio que
+probablemente no instala el puente OTLP, y **nuestro Collector agente no tiene
+receptor `filelog`**, así que de stdout no lo recoge nadie. Su registro de
+auditoría existe, es correcto, y vive en el terminal de quien arrancó el
+proceso.
+
+### Y el proceso, otra vez
+
+Escribí `A-35` sin haber leído `P-33`, que llevaba un día en el canal. Es
+literalmente lo que documenté en D-097 hace una hora, en el otro canal.
+
+La regla no basta con escribirla. Lo que la hace cumplirse es mirar el índice
+del canal antes de empezar, no el final del fichero — `P-33` estaba en la tabla
+y yo fui directo a la cola.

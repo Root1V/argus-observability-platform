@@ -198,9 +198,10 @@ processors:
           # seudonimo no de ya, y es dato personal directo.
           - delete_key(span.attributes, "user.email")
           - delete_key(span.attributes, "user_email")
-          # Misma regla del objeto-persona que abajo, por si el emisor pone el
-          # target en el span en vez de en el evento.
+          # Misma regla del objeto-principal que abajo, por si el emisor pone
+          # el target en el span en vez de en el evento.
           - set(span.attributes["argus.target.id"], SHA256(Concat([span.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.target.type"] == "user"
+          - set(span.attributes["argus.target.id"], SHA256(Concat([span.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.target.type"] == "client"
       # --- Los MISMOS atributos, pero en un EVENTO de span -----------------
       #
       # `context: span` NO alcanza los atributos de los eventos. Son un ambito
@@ -237,17 +238,30 @@ processors:
           - delete_key(spanevent.attributes, "jwt.subject")
           - delete_key(spanevent.attributes, "user.email")
           - delete_key(spanevent.attributes, "user_email")
-          # El OBJETO de la accion, cuando el objeto es una persona.
+          # El OBJETO de la accion, cuando el objeto puede ser una persona.
           #
-          # `argus.target.id` es opaco por definicion —un id de nodo, de clave,
-          # de cliente— salvo en un caso: cuando lo que se administra es un
-          # usuario. `/admin/users/{user_id}/disable` mete un identificador de
-          # persona en un atributo que ninguna regla de arriba mira, y seria el
-          # mismo agujero otra vez un nivel mas abajo.
+          # `argus.target.id` es opaco por definicion —un id de nodo, de
+          # modelo, de descarga— salvo cuando lo que se administra es un
+          # principal. Ahi mete un identificador de persona en un atributo que
+          # ninguna regla de arriba mira.
           #
-          # Por eso `argus.target.type` es el que decide: es el unico campo que
-          # sabe si el id de al lado es una cosa o alguien.
+          # SON DOS TIPOS, NO UNO, y el segundo lo trajo Prometheus (P-33): el
+          # mismo `client_id` aparece bajo `/users/{client_id}` —tipo `user`— y
+          # bajo `/billing/clients/{client_id}/settings` —tipo `client`—. Con
+          # solo `user` en la regla, el almacen acababa con el HASH de un
+          # sujeto en una fila y su identificador EN CLARO en otra.
+          #
+          # Y eso no es medio problema: un seudonimo vale lo que vale el sitio
+          # menos protegido donde aparece ese sujeto. La fila en claro deja sin
+          # sentido a la hasheada sin necesidad de cruzar nada (D-098).
+          #
+          # La clasificacion es de la PLATAFORMA, no del emisor: basta con que
+          # `client` pueda designar a una persona en UNA aplicacion para que
+          # haya que hashearlo en todas, porque el almacen es compartido. La
+          # lista vive en el modelo como `ARGUS_TARGET_TYPE_PRINCIPALS` y una
+          # prueba comprueba que esta enumeracion coincide con ella.
           - set(spanevent.attributes["argus.target.id"], SHA256(Concat([spanevent.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.target.type"] == "user"
+          - set(spanevent.attributes["argus.target.id"], SHA256(Concat([spanevent.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.target.type"] == "client"
 
     log_statements:
       - context: log
@@ -374,6 +388,34 @@ processors:
           key: messaging.destination.name
           values: [".*"]
           enabled_regex_matching: true
+
+      # --- La auditoria NO se muestrea -----------------------------------
+      #
+      # Un registro de auditoria al 10% no es un registro de auditoria.
+      #
+      # Se descubrio midiendo: Prometheus adopto `argus.target.*` y ejecuto dos
+      # acciones admin reales para que las verificaramos. Ninguna de las dos
+      # llego al almacen. Ninguna politica de arriba aplica a un PATCH admin
+      # —no falla, dura milisegundos, no toca cola, no es GenAI— asi que caian
+      # al `baseline` del 10%, con un 81% de probabilidad de perderse las dos.
+      #
+      # El coste de equivocarse no es simetrico. Una traza normal perdida es
+      # una muestra menos; una accion administrativa perdida es un hueco en el
+      # registro de quien hizo que, que ademas el Anexo III del AI Act obliga a
+      # conservar seis meses (D-098).
+      #
+      # `ottl_condition` y no `string_attribute` porque el evento de auditoria
+      # vive en el AMBITO spanevent, y las politicas de atributo solo miran el
+      # span. Es el mismo ambito que se nos escapo en la seudonimizacion.
+      - name: auditoria
+        type: ottl_condition
+        ottl_condition:
+          error_mode: ignore
+          spanevent:
+            - 'name == "audit.admin_action"'
+            - 'attributes["argus.target.type"] != nil'
+          span:
+            - 'attributes["argus.target.type"] != nil'
 
       - name: baseline
         type: probabilistic
