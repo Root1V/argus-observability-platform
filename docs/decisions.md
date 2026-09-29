@@ -4147,3 +4147,73 @@ literalmente lo que documenté en D-097 hace una hora, en el otro canal.
 La regla no basta con escribirla. Lo que la hace cumplirse es mirar el índice
 del canal antes de empezar, no el final del fichero — `P-33` estaba en la tabla
 y yo fui directo a la cola.
+
+---
+
+## D-099 · El consejo que le dimos a Aeon cambiaba una notificación de más por un registro incompleto al 90%
+
+> **Fallo de plataforma** · descubierto 2026-09-29 · la política `auditoria` de D-098 cubría acciones administrativas y no los desenlaces de gobierno, así que una denegación emitida como `argus.outcome=denied` sin `argus.guardrail` —que es exactamente lo que les recomendamos— caía al `baseline` del 10%
+
+**Contexto**: en la respuesta a Aeon razonamos que `argus.guardrail` enciende el
+camino caliente, y que marcar así una denegación de política Cedar pagaría en
+cada una. La recomendación fue:
+
+> *«Empezad sin el atributo —solo `argus.outcome=denied`—, medimos la tasa una
+> semana, y lo promovemos a guardrail si resulta raro e interesante.»*
+
+El razonamiento sobre el ruido es correcto. La recomendación, medida, no:
+
+```
+8 denegaciones con solo `argus.outcome=denied`
+conservadas por el muestreo:  0 / 8
+```
+
+Ninguna política aplicaba. Les habríamos pedido que **midieran una tasa sobre
+un registro del que falta el 90%** — y peor: durante esa semana su registro de
+denegaciones de política habría tenido huecos, sin que nadie lo notara.
+
+### La asimetría que no vi al aconsejar
+
+Es la misma de D-098 y no la apliqué al caso siguiente, una hora después.
+
+**El ruido se nota y un registro con huecos no.** Una notificación de más la ve
+una persona y se queja; un registro incompleto se descubre el día que hace
+falta reconstruir qué pasó, que es justamente el día en que ya no se puede.
+
+Así que la elección que le planteé a Aeon era falsa. No era «paginar o
+esperar»: era «paginar, o perder el 90% del registro». La opción buena —
+registro completo **sin** notificación — no existía y había que construirla.
+
+### Qué se añade
+
+`denied` y `suspended` a la política `auditoria`, en los dos ámbitos. Los dos
+son desenlaces de **gobierno**: uno dice que el sistema se negó, el otro que un
+run espera a una persona. Los dos son raros por construcción y los dos hay que
+poder reconstruirlos enteros.
+
+```
+antes:   0 / 8 denegaciones conservadas
+después: 8 / 8
+```
+
+Ahora la recomendación se sostiene: `argus.outcome=denied` sin
+`argus.guardrail` da **registro completo y cero notificaciones**, que es lo que
+queríamos ofrecer desde el principio.
+
+### Y un fallo que me hice a mí mismo escribiéndolo
+
+Al añadir las condiciones escribí un **segundo bloque `spanevent:`** en vez de
+ampliar el que ya existía. YAML acepta claves duplicadas y se queda con la
+última: el fichero seguía siendo válido, el Collector lo habría arrancado sin
+una queja, y la condición del evento de auditoría —lo que D-098 arregló ayer—
+habría desaparecido.
+
+Se vio **imprimiendo el YAML parseado y no el texto**, que es la única forma de
+ver una clave que ya no está.
+
+`test_el_fichero_no_tiene_claves_duplicadas` carga el gateway entero con un
+loader que rechaza duplicados, así que esto vale para cualquier bloque del
+fichero y no solo para esta política.
+
+**Editar configuración es programar sin compilador.** La única verificación
+disponible es leer el resultado parseado, y hay que hacerla siempre.
