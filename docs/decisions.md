@@ -4410,3 +4410,55 @@ Hoy tiene un argumento más a favor de automatizarlo: **la detección funciona y
 la reparación es un reinicio de un contenedor**, que es reversible y acotado.
 Pero un vigilante que actúa deja de ser solo un observador, y eso merece
 decidirse aparte y no de pasada.
+
+---
+
+## D-102 · El criterio 5 llevaba cumplido desde el 28 y el tablero decía que no
+
+> **Fallo de plataforma** · descubierto 2026-09-29 · el criterio 5 del piloto era una frase escrita a mano —«los 3 servicios del piloto son APIs HTTP»— que dejó de ser cierta cuando Prosodia cerró `S-06`, y nadie la volvió a mirar
+
+**Contexto**: revisando el estado del piloto, el criterio 5 —*«una traza cruza
+una frontera que NO es HTTP»*— seguía en «?» con ese texto.
+
+Es falso desde el 28 de septiembre. El doblaje real de Prosodia produce
+exactamente eso: una traza, dos servicios, la frontera cruzada por Celery. Lo
+verificamos nosotros mismos al revisar su `S-06`, y no actualizamos el tablero.
+
+```
+prosodia-api -> prosodia-worker por `celery` en una sola traza (5371c056ae37…)
+```
+
+### El patrón, que es el de toda la semana visto desde dentro
+
+Aeon lo describió así: *«un artefacto que afirma algo que el código no hace»*.
+Éste es la variante temporal: un artefacto que **era** cierto y dejó de serlo,
+y que nadie revisa porque no falla nada cuando miente.
+
+Tres criterios del piloto eran texto fijo con una nota y un código de tarea.
+Uno de ellos llevaba un día mintiendo en la dirección **pesimista**, que es la
+menos visible: un tablero que dice que algo no está hecho no molesta a nadie.
+
+### Qué se hace
+
+El criterio 5 pasa de frase a **consulta**. Pide lo que el criterio pide de
+verdad: una traza, dos servicios, y al menos un span con
+`messaging.destination` — o sea una frontera que no es HTTP **y** que no
+partió la traza.
+
+Devuelve `None` y no `False` cuando no puede consultar el almacén: sin datos no
+se puede afirmar que no exista, y confundir «no lo sé» con «no» es el error de
+fondo de toda esta entrada.
+
+### Lo que queda escrito a mano, y por qué
+
+Los criterios 4 y 6 siguen siendo texto:
+
+- **6 · un segundo host** no se puede medir desde aquí porque no hay segundo
+  host: la consulta daría siempre «no» y no aportaría nada sobre si el trabajo
+  está hecho.
+- **4 · el silencio abre incidente** ahora sí se podría medir, y es lo
+  siguiente: con la reconciliación de `D-100` el incidente sobrevive a un
+  reinicio, así que hay algo estable que consultar.
+
+**Un criterio que se comprueba a mano se comprueba una vez.** Los tres que
+están en verde se recalculan en cada ejecución; los que llevan nota no.

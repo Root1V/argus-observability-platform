@@ -48,6 +48,49 @@ def _get(url: str, timeout: float = 4.0):
         return None
 
 
+
+def _traza_que_cruza_una_cola() -> tuple[bool | None, str]:
+    """Criterio 5, medido en el almacen en vez de anotado a mano.
+
+    Estuvo en «?» con el texto «los 3 servicios del piloto son APIs HTTP»
+    mucho despues de dejar de ser cierto: Prosodia cerro `S-06` con un doblaje
+    real cuya traza cruza Celery de la API al worker. El criterio estaba
+    cumplido y el tablero seguia diciendo que no, porque era una frase escrita
+    una vez y nadie la volvio a mirar (D-102).
+
+    La consulta pide lo que el criterio pide de verdad: UNA traza, DOS
+    servicios, y al menos un span con `messaging.destination` — o sea una
+    frontera que no es HTTP y que ademas no se partio.
+    """
+    sql = (
+        "SELECT TraceId, uniqExact(ServiceName) AS s, "
+        "  arrayStringConcat(groupUniqArray(ServiceName), ' -> ') AS quienes, "
+        "  anyIf(SpanAttributes['messaging.destination'], "
+        "        SpanAttributes['messaging.destination'] != '') AS cola "
+        "FROM otel.otel_traces WHERE Timestamp > now() - INTERVAL 30 DAY "
+        "GROUP BY TraceId "
+        "HAVING s >= 2 AND countIf(SpanAttributes['messaging.destination'] != '') > 0 "
+        "ORDER BY max(Timestamp) DESC LIMIT 1 FORMAT TSV"
+    )
+    try:
+        salida = subprocess.run(
+            ["docker", "exec", "argus-clickhouse-1", "clickhouse-client", "-q", sql],
+            capture_output=True, text=True, timeout=20,
+        )
+    except Exception:  # noqa: BLE001
+        return None, "no se pudo consultar ClickHouse"
+
+    fila = salida.stdout.strip()
+    if salida.returncode != 0 or not fila:
+        # `None` y no `False`: sin almacen no se puede afirmar que NO exista.
+        return (None, "sin trazas que crucen una cola en 30 dias") if salida.returncode == 0 \
+            else (None, "no se pudo consultar ClickHouse")
+
+    partes = fila.split("\t")
+    traza, _, quienes, cola = [*partes, "", "", "", ""][:4]
+    return True, f"{quienes} por `{cola}` en una sola traza ({traza[:12]}…)"
+
+
 def criterios() -> list[tuple[bool | None, str, str]]:
     """(cumplido, titulo, detalle). `None` = no se puede comprobar desde aqui."""
     stats = _get("http://127.0.0.1:8080/stats")
@@ -56,6 +99,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
     activas = [a for a in registro if a.get("estado") == "activo"
                and a["id"] not in ("argus",) and not a["id"].startswith(("postgres", "redis", "minio", "clickhouse", "victoria", "temporal"))]
     canales = [c for c in (stats or {}).get("canales", []) if c not in ("console", "json", "memory")]
+    cruza_cola, detalle_cola = _traza_que_cruza_una_cola()
 
     # 7 · el vigilante corre FUERA de los contenedores
     try:
@@ -123,8 +167,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
          f"{(stats or {}).get('signals_in',0)} señales → {(stats or {}).get('notifications_sent',0)} notificaciones"),
         (None, "4 · El silencio de un servicio real abre incidente",
          "verificado el 13/09 con auth-service; no se re-comprueba solo"),
-        (None, "5 · Una traza cruza una frontera que NO es HTTP",
-         "los 3 servicios del piloto son APIs HTTP — F1-27"),
+        (cruza_cola, "5 · Una traza cruza una frontera que NO es HTTP", detalle_cola),
         (None, "6 · Un segundo host manda telemetría",
          "un solo agente desplegado — F1-10"),
         (vigilante, "7 · Hay red de seguridad externa", f"dead man's switch: {detalle_v}"),
