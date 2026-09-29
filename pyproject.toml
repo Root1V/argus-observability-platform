@@ -54,6 +54,10 @@ testpaths = [
     # la seudonimizacion. Un ambito OTTL sin cubrir dejaba pasar identificadores
     # en crudo y solo se vio mirando ClickHouse a mano (D-092).
     "platform/tests",
+    # `pilot_status` decide si un criterio del piloto esta cumplido. Su logica
+    # no la probaba nada, y un criterio mal medido es peor que uno sin medir
+    # (D-104).
+    "scripts/tests",
 ]
 asyncio_mode = "auto"
 filterwarnings = ["ignore::RuntimeWarning"]

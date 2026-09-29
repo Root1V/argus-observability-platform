@@ -39,6 +39,14 @@ services:
       ARGUS_GATEWAY_ENDPOINT: ${ARGUS_GATEWAY_ENDPOINT:?p.ej. argus.tu-tailnet.ts.net:4317}
       ARGUS_ALERTBUS_ENDPOINT: ${ARGUS_ALERTBUS_ENDPOINT:-${ARGUS_GATEWAY_ENDPOINT}}
       ARGUS_GATEWAY_TOKEN: ${ARGUS_GATEWAY_TOKEN:?el mismo token que el gateway}
+      # El nombre de ESTA maquina. Obligatorio y sin valor por defecto.
+      #
+      # Adivinarlo es lo que nos trajo aqui: dentro de un contenedor el nombre
+      # del sistema es el id del contenedor, asi que un defecto "razonable"
+      # habria seguido sellando un identificador inutil sin que nadie lo
+      # notara. Hay un agente por maquina; nombrarla es parte de desplegarlo
+      # (D-104).
+      ARGUS_HOST: ${ARGUS_HOST:?el nombre de esta maquina, p.ej. macbook-emeric}
       ARGUS_INSECURE: ${ARGUS_INSECURE:-true}
     volumes:
       - ./collector/agent.yaml:/etc/otel/agent.yaml:ro

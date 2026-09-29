@@ -105,6 +105,26 @@ processors:
         value: agent
         action: upsert
 
+      # QUE MAQUINA es esta. `upsert` a proposito: el agente es lo unico que
+      # lo sabe con certeza.
+      #
+      # `resourcedetection` con `hostname_sources: [os]` devuelve, dentro de un
+      # contenedor, el ID DEL CONTENEDOR. Medido: los 22.377 spans del almacen
+      # llevaban `host.name = 2a3bc2822dfb` — dieciseis servicios distintos
+      # bajo un identificador que cambia en cada recreacion.
+      #
+      # Eso no es un detalle cosmetico: hace que "¿en que maquina corria esto?"
+      # no se pueda responder, y con ello que el criterio 6 del piloto —que un
+      # SEGUNDO host mande telemetria— no sea que falte maquina, sino que no
+      # habria forma de distinguirla (D-104).
+      #
+      # Se pisa lo que traiga la aplicacion porque una app en un contenedor
+      # tampoco conoce su maquina: cree ser su propio contenedor. El agente si,
+      # porque hay uno por host y alguien tuvo que decirselo al desplegarlo.
+      - key: host.name
+        value: ${env:ARGUS_HOST}
+        action: upsert
+
   # --- Camino CALIENTE -------------------------------------------------------
   # Lote de 200 ms. Con eso un error llega al alert-bus en ~2 s de punta a
   # punta. El volumen es bajo por definicion (los errores son la excepcion),

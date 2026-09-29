@@ -487,6 +487,23 @@ connectors:
       enabled: true
     metrics_flush_interval: 10s
 
+    # Una serie que deja de recibir spans deja de emitirse.
+    #
+    # Sin esto, `spanmetrics` mantiene y reemite cada serie que ha visto para
+    # siempre. Medido: retire un agente de prueba y sus metricas seguian
+    # apareciendo con marca de tiempo ACTUAL quince minutos despues, con el
+    # contenedor borrado.
+    #
+    # Lo que eso rompe no es un panel: es cualquier cosa que cuente "que esta
+    # vivo" a partir de estas metricas. Una aplicacion retirada, un host que
+    # ya no existe o un endpoint que se dejo de servir parecen activos
+    # indefinidamente — y "parece vivo" es justo lo que esta plataforma
+    # existe para no creerse (D-104).
+    #
+    # 15 minutos: mas que cualquier intervalo de scrape y menos que la ventana
+    # con la que se juzga si algo sigue ahi.
+    metrics_expiration: 15m
+
 exporters:
   # Base de datos `otel`, SEPARADA de la que usa Langfuse en la misma
   # ClickHouse: compartirla arriesga colisiones con sus migraciones.

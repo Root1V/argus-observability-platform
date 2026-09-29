@@ -50,6 +50,95 @@ def _get(url: str, timeout: float = 4.0):
 
 
 
+
+
+# Un id corto de contenedor: doce hexadecimales. Docker los genera asi.
+_ID_DE_CONTENEDOR = re.compile(r"[0-9a-f]{12}")
+
+
+def clasificar_hosts(nombres) -> tuple[list[str], list[str]]:
+    """Separa nombres de maquina de identificadores de contenedor.
+
+    Sin este filtro, un despliegue viejo que siga sellando ids inflaria la
+    cuenta y el criterio 6 se daria por cumplido con UNA sola maquina mal
+    identificada — que es exactamente el estado del que veniamos (D-104).
+
+    Vive aparte para poder probarla sin ClickHouse delante.
+    """
+    reales: list[str] = []
+    sospechosos: list[str] = []
+    for nombre in nombres:
+        if not nombre:
+            continue
+        (sospechosos if _ID_DE_CONTENEDOR.fullmatch(nombre) else reales).append(nombre)
+    return reales, sospechosos
+
+
+def _hosts_que_emiten() -> tuple[bool | None, str]:
+    """Criterio 6, medido en el almacen.
+
+    Estuvo en «?» con «un solo agente desplegado», y la nota escondia algo
+    peor que la ausencia de una segunda maquina: **no habria forma de
+    distinguirla**. `resourcedetection` dentro de un contenedor devuelve el ID
+    DEL CONTENEDOR, asi que los 22.377 spans del almacen llevaban todos el
+    mismo `host.name` — dieciseis servicios bajo un identificador que cambia
+    en cada recreacion (D-104).
+
+    Ahora el agente sella el nombre de su maquina, que es el unico que lo sabe
+    porque hay uno por host. Contar valores distintos ES el criterio.
+
+    Se ignoran los que parecen id de contenedor: doce caracteres hexadecimales.
+    Sin ese filtro, un despliegue viejo inflaria la cuenta y el criterio se
+    daria por cumplido con una sola maquina mal identificada.
+    """
+    # Se miran METRICAS y no trazas, y una ventana corta.
+    #
+    # Con trazas y 24 h, una sola peticion de prueba desde un host cumplia el
+    # criterio y lo dejaba en verde un dia entero — aunque ese host ya no
+    # existiera. "Manda telemetria" es presente, y una prueba puntual no es un
+    # host.
+    #
+    # Las metricas del propio agente fluyen mientras la maquina este viva, asi
+    # que su presencia en los ultimos minutos SI significa que hay un agente
+    # corriendo ahi ahora mismo.
+    # Se cuentan las metricas del PROPIO Collector (`otelcol_*`), no las
+    # derivadas de spans.
+    #
+    # `spanmetrics` mantiene viva cada serie que ha visto: al retirar un agente
+    # de prueba, sus metricas seguian llegando con marca de tiempo actual y el
+    # criterio se quedaba en verde con un host que ya no existia. Se le puso
+    # `metrics_expiration`, pero aun asi la senal correcta es otra: las
+    # metricas internas de un agente PARAN cuando el agente para, sin depender
+    # de la configuracion de ningun conector (D-104).
+    sql = (
+        "SELECT ResourceAttributes['host.name'] AS h, count() "
+        "FROM otel.otel_metrics_sum "
+        "WHERE TimeUnix > now() - INTERVAL 10 MINUTE AND h != '' "
+        "  AND MetricName LIKE 'otelcol_%' "
+        "GROUP BY h ORDER BY 2 DESC FORMAT TSV"
+    )
+    try:
+        r = subprocess.run(
+            ["docker", "exec", "argus-clickhouse-1", "clickhouse-client", "-q", sql],
+            capture_output=True, text=True, timeout=20,
+        )
+    except Exception:  # noqa: BLE001
+        return None, "no se pudo consultar ClickHouse"
+    if r.returncode != 0:
+        return None, "no se pudo consultar ClickHouse"
+
+    reales, sospechosos = clasificar_hosts(
+        linea.split("\t")[0] for linea in r.stdout.strip().splitlines()
+    )
+
+    aviso = f" ({len(sospechosos)} con id de contenedor, ignorados)" if sospechosos else ""
+    if len(reales) >= 2:
+        return True, f"{len(reales)} hosts emitiendo ahora: {', '.join(sorted(reales)[:3])}{aviso}"
+    if reales:
+        return False, f"un solo host identificado: {reales[0]}{aviso}"
+    return None, f"ningun host con nombre real todavia{aviso}"
+
+
 def _el_silencio_abrio_incidente() -> tuple[bool | None, str]:
     """Criterio 4, medido en el historico en vez de anotado a mano.
 
@@ -153,6 +242,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
     canales = [c for c in (stats or {}).get("canales", []) if c not in ("console", "json", "memory")]
     cruza_cola, detalle_cola = _traza_que_cruza_una_cola()
     silencio_ok, detalle_silencio = _el_silencio_abrio_incidente()
+    hosts_ok, detalle_hosts = _hosts_que_emiten()
 
     # 7 · el vigilante corre FUERA de los contenedores
     try:
@@ -220,8 +310,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
          f"{(stats or {}).get('signals_in',0)} señales → {(stats or {}).get('notifications_sent',0)} notificaciones"),
         (silencio_ok, "4 · El silencio de un servicio real abre incidente", detalle_silencio),
         (cruza_cola, "5 · Una traza cruza una frontera que NO es HTTP", detalle_cola),
-        (None, "6 · Un segundo host manda telemetría",
-         "un solo agente desplegado — F1-10"),
+        (hosts_ok, "6 · Un segundo host manda telemetría", detalle_hosts),
         (vigilante, "7 · Hay red de seguridad externa", f"dead man's switch: {detalle_v}"),
     ]
 
