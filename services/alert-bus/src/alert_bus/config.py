@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # Cada cuanto se revisan ventanas y cierres.
     tick_s: int = 5
 
+    # Donde sobreviven los incidentes a un reinicio. Vacio = sin persistencia,
+    # que es como funciono hasta D-103: el motor detecta igual y olvida.
+    #
+    # SQLite en un volumen y no una base de datos de red: el alert-bus es lo
+    # que avisa cuando algo se rompe, y darle una dependencia de red seria
+    # compartir modos de fallo con lo que vigila.
+    store_path: Path | None = None
+
     # Token que exige a los Collector agente. El mismo del gateway.
     token: str = ""
 

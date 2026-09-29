@@ -49,6 +49,58 @@ def _get(url: str, timeout: float = 4.0):
 
 
 
+
+def _el_silencio_abrio_incidente() -> tuple[bool | None, str]:
+    """Criterio 4, medido en el historico en vez de anotado a mano.
+
+    Estuvo en «?» con «verificado el 13/09 con auth-service; no se
+    re-comprueba solo» durante dos semanas y media, y la nota era honesta: NO
+    se podia re-comprobar. El exito de este criterio es un EVENTO —el silencio
+    de un servicio abrio un incidente— y el estado actual no lo puede
+    responder, porque lo deseable es que ahora mismo no este pasando.
+
+    Con los incidentes persistidos (D-103) ya hay algo que consultar: el
+    historico conserva los resueltos.
+
+    Devuelve `None` si el alert-bus no tiene persistencia: "no tengo registro"
+    no es "no ha pasado", y confundirlos es el error que D-102 documenta.
+    """
+    stats = _get("http://127.0.0.1:8080/stats")
+    if stats is None:
+        return None, "el alert-bus no responde"
+    if not stats.get("persistencia"):
+        return None, "sin persistencia de incidentes: no hay historico que consultar"
+
+    historico = _get("http://127.0.0.1:8080/incidents/history?signature=canary-silencio&dias=30")
+    if historico is None:
+        return None, "no se pudo consultar el historico"
+
+    if not historico:
+        # "No ha pasado" y "llevo cinco minutos mirando" no son lo mismo, y
+        # esta es justo la distincion que D-102 documenta. Se mira la edad del
+        # registro ENTERO, no la de los silencios: si el almacen acaba de
+        # nacer, su vacio no dice nada.
+        todos = _get("http://127.0.0.1:8080/incidents/history?dias=30") or []
+        fechas = sorted(d.get("opened_at") or "" for d in todos if d.get("opened_at"))
+        if not fechas:
+            return None, "el registro de incidentes esta recien creado: todavia no dice nada"
+        try:
+            desde = dt.datetime.fromisoformat(fechas[0])
+            horas = (dt.datetime.now(desde.tzinfo) - desde).total_seconds() / 3600
+        except ValueError:
+            return None, "no se pudo leer la antiguedad del registro"
+        if horas < 24:
+            return None, f"el registro lleva {horas:.1f} h: aun no es evidencia de ausencia"
+        return False, f"ningun incidente de silencio en {horas / 24:.0f} dias de registro"
+
+    ultimo = historico[-1]
+    cuando = (ultimo.get("opened_at") or "")[:16].replace("T", " ")
+    return True, (
+        f"{len(historico)} en 30 dias; el ultimo {ultimo.get('app')}/"
+        f"{ultimo.get('component')} el {cuando}"
+    )
+
+
 def _traza_que_cruza_una_cola() -> tuple[bool | None, str]:
     """Criterio 5, medido en el almacen en vez de anotado a mano.
 
@@ -100,6 +152,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
                and a["id"] not in ("argus",) and not a["id"].startswith(("postgres", "redis", "minio", "clickhouse", "victoria", "temporal"))]
     canales = [c for c in (stats or {}).get("canales", []) if c not in ("console", "json", "memory")]
     cruza_cola, detalle_cola = _traza_que_cruza_una_cola()
+    silencio_ok, detalle_silencio = _el_silencio_abrio_incidente()
 
     # 7 · el vigilante corre FUERA de los contenedores
     try:
@@ -165,8 +218,7 @@ def criterios() -> list[tuple[bool | None, str, str]]:
          f"canal humano: {', '.join(canales) or 'ninguno'}"),
         ((stats or {}).get("signals_deduplicated", 0) > 0, "3 · Una tormenta real se deduplica",
          f"{(stats or {}).get('signals_in',0)} señales → {(stats or {}).get('notifications_sent',0)} notificaciones"),
-        (None, "4 · El silencio de un servicio real abre incidente",
-         "verificado el 13/09 con auth-service; no se re-comprueba solo"),
+        (silencio_ok, "4 · El silencio de un servicio real abre incidente", detalle_silencio),
         (cruza_cola, "5 · Una traza cruza una frontera que NO es HTTP", detalle_cola),
         (None, "6 · Un segundo host manda telemetría",
          "un solo agente desplegado — F1-10"),

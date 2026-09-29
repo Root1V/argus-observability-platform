@@ -24,6 +24,18 @@ RUN uv sync --frozen --no-dev --package alert-bus
 # Sin privilegios. La pieza que recibe telemetria de toda la red no tiene
 # ninguna razon para correr como root.
 RUN useradd --create-home --uid 10001 argus
+
+# El directorio de datos se crea EN LA IMAGEN y con dueño, no en el volumen.
+#
+# Docker copia el propietario del directorio de la imagen al crear un volumen
+# nombrado por primera vez. Sin esto el volumen nace de root, el proceso corre
+# como `argus` y SQLite falla con «unable to open database file» — el servicio
+# arranca igual y detecta igual, pero olvida en cada reinicio.
+#
+# Es un fallo que los tests no pueden ver: ahi el almacen es un `tmp_path` del
+# propio usuario. Solo aparece desplegando (D-103).
+RUN mkdir -p /var/lib/argus && chown argus:argus /var/lib/argus
+
 USER argus
 
 EXPOSE 8080

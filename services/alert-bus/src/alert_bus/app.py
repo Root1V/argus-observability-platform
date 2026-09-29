@@ -103,6 +103,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     settings = settings or Settings()
 
     dispatcher: Dispatcher | None = None
+    # Declarado ANTES del `if`: cuando un test inyecta su propio motor, la rama
+    # de abajo no corre y `store` quedaba sin definir. El endpoint del
+    # historico lo usaba y daba `NameError` — un fallo que solo aparecia con
+    # motor inyectado, o sea solo en los tests que no tocan ese endpoint.
+    store = None
 
     if engine is None:
         registry = Registry(settings.registry_path)
@@ -112,13 +117,25 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         )
         sinks = build_sinks(settings)
         log.info("sinks.ready", extra={"sinks": ",".join(s.name for s in sinks)})
+        if settings.store_path is not None:
+            from .store import IncidentStore
+
+            store = IncidentStore(settings.store_path)
+            log.info(
+                "store.ready" if store.disponible else "store.unavailable",
+                extra={"ruta": str(settings.store_path)},
+            )
         engine = Engine(
             registry,
             sinks,
             group_window_s=settings.group_window_s,
             resolve_after_s=settings.resolve_after_s,
             dispatcher=dispatcher,
+            store=store,
         )
+    else:
+        # Motor inyectado: si trae almacen propio, el historico lo usa.
+        store = getattr(engine, "_store", None)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -233,6 +250,24 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             for i in engine.open_incidents()
         ]
 
+    @app.get("/incidents/history")
+    async def history(signature: str | None = None, dias: int = 30) -> list[dict[str, Any]]:
+        """Incidentes de los ultimos N dias, resueltos incluidos.
+
+        Existe para poder comprobar criterios cuyo exito es un EVENTO PASADO y
+        no un estado presente. El criterio 4 del piloto —"el silencio de un
+        servicio real abre incidente"— no se puede responder mirando
+        `/incidents`, porque lo deseable es que ahora mismo no este pasando
+        (D-103).
+
+        Sin almacen devuelve una lista vacia, que es lo correcto: "no tengo
+        registro" no es lo mismo que "no ha pasado", y quien pregunte tiene que
+        poder distinguirlo — por eso el estado se dice aparte, en `/stats`.
+        """
+        if store is None:
+            return []
+        return store.historico(signature=signature, dias=dias)
+
     @app.post("/incidents/{incident_id}/ack")
     async def acknowledge(incident_id: str) -> dict[str, Any]:
         incidente = engine.acknowledge(incident_id)
@@ -262,6 +297,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             **engine.stats,
             "incidentes_abiertos": len(engine.open_incidents()),
             "canales": [s.name for s in engine._sinks],
+            # "No tengo registro" no es "no ha pasado". Quien consulte el
+            # historico tiene que poder distinguirlo, o una lista vacia se lee
+            # como una negativa.
+            "persistencia": bool(store is not None and getattr(store, "disponible", False)),
             # Un destino de pruebas que sobrevive al despliegue rompe el canal
             # EN SILENCIO: el sink esta cargado, enruta, y manda a un servidor
             # que no existe. Se expone para que la prueba de canal lo vea.
