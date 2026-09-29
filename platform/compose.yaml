@@ -187,6 +187,10 @@ services:
     environment:
       ALERTBUS_TOKEN: ${ARGUS_GATEWAY_TOKEN:?define ARGUS_GATEWAY_TOKEN en .env}
       ALERTBUS_REGISTRY_PATH: /etc/argus/apps.yaml
+      # Los incidentes sobreviven al reinicio del servicio. En un volumen
+      # NOMBRADO como todo lo demas: es lo que hace portable el plano central
+      # y lo que distingue "reiniciar" de "empezar de cero" (D-103).
+      ALERTBUS_STORE_PATH: /var/lib/argus/incidentes.sqlite
       ALERTBUS_SINKS: ${ALERTBUS_SINKS:-console,json}
       # Canales reales. Se omiten con un aviso si no estan configurados: un
       # sink que falla en cada envio llena el log y da la falsa impresion de
@@ -220,6 +224,7 @@ services:
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
     volumes:
       - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
+      - alertbus-data:/var/lib/argus
     ports:
       - "127.0.0.1:8080:8080"
 
@@ -461,6 +466,7 @@ services:
 
 volumes:
   grafana-data:
+  alertbus-data:
   # Volumenes NOMBRADOS: son lo que hace portable el plano central.
   clickhouse-data:
   vm-data:

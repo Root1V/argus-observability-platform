@@ -53,6 +53,7 @@ class Engine:
         max_incidents: int = 5_000,
         correlation_window_s: int = 300,
         dispatcher: object | None = None,
+        store: object | None = None,
     ) -> None:
         self._registry = registry
         self._sinks = list(sinks)
@@ -72,6 +73,18 @@ class Engine:
         self._order: deque[str] = deque()           # para acotar la memoria
         self._lock = threading.Lock()
 
+        # Persistencia opcional. Sin ella el motor funciona igual que siempre:
+        # detecta, correlaciona y notifica, y olvida al reiniciarse.
+        #
+        # NO se escribe al absorber una senal repetida, que es el camino
+        # caliente. Eso solo refresca `last_seen_at`, y perderlo no cuesta
+        # nada: la siguiente senal lo vuelve a poner. Se escribe cuando cambia
+        # algo que NO se puede reconstruir desde el flujo — abrir, notificar,
+        # acusar recibo, enriquecer, resolver (D-103).
+        self._store = store
+        if store is not None:
+            self._restaurar()
+
         self.stats = {
             "signals_in": 0,
             "incidents_opened": 0,
@@ -81,6 +94,42 @@ class Engine:
             "symptoms_suppressed": 0,
             "symptoms_promoted": 0,
         }
+
+    # --- Persistencia --------------------------------------------------------
+
+    def _persistir(self, incident: Incident) -> None:
+        """Un fallo del almacen no puede tumbar la deteccion.
+
+        Se prefiere un alert-bus que detecta y no recuerda a uno que no
+        detecta, asi que esto nunca levanta hacia arriba.
+        """
+        if self._store is None:
+            return
+        try:
+            self._store.guardar(incident)
+        except Exception as exc:  # noqa: BLE001
+            log.error("engine.persist_failed", extra={"incident": incident.id, "error": str(exc)})
+
+    def _restaurar(self) -> None:
+        """Recupera los incidentes que estaban abiertos al apagarse.
+
+        Lo importante de recuperar no es que aparezcan en el tablero —de eso
+        ya se encarga la reconciliacion del emisor (D-100)— sino que conserven
+        su IDENTIDAD: su `id`, su `opened_at`, su `notified_at`, el acuse de
+        recibo y el informe del agente. Sin eso, el primer ciclo tras un
+        reinicio vuelve a notificar un problema que alguien ya estaba mirando.
+        """
+        try:
+            recuperados = list(self._store.abiertos())  # type: ignore[union-attr]
+        except Exception as exc:  # noqa: BLE001
+            log.error("engine.restore_failed", extra={"error": str(exc)})
+            return
+
+        for incident in recuperados:
+            self._incidents[incident.fingerprint] = incident
+            self._order.append(incident.fingerprint)
+        if recuperados:
+            log.info("engine.restored", extra={"incidentes": len(recuperados)})
 
     # --- Entrada -------------------------------------------------------------
 
@@ -125,6 +174,11 @@ class Engine:
                 self.stats["signals_deduplicated"] += 1
                 # Una tormenta de senales puede ELEVAR la severidad, pero nunca
                 # bajarla: que el problema se repita no lo hace menos grave.
+                #
+                # Esta rama NO persiste: es el camino caliente y lo unico que
+                # cambia —`last_seen_at` y el contador— se reconstruye con la
+                # siguiente senal. Escribir aqui seria pagar un viaje a disco
+                # por senal, que es justo lo que el motor evita.
                 if severity.rank > existing.severity.rank:
                     existing.severity = severity
                 return existing, False
@@ -144,7 +198,10 @@ class Engine:
             self._order.append(huella)
             self.stats["incidents_opened"] += 1
             self._evict_if_needed()
-            return incident, True
+
+        # Fuera del lock: escribir en disco no puede bloquear la ingesta.
+        self._persistir(incident)
+        return incident, True
 
     def _find_upstream_cause(self, app_id: str) -> Incident | None:
         """Busca un incidente abierto en algo de lo que esta app depende.
@@ -243,6 +300,11 @@ class Engine:
         if not update:
             incident.notified_at = _now()
             self.stats["notifications_sent"] += 1
+            # `notified_at` es lo que impide volver a avisar de lo mismo. Si
+            # no se persiste, un reinicio lo pone a `None` y el primer ciclo
+            # de reconciliacion vuelve a notificar un problema que ya se
+            # notifico — que es exactamente el ruido que D-100 dejo abierto.
+            self._persistir(incident)
 
     def flush_grouped(self) -> list[Incident]:
         """Notifica los incidentes cuya ventana de agrupacion ya cerro.
@@ -281,6 +343,9 @@ class Engine:
                     setattr(incident, clave, valor)
             incident.enriched_at = _now()
             incident.updated_at = _now()
+        # El informe del agente cuesta tokens y minutos; perderlo en un
+        # reinicio significa volver a investigar lo mismo.
+        self._persistir(incident)
 
         if incident.notified_at is not None:
             self._notify(incident, update=True)
@@ -302,6 +367,11 @@ class Engine:
         ahora = _now()
         cerrados = 0
         vivos: set[str] = set()
+        # Un incidente resuelto se borra de memoria pero SE GUARDA. Sin ese
+        # rastro no se puede responder "¿ha abierto alguna vez un incidente el
+        # silencio de un servicio?", que es el criterio 4 del piloto: su exito
+        # es un evento pasado, y lo deseable es que ahora mismo no ocurra.
+        resueltos: list[Incident] = []
 
         with self._lock:
             for huella, incident in list(self._incidents.items()):
@@ -311,6 +381,7 @@ class Engine:
                     incident.state = IncidentState.RESOLVED
                     incident.resolved_at = ahora
                     cerrados += 1
+                    resueltos.append(incident)
                     del self._incidents[huella]
                 else:
                     vivos.add(incident.id)
@@ -324,6 +395,9 @@ class Engine:
                 sintoma.suppressed_by = None
                 sintoma.updated_at = ahora
                 self.stats["symptoms_promoted"] += 1
+
+        for incident in resueltos:
+            self._persistir(incident)
 
         # Los que ahora merecen aviso, lo reciben. Fuera del lock: notificar
         # puede tardar y no queremos bloquear la ingesta mientras tanto.
@@ -349,10 +423,17 @@ class Engine:
             )
 
     def acknowledge(self, incident_id: str) -> Incident | None:
+        encontrado: Incident | None = None
         with self._lock:
             for incident in self._incidents.values():
                 if incident.id == incident_id:
                     incident.state = IncidentState.ACKNOWLEDGED
                     incident.updated_at = _now()
-                    return incident
-        return None
+                    encontrado = incident
+                    break
+        # El acuse de recibo es de lo que MAS importa conservar: significa que
+        # una persona ya lo esta mirando, y volver a avisarle tras un reinicio
+        # es la forma mas rapida de que deje de mirar.
+        if encontrado is not None:
+            self._persistir(encontrado)
+        return encontrado

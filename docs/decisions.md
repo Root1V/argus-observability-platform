@@ -4462,3 +4462,115 @@ Los criterios 4 y 6 siguen siendo texto:
 
 **Un criterio que se comprueba a mano se comprueba una vez.** Los tres que
 están en verde se recalculan en cada ejecución; los que llevan nota no.
+
+---
+
+## D-103 · Los incidentes sobreviven al reinicio, y el criterio 4 deja de ser una nota (cierra `F2-15`)
+
+**Contexto**: `D-100` hizo que el canario reconcilie, así que tras reiniciar el
+alert-bus el tablero se repuebla solo. Quedó escrito allí lo que **no**
+arreglaba: para el proceso recién arrancado el incidente es nuevo, así que
+vuelve a notificar, olvida el acuse de recibo y tira el informe del agente.
+
+*Reconciliar dio la corrección; persistir da la educación.*
+
+### Dónde se escribe, que es la decisión de diseño
+
+El motor guarda los incidentes en memoria a propósito: el camino caliente no
+puede pagar un viaje a disco por señal. Eso sigue siendo cierto, y por eso
+**absorber una señal repetida no escribe**: lo único que cambia es
+`last_seen_at`, y perderlo no cuesta nada porque la siguiente señal lo repone.
+
+Se escribe solo cuando cambia algo que **no se puede reconstruir desde el
+flujo**: abrir, notificar, acusar recibo, enriquecer, resolver. Hay una prueba
+que manda diez señales repetidas y exige **cero** escrituras.
+
+### SQLite de la biblioteca estándar
+
+El alert-bus es lo que avisa cuando algo se rompe. Darle una dependencia de red
+sería compartir modos de fallo con lo que vigila — el mismo argumento por el
+que el dead man's switch no importa nada.
+
+Y un fallo del almacén no puede tumbar la detección: todo va en `try/except`
+con aviso. **Se prefiere un alert-bus que detecta y no recuerda a uno que no
+detecta.** Hay una prueba con una ruta inservible que lo comprueba.
+
+### Verificado desplegando, y ahí apareció lo que los tests no podían ver
+
+```
+antes      id=5d9ca31d1f41  abierto=12:47:04  notificado=True
+tras reiniciar el alert-bus, SIN reconciliar:  1 incidente, recuperado del almacen
+despues    id=5d9ca31d1f41  abierto=12:47:04  notificado=True
+notificaciones tras el reinicio: 0
+```
+
+Misma identidad, mismo `opened_at`, y **cero re-notificaciones** — que es
+exactamente el ruido que `D-100` dejó abierto.
+
+Pero el primer despliegue salió con `persistencia: False`:
+
+```
+store.unavailable  ruta=/var/lib/argus/incidentes.sqlite
+                   error="unable to open database file"
+```
+
+El volumen nombrado nace propiedad de root y el proceso corre como `argus`.
+**Los tests no podían verlo**: allí el almacén es un `tmp_path` del propio
+usuario. Se arregla creando el directorio **en la imagen** con su dueño, porque
+Docker copia esa propiedad al crear el volumen la primera vez.
+
+Y el servicio degradó exactamente como está diseñado —detectando y sin
+recordar— lo cual es lo correcto y también la razón de que hubiera pasado
+desapercibido sin mirar `persistencia` en `/stats`.
+
+### El criterio 4, que era lo que se venía a cerrar
+
+Llevaba dos semanas y media en «?» con la nota *«verificado el 13/09 con
+auth-service; no se re-comprueba solo»*. La nota era honesta: **no se podía**
+re-comprobar. Su éxito es un EVENTO —el silencio de un servicio abrió un
+incidente— y el estado actual no lo puede responder, porque lo deseable es que
+ahora mismo no esté pasando.
+
+Con el histórico ya hay algo que consultar. Y tiene tres respuestas, no dos:
+
+| respuesta | cuándo |
+|---|---|
+| `OK` | hay silencios registrados en 30 días |
+| `NO` | el registro lleva más de 24 h y no hay ninguno |
+| `?` | el registro es más joven que 24 h |
+
+La tercera es la que importa. **«No ha pasado» y «llevo cinco minutos mirando»
+no son lo mismo**, y confundirlos es literalmente el error que D-102 documenta.
+Ahora mismo dice *«el registro lleva 0.0 h: aún no es evidencia de ausencia»*,
+que es la verdad.
+
+### Dos veces el mismo fallo en una sesión
+
+Al añadir el volumen escribí un segundo bloque `volumes:` en `compose.yaml`
+sobre un servicio que ya tenía uno. YAML se queda con la última clave: el
+volumen se perdió, el fichero siguió siendo válido, y lo vi imprimiendo el YAML
+parseado.
+
+Es **exactamente** lo que me había pasado una hora antes en `gateway.yaml`, y
+para lo que había escrito una prueba… acotada a `gateway.yaml`.
+
+Dos veces en una sesión no es falta de cuidado, es un guardarraíl mal acotado.
+`test_yaml_sin_duplicados.py` cubre ahora **todos** los YAML de `platform/`,
+descubiertos solos para que un fichero nuevo entre sin que nadie se acuerde.
+
+Y tenía un segundo defecto: se **saltaba `compose.yaml`**, el único fichero
+donde el fallo había ocurrido de verdad. Las claves de fusión `<<: *restart`
+hacían saltar un `ConstructorError` y el `pytest.skip` lo tapaba. Ahora el
+loader llama a `flatten_mapping` y un fichero que no se puede cargar **falla**
+en vez de saltarse.
+
+*Una prueba que se salta el caso que la motivó es un fichero de texto.* Es
+D-088 por tercera vez.
+
+### Y un error mío de manos
+
+Ejecuté `git checkout platform/compose.yaml` como limpieza de una prueba,
+sobre un fichero que tenía trabajo sin confirmar. Perdí los tres cambios y los
+rehice. No hay daño más allá del tiempo, pero queda escrito: **un `checkout`
+de limpieza sobre un fichero con cambios sin confirmar es un `rm` con otro
+nombre.**
