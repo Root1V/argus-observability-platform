@@ -4740,3 +4740,98 @@ consultó, un fallo transitorio de red se lee como confirmación.
 
 Y para las esperas: comparar numéricamente (`-ge`), que falla sobre una cadena
 vacía en vez de darla por buena.
+
+---
+
+## D-106 · El entorno no necesitaba vocabulario: ya tenía uno, y era del estándar
+
+**Contexto**: al medir el cambio de `host.name` salió que los tres equipos
+mandaban tres valores distintos en `deployment.environment.name`, más el
+nuestro:
+
+```
+argus        mac-dev
+prosodia     local
+aeon-ai      local
+prometheus   bare-metal
+```
+
+Les dije a los tres que iba a *cerrar el vocabulario y proponérselo*. Fui a
+mirar el estándar antes de inventarlo, y **ya está cerrado**:
+
+```python
+class DeploymentEnvironmentNameValues(Enum):
+    PRODUCTION = "production"
+    STAGING    = "staging"
+    TEST       = "test"
+    DEVELOPMENT = "development"
+```
+
+Así que no había nada que diseñar. Es D-081 otra vez —*poner nombre propio a
+algo que ya lo tiene*— y esta vez a punto de cometerlo yo, con tres equipos
+esperando mi propuesta.
+
+### El motivo de la deriva, que no es descuido de nadie
+
+Ninguno de los cuatro valores es tonto. `local`, `mac-dev` y `bare-metal` son
+respuestas razonables… **a otra pregunta**: *¿dónde / cómo corre esto?*
+
+Y esa pregunta tiene su propio campo, `host.name`, que hasta ayer devolvía el
+id de un contenedor (D-104). O sea: el campo del entorno estaba absorbiendo un
+significado porque el campo correcto **no funcionaba**.
+
+Arreglado `host.name`, la deriva se explica sola y se corrige sola.
+
+### Y el primer valor inventado lo escribí yo
+
+`docs/PLAN.md` decía, desde el principio:
+
+```
+| deployment.environment.name | entorno | mac-dev | imac | server-1 | ci |
+```
+
+Cuatro valores, ninguno del estándar, y **mezclando máquina con nivel en la
+misma columna**. Los equipos leyeron eso e hicieron lo razonable: inventar el
+suyo.
+
+No fue que tres equipos derivaran de un vocabulario bueno. **Fue que no había
+vocabulario, y el mío era el peor de los cuatro** porque además era el que los
+demás tomaban como referencia.
+
+### Lo incómodo de la corrección
+
+Los cuatro valores mapean a `development`. Todos. La plataforma entera corre
+en un portátil.
+
+O sea que el campo **no estaba distinguiendo nada** y llevaba semanas
+pareciendo que sí, porque tenía cuatro valores distintos. Cuatro valores no son
+información: son cuatro formas de decir lo mismo.
+
+Lo que la gente quería expresar —qué máquina, cómo corre— ya tiene sitio:
+`host.name`, y `argus.component.role` para la forma.
+
+### Qué se hace
+
+- El modelo declara el campo como **enum con los cuatro del estándar**, con un
+  comentario que dice explícitamente que no son nuestros.
+- `argus.init()` **avisa** si el valor no está en el vocabulario, y conserva el
+  valor: un entorno mal escrito es un dato peor, no un motivo para no arrancar.
+- El aviso es **distinto** para `local`, `mac-dev` y `bare-metal`: dice
+  *«si lo que querías decir es en qué máquina corre, eso es `host.name`»*.
+  Quien escribe eso no está eligiendo mal entre cuatro niveles — está
+  respondiendo a otra pregunta, y un «no está en la lista» a secas le haría
+  elegir uno al azar.
+- Nuestro propio `mac-dev` pasa a `development`, en el compose y en los tres
+  documentos que lo proponían.
+- Y se corrige `PLAN.md`, que es donde empezó.
+
+Publicado en `1.0.0a13`.
+
+### Lo que esto dice del método
+
+Iba a diseñar un vocabulario para un campo que ya lo tenía, a petición mía, con
+tres equipos esperando. Lo único que lo evitó fue **mirar el estándar antes de
+escribir la propuesta** — y lo miré porque D-081 me había mordido con lo mismo.
+
+Las convenciones propias hay que justificarlas contra el estándar **cada vez**,
+no solo cuando el nombre suena a que podría existir ya.

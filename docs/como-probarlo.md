@@ -341,7 +341,7 @@ Y en el entorno:
 
 ```bash
 export ARGUS_ENDPOINT=http://localhost:4317
-export ARGUS_ENVIRONMENT=mac-dev
+export ARGUS_ENVIRONMENT=development
 ```
 
 Para que resuelva `argus` mientras no haya índice privado (B-10):

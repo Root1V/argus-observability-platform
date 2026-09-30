@@ -41,13 +41,17 @@
         },
         {
           "id": "deployment.environment.name",
-          "type": "string",
-          "brief": "Entorno de despliegue.",
+          "type": "enum",
+          "brief": "El NIVEL de despliegue, no la maquina ni la forma de correr. `host.name` dice en que maquina, y desde D-104 dice la verdad.",
+          "members": [
+            "production",
+            "staging",
+            "test",
+            "development"
+          ],
           "examples": [
-            "mac-dev",
-            "imac",
-            "server-1",
-            "ci"
+            "development",
+            "production"
           ]
         },
         {

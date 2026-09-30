@@ -65,7 +65,7 @@ correlación.
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 export OTEL_SERVICE_NAME=idp-api
-export OTEL_RESOURCE_ATTRIBUTES=service.namespace=intelligent-document-platform,argus.component.role=api,deployment.environment.name=mac-dev
+export OTEL_RESOURCE_ATTRIBUTES=service.namespace=intelligent-document-platform,argus.component.role=api,deployment.environment.name=development
 ```
 
 Arranca la app, úsala un poco, y mira:
@@ -89,14 +89,14 @@ Desde PyPI, como cualquier otra dependencia. Nada de `--find-links`, ni de
 índices privados, ni de ruedas pasadas a mano.
 
 ```bash
-pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a12"
+pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a13"
 ```
 
 En el `pyproject.toml` de tu aplicación:
 
 ```toml
 dependencies = [
-  "argus-obs-sdk[asgi,client,sql]==1.0.0a12",
+  "argus-obs-sdk[asgi,client,sql]==1.0.0a13",
 ]
 ```
 
@@ -147,7 +147,7 @@ Y en el entorno:
 
 ```bash
 ARGUS_ENDPOINT=http://localhost:4317
-ARGUS_ENVIRONMENT=mac-dev
+ARGUS_ENVIRONMENT=development
 ARGUS_SLO_MS=8000        # por encima de esto, el span se marca para detección
 ```
 

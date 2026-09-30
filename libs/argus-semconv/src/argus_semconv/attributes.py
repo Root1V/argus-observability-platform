@@ -21,6 +21,7 @@ SERVICE_NAME: Final[str] = "service.name"
 SERVICE_VERSION: Final[str] = "service.version"
 SERVICE_INSTANCE_ID: Final[str] = "service.instance.id"
 DEPLOYMENT_ENVIRONMENT_NAME: Final[str] = "deployment.environment.name"
+DEPLOYMENT_ENVIRONMENT_NAME_VALUES: Final[tuple[str, ...]] = ("production", "staging", "test", "development",)
 ARGUS_COMPONENT_ROLE: Final[str] = "argus.component.role"
 ARGUS_COMPONENT_ROLE_VALUES: Final[tuple[str, ...]] = ("api", "worker", "scheduler", "cli", "model-server", "frontend", "library",)
 
