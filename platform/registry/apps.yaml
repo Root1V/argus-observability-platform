@@ -158,18 +158,38 @@
   tipo_ia: [asr, diarizacion, traduccion, tts]
 
 - id: aeon-ai
-  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
-  estado: planificado
+  # Activa desde el 29/09: los cinco servicios emiten con identidad correcta.
+  # Se promueve porque mientras estuvo `planificado` sin canales, sus
+  # incidentes iban al `["console"]` por defecto — el log de nuestro propio
+  # servicio, que no mira nadie (D-094).
+  estado: activo
   criticidad: media
   dueño: emeric
   canales:
     page: [telegram, console]
-    ticket: [console]
+    ticket: [telegram, console]
   componentes:
-    - {id: control-plane, rol: api}
-    - {id: modelgw, rol: api}
-    - {id: toolgw, rol: api}
-    - {id: worker, rol: worker}
+    # `latido: false` en los cinco, y NO es lo que ellos pidieron.
+    #
+    # Dijeron «corren siempre, sin latido: false — si uno se calla, es una
+    # noticia», y tienen razon sobre su produccion. Pero avisaron a la vez de
+    # que en desarrollo los levantan y los bajan a mano constantemente, y
+    # preguntaron si nuestra sonda distingue por entorno.
+    #
+    # No distingue: `_sondas_silencio` mira `estado` y `rol`, y nada mas. Con
+    # `latido: true` les avisariamos cada cinco minutos de algo sabido, que es
+    # como se ensena a ignorar al canario.
+    #
+    # Asi que va en false HASTA que pase una de las dos: que salgan de
+    # `local`, o que la sonda aprenda a distinguir entorno. Es una decision
+    # suya y esta preguntada.
+    - {id: control-plane, rol: api, latido: false}
+    - {id: modelgw, rol: api, latido: false}
+    - {id: toolgw, rol: api, latido: false}
+    # Nos faltaba: son CINCO y teniamos cuatro. Gobierna los runs sobre
+    # Temporal (start/cancel/pause/resume/approve).
+    - {id: runcontroller, rol: api, latido: false}
+    - {id: worker, rol: worker, latido: false}
   depende_de: [postgres-main, temporal]
   tipo_ia: [agentes, llm-local]
 
