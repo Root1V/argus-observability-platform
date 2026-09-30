@@ -4835,3 +4835,21 @@ escribir la propuesta** — y lo miré porque D-081 me había mordido con lo mis
 
 Las convenciones propias hay que justificarlas contra el estándar **cada vez**,
 no solo cuando el nombre suena a que podría existir ya.
+
+### Y una coda, porque cambiar el valor no bastó
+
+Tras cambiar el compose, los contenedores seguían con `mac-dev`:
+
+```
+argus-alert-bus-1: ARGUS_ENVIRONMENT=mac-dev
+```
+
+`docker restart` **conserva la configuración del contenedor**; solo un
+`up -d` lo recrea con el entorno nuevo. Así que el valor estaba corregido en
+el fichero, en verde en los tests, y sin efecto en lo que corría.
+
+Es la tercera forma distinta del mismo fallo esta semana: la copia instalada
+del vigilante (D-090), la imagen del canario sin reconstruir (D-094), y ahora
+un contenedor sin recrear. **Editar la fuente no es desplegar**, y las tres
+veces lo que lo destapó fue ir a mirar el proceso en marcha en vez de fiarme
+del fichero.
