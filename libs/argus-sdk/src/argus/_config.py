@@ -19,6 +19,8 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
+from argus_semconv import attributes as A
+
 TrustMode = Literal["never", "trusted", "always"]
 
 _TRUE: Final = frozenset({"1", "true", "yes", "on"})
@@ -134,6 +136,39 @@ def _avisar_de_la_configuracion(endpoint: str, protocol: str) -> None:
             stacklevel=3,
         )
 
+
+def _avisar_del_entorno(valor: str) -> None:
+    """`deployment.environment.name` tiene vocabulario CERRADO, y es del estandar.
+
+    No lo cerramos nosotros: OTel ya lo fija en production/staging/test/
+    development. Aqui solo se comprueba, que es la diferencia entre tener un
+    vocabulario y tenerlo de verdad.
+
+    Existe porque derivo a cuatro valores entre cuatro emisores —`mac-dev`,
+    `local`, `local` y `bare-metal`— y ninguno era del estandar. El motivo no
+    fue descuido: el campo se estaba usando para responder "¿en que MAQUINA?",
+    que es `host.name` y no esto. Y el primer valor inventado lo escribimos
+    nosotros en el plan (D-106).
+
+    AVISA y no levanta, y el valor se conserva: un entorno mal escrito es un
+    dato peor, no un motivo para no arrancar.
+    """
+    if not valor:
+        return
+    if valor in A.DEPLOYMENT_ENVIRONMENT_NAME_VALUES:
+        return
+
+    pista = ""
+    if valor.lower() in ("local", "dev", "mac-dev", "laptop", "bare-metal"):
+        pista = " Si lo que querias decir es en que maquina corre, eso es `host.name` y lo pone el agente."
+    warnings.warn(
+        f"Argus: deployment.environment.name={valor!r} no esta en el vocabulario "
+        f"del estandar ({', '.join(A.DEPLOYMENT_ENVIRONMENT_NAME_VALUES)}). Se usa "
+        f"igual, pero no agrupara con el resto del portafolio.{pista}",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
 def _flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -216,6 +251,7 @@ class Config:
         cidrs = tuple(c.strip() for c in os.getenv("ARGUS_TRUSTED_CIDRS", "").split(",") if c.strip())
 
         _avisar_de_la_configuracion(endpoint, protocol)
+        _avisar_del_entorno(os.getenv("ARGUS_ENVIRONMENT") or os.getenv("DEPLOYMENT_ENVIRONMENT", ""))
 
         cfg = cls(
             service=resolved_service,

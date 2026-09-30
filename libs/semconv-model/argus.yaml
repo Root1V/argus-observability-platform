@@ -43,10 +43,24 @@ groups:
         requirement: recommended
         examples: ["idp-worker-3"]
       - id: deployment.environment.name
-        type: string
         requirement: required
-        brief: Entorno de despliegue.
-        examples: ["mac-dev", "imac", "server-1", "ci"]
+        type: enum
+        # LOS CUATRO SON DEL ESTANDAR, no nuestros. Se declaran aqui para
+        # poder comprobarlos, no para inventarlos: OTel ya cierra este campo
+        # en production/staging/test/development.
+        #
+        # Estaba sin declarar y por eso derivo: tres equipos mandaban `local`,
+        # `local` y `bare-metal`, y nosotros `mac-dev`. Ninguno es del
+        # estandar y ninguno es tonto — el campo se estaba usando para
+        # responder "¿en que MAQUINA?", que es `host.name` y no esto.
+        #
+        # `mac-dev` lo escribimos NOSOTROS en el plan, mezclando maquina y
+        # nivel, asi que la deriva empezo aqui (D-106).
+        members: [production, staging, test, development]
+        brief: >
+          El NIVEL de despliegue, no la maquina ni la forma de correr.
+          `host.name` dice en que maquina, y desde D-104 dice la verdad.
+        examples: ["development", "production"]
       - id: argus.component.role
         type: enum
         requirement: required

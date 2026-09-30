@@ -220,7 +220,7 @@ services:
       # Se observa a si mismo: seria absurdo que la pieza que detecta
       # incidentes fuera la unica sin telemetria.
       ARGUS_ENDPOINT: http://collector:4317
-      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-mac-dev}
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
     volumes:
       - ./registry/apps.yaml:/etc/argus/apps.yaml:ro
@@ -251,7 +251,7 @@ services:
       CANARY_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
       CANARY_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       ARGUS_ENDPOINT: http://collector:4317
-      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-mac-dev}
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
     volumes:
       - ./registry/apps.yaml:/etc/argus/apps.yaml:ro

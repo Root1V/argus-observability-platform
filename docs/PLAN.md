@@ -446,7 +446,7 @@ Cinco reglas verificadas con tests, no con buenas intenciones:
 | `argus.component.role` | forma del componente | `api` \| `worker` \| `scheduler` \| `cli` \| `model-server` \| `frontend` |
 | `service.version` | versión | `0.4.2` |
 | `service.instance.id` | instancia concreta | `idp-worker-3` |
-| `deployment.environment.name` | entorno | `mac-dev` \| `imac` \| `server-1` \| `ci` |
+| `deployment.environment.name` | el NIVEL de despliegue | `development` \| `staging` \| `test` \| `production` — vocabulario **del estándar**, no nuestro. La máquina es `host.name` (D-106) |
 | `host.name`, `os.type`, `process.pid` | detectores del SDK | — |
 | `langfuse.environment`, `langfuse.release` | espejo, porque Langfuse los lee literalmente | — |
 
@@ -895,7 +895,7 @@ Fuente de verdad de la correlación y del enrutamiento. Versionado, recargado en
   criticidad: alta                      # decide si pagina o hace ticket
   dueño: emeric
   canales: {page: [gchat, whatsapp], ticket: [gchat]}
-  hosts: [mac-dev, server-1]            # dónde corre, para el enrutamiento de agentes
+  hosts: [macbook-emeric, servidor-1]   # dónde corre: son `host.name`, no entornos (D-106)
   componentes:                          # = service.name
     - {id: idp-api,    rol: api,          slo: {disponibilidad: 99.0, p95_ms: 8000}}
     - {id: idp-worker, rol: worker,       slo: {backlog_max: 500}}
