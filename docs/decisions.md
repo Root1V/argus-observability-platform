@@ -4678,3 +4678,65 @@ aunque ese host ya no existiera.
 
 Ninguno: los criterios 1–7 se recalculan en cada ejecución. El 8 es un contador
 sobre este mismo fichero.
+
+---
+
+## D-105 · Un bucle de espera que cantaba éxito cuando no podía preguntar
+
+**Contexto**: un bucle de verificación que quedó corriendo de fondo desde
+primera hora terminó con `LLEGO` y código 0. La traza que esperaba tiene
+**cero spans** en el almacén. No llegó nunca.
+
+```bash
+until [ "$(docker exec argus-clickhouse-1 clickhouse-client -q "SELECT count() …")" != "0" ]
+do sleep 3; done
+echo LLEGO
+```
+
+Si `docker exec` falla —y ClickHouse y el gateway se reiniciaron muchas veces
+hoy— la sustitución devuelve **cadena vacía**. Y `"" != "0"` es **verdadero**:
+el bucle sale y canta éxito.
+
+La condición no dice «ha llegado». Dice «he conseguido leer algo distinto de
+cero», y no poder leer entra en esa definición.
+
+### Es la tercera vez con la misma forma
+
+| | |
+|---|---|
+| D-091 | `except ValueError: continue` convertía «no puedo parsear» en «no hay evaluaciones», y mandó una alerta falsa por Telegram |
+| a9 | el bucle de espera de PyPI reventaba con `JSONDecodeError` sobre un cuerpo vacío |
+| **D-105** | `""  != "0"` convierte «no pude preguntar» en «la respuesta es sí» |
+
+Las tres son **«no lo sé» tratado como una respuesta**, que es literalmente lo
+que llevo toda la semana corrigiendo en el producto —`None` frente a `False`
+en los criterios 4 y 6, la seudonimización que no distinguía ámbitos— sin
+aplicarlo a mis propias herramientas de comprobación.
+
+### Qué se comprobó, y qué no hace falta rehacer
+
+El repositorio **no** usa ese patrón: sus esperas son `until curl -sf …`, y
+`curl -sf` devuelve no-cero cuando falla, así que sigue esperando. El fallo
+estaba solo en mis comandos de verificación.
+
+Y las afirmaciones que dependían de un bucle se re-comprobaron contra el
+almacén, sin bucle de por medio:
+
+```
+politica de auditoria       6/6
+denegaciones conservadas    8/8
+cola con el gateway caido   5/5
+```
+
+Se sostienen porque en esos casos el bucle solo esperaba, y **la evidencia que
+publiqué salió de una consulta posterior que imprimía el dato**. Eso es lo que
+salvó las conclusiones, no el bucle.
+
+### La regla
+
+**Un bucle de espera no puede ser la evidencia.** Espera; después se pregunta,
+se imprime el número y ése es el resultado. Si el bucle es lo único que
+consultó, un fallo transitorio de red se lee como confirmación.
+
+Y para las esperas: comparar numéricamente (`-ge`), que falla sobre una cadena
+vacía en vez de darla por buena.
