@@ -4933,3 +4933,108 @@ encontraría nunca. **La documentación de un SDK no la valida quien lo escribe.
 
 Publicado en `1.0.0a14`. Y el README arrastraba todavía el vocabulario de
 entorno que D-106 retiró — corregido ahí también.
+
+---
+
+## D-108 · El inquilino era el mismo sujeto, en claro, dos campos más allá
+
+> **Fallo de plataforma** · descubierto 2026-10-01 · `argus.tenant` no se seudonimizaba, y en el registro de auditoría de Prometheus contenía exactamente el mismo identificador que `enduser.pseudo.id` estaba protegiendo en el mismo evento; además el modelo lo declaraba apto para viajar en baggage, contra nuestra propia regla dura
+
+**Contexto**: Prometheus pidió en `P-35` que verificáramos el seudónimo de su
+objetivo sobre tráfico real. La verificación **pasa** —el `argus.target.id` de
+un `type = user` sale hasheado y distinto del hash del actor— y en el mismo
+evento estaba esto:
+
+```
+enduser.pseudo.id = 9b154d1bde622b3b…    el actor, protegido
+argus.tenant      = d2e0e23d-8599-4cab…  EL MISMO SUJETO, en claro
+```
+
+Hasheando ese UUID con nuestra sal:
+
+```
+sha256("d2e0e23d-8599-4cab-a730-aafb82f964d5" + sal)
+  = 9b154d1bde622b3bb77b371cd9f304efc5ac596bb08dda3575c569f49a1d3fea
+```
+
+Idéntico al seudónimo de al lado. **La seudonimización del actor quedaba
+anulada dentro del mismo evento.**
+
+### Tercera vez con la misma forma, y la regla ya estaba escrita
+
+| | el sitio sin cubrir |
+|---|---|
+| D-092 | el ámbito `spanevent`: cubríamos `span` y `log` |
+| D-098 | el tipo `client`: cubríamos `user` |
+| **D-108** | el campo `argus.tenant`: cubríamos el actor |
+
+Y la frase que las explica la escribimos en D-098: **un seudónimo vale lo que
+vale el sitio menos protegido donde aparece ese sujeto.** Tres veces la misma
+regla, tres sitios distintos, y ninguna la encontró leyendo.
+
+### Y es nuestro, no suyo
+
+En `P-32` les dijimos que `prometheus.audit.actor.client_id` sobraba *«porque
+`argus.tenant` ya lleva el cliente»*. Retiraron su atributo y usaron el
+nuestro. **Hicieron exactamente lo que documentamos**, y lo que documentamos
+metía un identificador de persona en un campo sin proteger.
+
+### El segundo defecto, peor que el primero
+
+El modelo decía: *«Inquilino, si aplica. **Viaja en baggage.**»*
+
+Y `propagate.set_baggage` lo listaba como seguro:
+
+```
+REGLA DURA: el baggage es pequeno, acotado y SIN PII. […]
+Lo que si va: `argus.app`, `argus.run.id`, `argus.tenant`.
+```
+
+**La regla dura y su violación, en el mismo docstring, separadas por dos
+párrafos.** Es literalmente lo que Aeon nos describió encontrando en su propio
+`MarkGuardrail` —*«una contradicción a tres funciones de distancia»*— y que
+celebramos como hallazgo suyo sin mirar el nuestro.
+
+El baggage cruza procesos y máquinas en cabeceras, o sea sitios que no
+controlamos. Ahí no puede ir un identificador que pueda ser de una persona.
+
+### Qué se hace
+
+- **Se hashea en sitio**, en los tres ámbitos, como `session.id`. No se borra:
+  un inquilino seudonimizado sigue agrupando, que es para lo que el campo
+  existe — y atribuir coste por inquilino sigue funcionando.
+- **Se retira de la lista de baggage**, con el motivo escrito.
+- El modelo dice que puede ser una persona, y por qué: donde un principal se
+  autentica con contraseña **o** con secreto de máquina, el identificador es el
+  mismo y el campo no puede saber cuál es.
+- Cubierto también en `log`, donde hoy nadie lo manda. El hueco de D-092 fue
+  exactamente eso: unos ámbitos sí y otros no.
+
+Verificado con el mismo sujeto en los dos campos:
+
+```
+argus.tenant      cce50cb26c1f0ee2…
+enduser.pseudo.id cce50cb26c1f0ee2…    el mismo hash
+```
+
+Que den **el mismo** hash es la parte buena: se sigue viendo que el actor y el
+inquilino son el mismo sujeto, sin que ninguno esté en claro.
+
+### Lo que no se repara
+
+Los seis eventos de auditoría que ya están en el almacén llevan el valor en
+claro. No se reescriben: son suyos y de hace horas, y borrarlos a mano de una
+tabla de ClickHouse es más riesgo que el que corrigen. Quedan ahí y está dicho.
+
+Publicado en `1.0.0a15`.
+
+### Lo que esto dice del método
+
+La verificación que me pidieron **pasó**. Si me hubiera limitado a contestar
+«confirmado, el hash sale bien y es distinto del actor», habría sido cierto y
+habría dejado la fuga en pie — porque mi atención estaba en el campo que ellos
+me señalaron.
+
+**Lo encontré mirando el evento entero en vez de el campo de la pregunta.**
+Y la única razón de mirarlo entero es que las dos veces anteriores el fallo
+estaba justo al lado de donde miraba.

@@ -172,3 +172,54 @@ def test_hay_mas_de_un_tipo_principal(seudonimizador: dict) -> None:
     from argus_semconv import attributes as A
 
     assert len(A.ARGUS_TARGET_TYPE_PRINCIPALS) >= 2
+
+
+# ---------------------------------------------------------------------------
+# El inquilino puede ser una persona.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("ambito", sorted(AMBITOS_CON_ATRIBUTOS))
+def test_el_inquilino_se_seudonimiza(seudonimizador: dict, ambito: str) -> None:
+    """Lo encontro Prometheus sin buscarlo, en el mismo evento:
+
+        enduser.pseudo.id = 9b154d1bde62…   el actor, protegido
+        argus.tenant      = d2e0e23d-8599…  EL MISMO SUJETO, en claro
+
+    Comprobado hasheando el valor con nuestra sal: daba exactamente el
+    seudonimo de al lado. La seudonimizacion del actor quedaba anulada dentro
+    del mismo evento, dos campos mas alla (D-108).
+
+    Tercera vez con la misma forma —el ambito `spanevent`, el tipo `client`, y
+    este— y la regla ya estaba escrita: un seudonimo vale lo que vale el sitio
+    menos protegido donde aparece ese sujeto.
+    """
+    texto = "\n".join(_sentencias_por_ambito(seudonimizador)[ambito])
+    assert f'set({ambito}.attributes["argus.tenant"], SHA256(' in texto, (
+        f"en `{ambito}`, `argus.tenant` llega en claro al almacen"
+    )
+
+
+def test_el_inquilino_no_se_borra_sino_que_se_hashea(seudonimizador: dict) -> None:
+    """Se hashea EN SITIO y no se borra, como `session.id`.
+
+    Borrarlo haria imposible atribuir coste por inquilino, que es para lo que
+    el campo existe. Un inquilino seudonimizado sigue agrupando.
+    """
+    for ambito in AMBITOS_CON_ATRIBUTOS:
+        texto = "\n".join(_sentencias_por_ambito(seudonimizador)[ambito])
+        assert f'delete_key({ambito}.attributes, "argus.tenant")' not in texto
+
+
+def test_el_inquilino_ya_no_se_ofrece_para_baggage() -> None:
+    """El baggage cruza procesos y maquinas en cabeceras, y nuestra regla dura
+    dice que no lleva PII. `set_baggage` listaba `argus.tenant` como seguro dos
+    parrafos despues de declarar esa regla."""
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parents[2]
+    fuente = (raiz / "libs/argus-sdk/src/argus/propagate.py").read_text(encoding="utf-8")
+    i = fuente.index("def set_baggage")
+    cuerpo = fuente[i : i + 1800]
+    assert "Lo que si va: `argus.app` y `argus.run.id`." in cuerpo
+    assert "se retiro" in cuerpo, "falta el motivo de la retirada"
