@@ -34,6 +34,12 @@ PATRON = re.compile(r"`(argus\.[a-z0-9_.]+)`")
 # los errores de verdad.
 PERMITIDOS: dict[str, str] = {
     "argus.yaml": "el fichero del modelo, no un atributo",
+    # El MODULO de propagacion de contexto. Tiene entrada propia aqui porque
+    # es la tercera vez que esta comprobacion lo caza, y rodearlo escribiendo
+    # `argus/propagate.py` funcionaba hasta que el tema del documento fue
+    # justamente que el modulo y `ARGUS_PROPAGATE` se llamaban igual: ahi,
+    # disfrazar el nombre oculta lo que se esta contando (D-107).
+    "argus.propagate": "el modulo de propagacion, no un atributo (D-095, D-107)",
     "argus.usecase": "aparece en PLAN.md como EJEMPLO de nombre mal escrito",
     # Los tres nombres viejos del grupo de inferencia. Siguen citados en el
     # registro de decisiones porque la historia de D-081 no se puede contar sin

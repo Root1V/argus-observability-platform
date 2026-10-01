@@ -246,7 +246,10 @@ def init(
             "role": cfg.role,
             "environment": cfg.environment,
             "endpoint": cfg.endpoint if not cfg.disabled else "disabled",
-            "propagate": cfg.propagate,
+            # `trust_inbound` y no `propagate`: la clave vieja se leia pegada
+            # a `argus.propagate`, el modulo de propagacion de contexto, y son
+            # cosas distintas. Lo reporto Prosodia (D-107).
+            "trust_inbound": cfg.trust_inbound,
             "instrumented": ",".join(handle.instrumented),
         },
     )
