@@ -62,10 +62,11 @@ se configuran copiando el mismo bloque.
 | `ARGUS_NAMESPACE` | La aplicación (`service.namespace`) | = servicio |
 | `ARGUS_ROLE` | `api`/`worker`/`scheduler`/`cli`/`model-server`/`frontend` | `api` |
 | `ARGUS_VERSION` | Versión del componente | — |
-| `ARGUS_ENVIRONMENT` | `mac-dev`, `imac`, `server-1`, `ci` | `local` |
+| `ARGUS_ENVIRONMENT` | El **nivel** de despliegue: `development` \| `staging` \| `test` \| `production`. Vocabulario del estándar, no nuestro. La máquina es `host.name` y la pone el agente | — |
 | `ARGUS_ENDPOINT` | Collector **agente local** | `http://localhost:4317` |
-| `ARGUS_PROTOCOL` | `grpc` \| `http/protobuf` | `grpc` |
-| `ARGUS_PROPAGATE` | `never` \| `trusted` \| `always` | `never` |
+| `ARGUS_PROTOCOL` | `grpc` \| `http/protobuf` | según lo instalado |
+| `ARGUS_TRUST_INBOUND` | Si adoptar un `traceparent` que llega de fuera: `never` \| `trusted` \| `always` | `never` |
+| `ARGUS_PROPAGATE` | Nombre **viejo** de la anterior. Sigue funcionando | — |
 | `ARGUS_TRUSTED_CIDRS` | CIDRs de confianza, separados por coma | — |
 | `ARGUS_CAPTURE_CONTENT` | Capturar prompts y respuestas | `false` |
 | `ARGUS_SLO_MS` | Umbral de latencia del componente | `0` (sin umbral) |
@@ -74,6 +75,70 @@ se configuran copiando el mismo bloque.
 Las estándar de OpenTelemetry (`OTEL_SERVICE_NAME`,
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`) también se respetan,
 para que una app que ya tiene OTel migre sin tocar código.
+
+
+## Propagar el contexto a otro hilo
+
+El contexto de OpenTelemetry vive en un `contextvars.ContextVar`. `asyncio` lo
+copia al crear una tarea; **`ThreadPoolExecutor` no lo copia** al hilo
+trabajador. Lo que se pierde ahí no suele ser la traza entera, sino los
+registros que emite la librería que corre dentro: salen con `trace_id = none`
+mientras los de al lado salen bien.
+
+```python
+from argus.propagate import Executor as ThreadPoolExecutor
+```
+
+`submit` y `map` propagan solos, así que no hay que tocar ninguna llamada. Es
+un reemplazo y no un ayudante a propósito: un ayudante hay que recordarlo en
+cada envío, y el olvido no da error.
+
+### Si el SDK es una dependencia **opcional** de tu aplicación
+
+Que lo sea es lo correcto —la aplicación tiene que arrancar sin él— y entonces
+el import de arriba la rompe al cargar, en una ruta que no toca telemetría.
+Protégelo, **con el caso base primero**:
+
+```python
+from concurrent.futures import ThreadPoolExecutor   # sin el extra, este
+
+try:
+    from argus.propagate import Executor as ThreadPoolExecutor
+except ImportError:
+    pass
+```
+
+El orden no es cosmético: al revés, `mypy` lo rechaza porque asigna un
+supertipo sobre un subtipo. Declarar el estándar y estrecharlo después es lo
+que comprueba.
+
+> Esta receta es de Prosodia, que la encontró adoptándolo: tienen el SDK en un
+> extra `web` y la misma función la corre también una CLI que no lo instala.
+
+### Y para un subproceso
+
+Ahí no hay contexto que copiar: hay que pasar la cadena.
+
+```python
+subprocess.run(cmd, env=argus.propagate.inject_env(dict(os.environ)))
+```
+
+Y en el hijo, si es código tuyo:
+
+```python
+with argus.propagate.extract_env(name="mi.etapa"):
+    ...
+```
+
+### Dos nombres parecidos que no tienen nada que ver
+
+| | qué es |
+|---|---|
+| `argus.propagate` | el **módulo**: lleva el contexto entre hilos, procesos, colas y cabeceras |
+| `ARGUS_TRUST_INBOUND` (antes `ARGUS_PROPAGATE`) | si **confiar** en un `traceparent` que llega de fuera por HTTP |
+
+Les pusimos el mismo nombre y no debimos. El segundo es una decisión de
+seguridad sobre lo que entra; el primero es cómo sale lo tuyo.
 
 ## Por qué `localhost` y no el plano central
 

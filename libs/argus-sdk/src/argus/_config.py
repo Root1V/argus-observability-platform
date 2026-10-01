@@ -169,6 +169,54 @@ def _avisar_del_entorno(valor: str) -> None:
         stacklevel=3,
     )
 
+
+# `ARGUS_PROPAGATE` fue un mal nombre y lo arrastramos.
+#
+# Gobierna UNA cosa: si confiar en un `traceparent` que llega de fuera. No
+# tiene nada que ver con `argus.propagate`, el modulo que lleva el contexto
+# entre hilos, procesos y colas — y los dos se llaman igual.
+#
+# Lo reporto Prosodia: `init()` registraba `"propagate": "never"` justo despues
+# de que ellos acabaran de adoptar `argus.propagate.Executor`, y tardaron un
+# rato en separar las dos cosas. No es confusion suya; les pusimos el mismo
+# nombre a dos cosas distintas (D-107).
+#
+# El nombre nuevo dice lo que hace. El viejo sigue valiendo porque ya esta en
+# tres repositorios que no controlamos, y romperlo para arreglar una palabra
+# seria cobrarles a ellos nuestro error.
+_VAR_CONFIANZA = "ARGUS_TRUST_INBOUND"
+_VAR_CONFIANZA_VIEJA = "ARGUS_PROPAGATE"
+_MODOS_DE_CONFIANZA = ("never", "trusted", "always")
+
+
+def _modo_de_confianza() -> str:
+    """Resuelve el modo de confianza con el nombre nuevo y el viejo."""
+    nuevo = (os.getenv(_VAR_CONFIANZA) or "").strip().lower()
+    viejo = (os.getenv(_VAR_CONFIANZA_VIEJA) or "").strip().lower()
+
+    # Dos nombres puestos y en desacuerdo: avisar en vez de elegir callando.
+    # Un desacuerdo silencioso aqui decide si se adopta un `traceparent`
+    # ajeno, que es una decision de seguridad (OWASP A03).
+    if nuevo and viejo and nuevo != viejo:
+        warnings.warn(
+            f"Argus: {_VAR_CONFIANZA}={nuevo!r} y {_VAR_CONFIANZA_VIEJA}={viejo!r} "
+            f"no coinciden. Gana {_VAR_CONFIANZA}. Son la misma opcion y "
+            f"{_VAR_CONFIANZA_VIEJA} es el nombre viejo: borra uno de los dos.",
+            RuntimeWarning,
+            stacklevel=4,
+        )
+
+    elegido = nuevo or viejo or "never"
+    if elegido not in _MODOS_DE_CONFIANZA:
+        warnings.warn(
+            f"Argus: modo de confianza {elegido!r} desconocido; se usa 'never'. "
+            f"Validos: {', '.join(_MODOS_DE_CONFIANZA)}.",
+            RuntimeWarning,
+            stacklevel=4,
+        )
+        return "never"
+    return elegido
+
 def _flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -208,6 +256,9 @@ class Config:
     headers: dict[str, str] = field(default_factory=dict)
 
     # --- Comportamiento ------------------------------------------------------
+    # El modo de confianza para un `traceparent` ENTRANTE. El campo conserva el
+    # nombre viejo porque lo leen el middleware ASGI y los tests; `trust_inbound`
+    # de abajo es el nombre que decimos hacia fuera (D-107).
     propagate: TrustMode = "never"
     trusted_cidrs: tuple[str, ...] = ()
     capture_content: bool = False
@@ -221,6 +272,16 @@ class Config:
 
     disabled: bool = False
     console: bool = False
+
+    @property
+    def trust_inbound(self) -> TrustMode:
+        """Si se adopta un `traceparent` que llega de fuera.
+
+        Es el mismo valor que `propagate`, con el nombre que no se confunde
+        con el modulo `argus.propagate`. Se lee igual desde los dos sitios; lo
+        que cambia es cual se escribe en documentacion y en los logs.
+        """
+        return self.propagate
 
     @classmethod
     def from_env(cls, service: str | None = None, **overrides: object) -> Config:
@@ -244,9 +305,7 @@ class Config:
             or (DEFAULT_ENDPOINT if protocol == "grpc" else DEFAULT_ENDPOINT_HTTP)
         )
 
-        propagate = (os.getenv("ARGUS_PROPAGATE") or "never").strip().lower()
-        if propagate not in ("never", "trusted", "always"):
-            propagate = "never"
+        propagate = _modo_de_confianza()
 
         cidrs = tuple(c.strip() for c in os.getenv("ARGUS_TRUSTED_CIDRS", "").split(",") if c.strip())
 

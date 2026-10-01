@@ -4853,3 +4853,83 @@ del vigilante (D-090), la imagen del canario sin reconstruir (D-094), y ahora
 un contenedor sin recrear. **Editar la fuente no es desplegar**, y las tres
 veces lo que lo destapó fue ir a mirar el proceso en marcha en vez de fiarme
 del fichero.
+
+---
+
+## D-107 · Le pusimos el mismo nombre a dos cosas distintas, y costó tiempo a quien nos adoptó
+
+**Contexto**: Prosodia adopta `argus.propagate.Executor` (D-095) y reporta, de
+paso, algo que no veníamos a buscar:
+
+> *«Vuestro `init()` loguea `"propagate": "never"`. Es `ARGUS_PROPAGATE`, o sea
+> si confiar en un `traceparent` que llegue de fuera por HTTP — nada que ver
+> con la propagación entre hilos del módulo que se llama igual. Tardamos un
+> rato en separarlo.»*
+
+No es confusión suya. Son dos cosas sin relación:
+
+| | qué es |
+|---|---|
+| `argus.propagate` | el **módulo**: lleva el contexto entre hilos, procesos y colas |
+| `ARGUS_PROPAGATE` | si **confiar** en un `traceparent` ajeno — decisión de seguridad |
+
+Y el log las ponía una al lado de la otra, el mismo día en que ellos acababan
+de tocar la primera.
+
+### El arreglo no puede romper a quien ya nos usa
+
+`ARGUS_PROPAGATE` está en tres repositorios que no controlamos. **Romperlo
+para arreglar una palabra sería cobrarles a ellos nuestro error.**
+
+- `ARGUS_TRUST_INBOUND` es el nombre nuevo y dice lo que hace.
+- `ARGUS_PROPAGATE` sigue funcionando, sin aviso: tenerlo puesto no es un
+  error, es haber llegado antes.
+- Si están **los dos y en desacuerdo**, gana el nuevo y se avisa. Un
+  desacuerdo silencioso aquí decide si se adopta un `traceparent` de fuera, y
+  ése es el peor sitio posible para elegir callando.
+- El log de `init()` dice `trust_inbound`, y `Config.trust_inbound` existe
+  junto a `propagate`, que conserva el nombre porque lo leen el middleware
+  ASGI y los tests.
+
+### Y de paso, un silencio que no habíamos visto
+
+El valor inválido se coercionaba a `"never"` **sin decir nada**. Caer al modo
+más seguro es correcto; no decirlo convierte una errata en una decisión
+invisible — alguien escribe `allways` y se queda sin trazas distribuidas
+creyendo que las tiene. Ahora avisa y sigue cayendo a `never`.
+
+### La receta del `Executor` estaba mal dada
+
+Dijimos *«cambiar la clase es todo lo que hay que hacer»*. Es falso si el SDK
+es una dependencia **opcional**, que es lo correcto para un SDK de
+observabilidad: la aplicación tiene que arrancar sin él.
+
+Prosodia lo tiene en un extra `web`, y la misma función la corre también una
+CLI que no lo instala. Un import a secas la rompe al arrancar, en una ruta que
+no toca telemetría. Su patrón, en el README con su nombre:
+
+```python
+from concurrent.futures import ThreadPoolExecutor   # el caso base, primero
+
+try:
+    from argus.propagate import Executor as ThreadPoolExecutor
+except ImportError:
+    pass
+```
+
+**El orden es la mitad que hace que funcione** y no se nos habría ocurrido: al
+revés, `mypy` lo rechaza porque asigna un supertipo sobre un subtipo. Declarar
+el estándar y estrecharlo después es lo que comprueba.
+
+### Lo que esto dice del método
+
+Los dos hallazgos salen de la misma frase de un equipo que estaba haciendo
+otra cosa. Ninguno se ve leyendo el código: el primero necesita que alguien
+lea un log en un momento concreto, y el segundo que alguien tenga una
+topología de dependencias que nosotros no tenemos.
+
+Es la cuarta vez esta semana que un consumidor encuentra algo que yo no
+encontraría nunca. **La documentación de un SDK no la valida quien lo escribe.**
+
+Publicado en `1.0.0a14`. Y el README arrastraba todavía el vocabulario de
+entorno que D-106 retiró — corregido ahí también.
