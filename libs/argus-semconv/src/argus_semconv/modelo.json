@@ -143,7 +143,7 @@
         {
           "id": "argus.tenant",
           "type": "string",
-          "brief": "Inquilino, si aplica. Viaja en baggage."
+          "brief": "Inquilino, si aplica. El gateway lo SEUDONIMIZA, porque un inquilino puede ser una persona: donde un principal se autentica con contrasena o con secreto de maquina, el identificador es el mismo y no hay forma de saber cual es desde el campo. NO viaja en baggage, y ese texto estuvo aqui hasta D-108. El baggage cruza procesos y maquinas en cabeceras, y nuestra propia regla dura dice que no lleva PII — asi que este campo se contradecia con ella a dos funciones de distancia. Se hashea EN SITIO, como `session.id`: un inquilino seudonimizado sigue siendo el inquilino y sigue agrupando, que es para lo que el campo existe."
         }
       ]
     },

@@ -103,7 +103,17 @@ def set_baggage(**values: str) -> object:
     cruza procesos y maquinas; todo lo que metas aqui acaba en sitios que no
     controlas.
 
-    Lo que si va: `argus.app`, `argus.run.id`, `argus.tenant`.
+    Lo que si va: `argus.app` y `argus.run.id`.
+
+    `argus.tenant` estuvo en esta lista y se retiro: un inquilino puede ser
+    una persona. Donde un principal se autentica con contrasena o con secreto
+    de maquina el identificador es el mismo, asi que el campo no puede
+    prometer que no lleva PII — y esta funcion lo listaba como seguro dos
+    parrafos despues de declarar la regla dura (D-108).
+
+    Si necesitas atribuir coste por inquilino, el atributo sigue existiendo y
+    el gateway lo seudonimiza; lo que no hace es cruzar maquinas en una
+    cabecera.
     """
     ctx = context.get_current()
     for key, value in values.items():

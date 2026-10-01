@@ -202,6 +202,31 @@ processors:
           # el target en el span en vez de en el evento.
           - set(span.attributes["argus.target.id"], SHA256(Concat([span.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.target.type"] == "user"
           - set(span.attributes["argus.target.id"], SHA256(Concat([span.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.target.type"] == "client"
+          # EL INQUILINO PUEDE SER UNA PERSONA.
+          #
+          # Lo encontro Prometheus sin buscarlo. Pidieron que verificaramos el
+          # seudonimo de su objetivo, y en el mismo evento estaba esto:
+          #
+          #   enduser.pseudo.id = 9b154d1bde62…   el actor, protegido
+          #   argus.tenant      = d2e0e23d-8599…  EL MISMO SUJETO, en claro
+          #
+          # Comprobado hasheando el valor con nuestra sal: da exactamente el
+          # seudonimo de al lado. O sea que la seudonimizacion del actor queda
+          # anulada DENTRO DEL MISMO EVENTO, dos campos mas alla.
+          #
+          # Es la tercera vez con la misma forma —el ambito `spanevent`, el
+          # tipo `client`, y ahora este— y la regla ya estaba escrita: un
+          # seudonimo vale lo que vale el sitio menos protegido donde aparece
+          # ese sujeto (D-108).
+          #
+          # Y es nuestro, no suyo: en `P-32` les dijimos que `argus.tenant` ya
+          # llevaba el cliente, asi que retiraron un atributo propio para
+          # usarlo. Hicieron exactamente lo que documentamos.
+          #
+          # Se hashea EN SITIO, como `session.id`: un inquilino seudonimizado
+          # sigue siendo el inquilino y sigue agrupando, que es para lo que el
+          # campo existe.
+          - set(span.attributes["argus.tenant"], SHA256(Concat([span.attributes["argus.tenant"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where span.attributes["argus.tenant"] != nil
       # --- Los MISMOS atributos, pero en un EVENTO de span -----------------
       #
       # `context: span` NO alcanza los atributos de los eventos. Son un ambito
@@ -262,6 +287,7 @@ processors:
           # prueba comprueba que esta enumeracion coincide con ella.
           - set(spanevent.attributes["argus.target.id"], SHA256(Concat([spanevent.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.target.type"] == "user"
           - set(spanevent.attributes["argus.target.id"], SHA256(Concat([spanevent.attributes["argus.target.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.target.type"] == "client"
+          - set(spanevent.attributes["argus.tenant"], SHA256(Concat([spanevent.attributes["argus.tenant"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["argus.tenant"] != nil
 
     log_statements:
       - context: log
@@ -274,6 +300,9 @@ processors:
           # Mismo criterio que en trazas: el correo no viaja al almacen.
           - delete_key(log.attributes, "user.email")
           - delete_key(log.attributes, "user_email")
+          # Nadie lo manda aqui hoy. Se cubre igual porque el hueco de D-092
+          # fue exactamente eso: unos ambitos cubiertos y otros no.
+          - set(log.attributes["argus.tenant"], SHA256(Concat([log.attributes["argus.tenant"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["argus.tenant"] != nil
 
   # El sesgo del muestreo, escrito EN el dato.
   #
