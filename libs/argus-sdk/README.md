@@ -277,6 +277,53 @@ Activity.
 > caliente. La primera es la tercera vía por la que la misma llamada acababa
 > paginando — guardrail, `codes.Error` y SLO.
 
+## Una denegación no es un error, y lleva quién la hizo
+
+```python
+with argus.step("tool.invoke") as s:
+    if not politica.permite(peticion):
+        s.denied(by="policy")        # `policy` · `human` · `budget`
+        return
+```
+
+`denied()` pone **las dos mitades** —`argus.outcome=denied` y
+`argus.denied_by`— y lo hace en una llamada porque el fallo de este par no es
+escribir un valor malo, es escribir media pareja:
+
+| lo que falta | qué se rompe |
+|---|---|
+| `denied` sin `denied_by` | la denegación no se puede atribuir, y **el hueco no se ve**: un `GROUP BY` sobre un campo ausente devuelve una fila, no una queja |
+| `denied_by` sin `denied` | la dimensión cuelga de un paso que siguió adelante, y contamina cualquier recuento de denegaciones |
+
+El SDK avisa de las dos **al cerrar el paso**, no al escribir el campo: lo que
+hay que mirar es lo que se emite, no lo que se ha escrito hasta esa línea.
+
+**Tres cosas que una denegación NO es:**
+
+- **No es un `error`.** El sistema hizo lo correcto. Contarla como fallo
+  ensucia cualquier tasa de error con decisiones acertadas.
+- **No es un `cancelled`**, que sugiere que alguien se arrepintió.
+- **No enciende el camino caliente.** No lleva `argus.guardrail` y `denied()`
+  no marca `argus.hot`. Ese campo significa «este run se paró y hay que mirarlo
+  ya», y marcar cada denegación de política paginaría en todas: la fatiga de
+  alertas construida desde dentro.
+
+**Pero se conserva entera.** La política `auditoria` del gateway se queda el
+**100 %** de las trazas con `argus.outcome = denied`, así que no va al 10 % del
+baseline y esta dimensión no se muestrea. Las dos cosas a la vez —no paginar y
+no muestrear— son el punto: se cambió una notificación de más por un registro
+completo, porque el ruido se nota y un registro con huecos no.
+
+> `argus.denied_by` es de Aeon, y su argumento era consecuencia de un consejo
+> **nuestro**: les dijimos que no pusieran `argus.guardrail` en una denegación
+> de política, y con eso dejamos la denegación sin ningún portador de quién
+> denegó. `human` significa una persona **autenticada** desde que cerraron su
+> clase de llamador.
+
+**Dice la clase, nunca cuál.** El *quién* concreto es `user.id` /
+`enduser.pseudo.id`, que son del estándar y que el gateway seudonimiza. La
+cardinalidad cerrada de aquí es justo lo que permite agrupar sin tocar a nadie.
+
 ## Por qué `localhost` y no el plano central
 
 Las aplicaciones exportan **siempre** al Collector agente de su propia máquina.

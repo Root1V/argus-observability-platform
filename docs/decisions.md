@@ -5310,3 +5310,166 @@ la prueba que decía verificarla verificaba la lectura buena.
 La diferencia importa para el arreglo —no había que cambiar el código— y
 importa para el relato: Prosodia escribió algo falso en su `.env.example`;
 nosotros escribimos algo cierto de una forma que invitaba a escribir eso.
+
+---
+
+## D-112 · `argus.denied_by`: el campo que existe porque nuestro propio consejo dejó un hueco
+
+**Fecha**: 2026-10-02 · **Versión**: `1.0.0a18`
+
+### Por qué existe el campo
+
+Aeon nos trajo cinco desenlaces (`result` · `denied_by_policy` ·
+`approval_granted` · `approval_denied` · `approval_expired`) y los colapsamos a
+tres valores que ya teníamos más uno nuevo, `denied`. El colapso fue correcto y
+**perdía una cosa: quién denegó.**
+
+Y por separado les recomendamos que una denegación de política **no** llevara
+`argus.guardrail`, porque ese campo enciende el camino caliente y marcarla así
+paginaría en cada denegación.
+
+Las dos decisiones por separado eran buenas. Juntas dejaron la denegación sin
+**ningún** portador de quién la hizo, y eso no lo vimos nosotros: lo vio Aeon,
+razonando sobre la consecuencia de nuestro propio consejo.
+
+> *«Como ya no ponemos `argus.guardrail`, no queda ningún portador de quién
+> denegó.»*
+
+Es la segunda vez que un consejo nuestro a este equipo tiene un efecto que no
+habíamos calculado (la primera fue D-099, donde el mismo consejo dejó sus
+denegaciones al 10 %). El patrón merece el nombre: **una recomendación que
+quita algo tiene que decir qué ocupa su sitio.** Quitamos el guardarraíl de la
+denegación y no pusimos nada donde estaba la atribución.
+
+### El vocabulario
+
+`policy · human · budget`, cerrado, los tres que ellos pidieron.
+
+`human` significa **una persona autenticada**, y eso es cierto solo desde que
+Aeon cerró su clase de llamador: antes su aprobación la podía conceder
+cualquiera que alcanzase el puerto. Un `human` que en realidad significa «algo
+llegó al puerto» es peor que no tener el campo, porque se lee como atribución.
+
+**Dice la clase, nunca cuál.** El *quién* concreto es `user.id` /
+`enduser.pseudo.id`, que son del estándar y que el gateway seudonimiza. La
+cardinalidad cerrada de aquí es lo que permite agrupar sin tocar a nadie — es
+D-086 otra vez: no inventar nombre propio para lo que ya lo tiene.
+
+### Lo que se fija no es el vocabulario, es el PAR
+
+El vocabulario es la parte fácil. El defecto real es **medio par**, y tiene dos
+formas que se escriben las dos sin error:
+
+| lo que falta | qué se rompe |
+|---|---|
+| `denied` sin `denied_by` | la denegación no se puede atribuir |
+| `denied_by` sin `denied` | la dimensión cuelga de un paso que siguió, y contamina el recuento de denegaciones |
+
+La primera es la peligrosa, y por el motivo de siempre: **el hueco no se ve al
+consultar.** Un `GROUP BY` sobre un campo ausente devuelve una fila, no una
+queja. Si el defecto no duele en la emisión, no duele en ningún sitio.
+
+Por eso `Step.denied(by=...)` pone las dos mitades en **una** llamada, y por eso
+el aviso existe además para quien escriba el atributo a mano — que es como lo
+hacen los cuatro servicios Go de Aeon, leyendo `modelo.json`.
+
+### Dónde va el aviso: en el cierre, no en la escritura
+
+En `_finalize`, sobre el estado **resuelto**. Es la lección de D-110 aplicada
+antes de repetirla: un aviso que mira un campo antes de que el paso acabe se
+dispara sobre quien va a ponerlo bien en la línea siguiente. Hay una prueba de
+eso —poner el par en dos llamadas no avisa— y es la prueba que la versión a16
+no tenía.
+
+**Y no se rellena.** La tentación era hacer `setdefault("unknown")`, que es
+exactamente el `setdefault("ok")` de D-097 con otro campo: inventar un hecho
+para tapar una ausencia. Avisar y escribir lo que haya.
+
+### Medido antes de escribir a nadie
+
+La regla de D-110: comprobar qué vería cada equipo **antes** de mandarles la
+versión. Catorce días de almacén:
+
+```
+quién emite `argus.outcome`      ámbito span        ámbito spanevent
+aeon-*                           denied, suspended, timeout, ok    —
+gateway (Prometheus)             —                  ok, error  (24)
+Prosodia                         —                  —
+```
+
+Ningún equipo emite `denied` hoy, así que **el aviso nuevo no se dispara en
+ninguno**. El único que lo verá es Aeon, cuando emita lo que pidió.
+
+### Verificado en el almacén, no en la configuración
+
+Cuatro denegaciones reales por la tubería completa:
+
+- las tres atribuidas llegan con su `argus.denied_by`
+- **ninguna** lleva `argus.hot` ni `argus.guardrail` — no pagina
+- la no atribuida **llega igual**, con el campo vacío: avisar no es descartar
+- la política `auditoria` del muestreo las conserva: su contador subió a 16,
+  y 4 de 4 no es sobrevivir a un baseline del 10 %
+
+Las dos propiedades juntas —no paginar y no muestrear— son el punto de D-099:
+se cambió una notificación de más por un registro completo, porque el ruido se
+nota y un registro con huecos no.
+
+### Lo que esto tardó
+
+Dije *«os aviso al publicarlo»* el 30 de septiembre. Se publica el 2 de
+octubre, dos días después, y en medio salieron a14, a15, a16 y a17 — ninguna lo
+llevaba. Lo que se colaba delante cada vez era un defecto recién encontrado, y
+un defecto recién encontrado siempre parece más urgente que una promesa vieja.
+No lo es cuando el defecto no afecta a nadie todavía y la promesa bloquea a un
+equipo.
+
+---
+
+## D-113 · Tercera vez que `spanevent` se queda fuera de la medición
+
+**Fecha**: 2026-10-02
+
+### El error
+
+Midiendo qué vería cada equipo con `denied_by` (D-112), la primera consulta
+dio esto:
+
+```sql
+SELECT SpanAttributes['argus.outcome'] ... FROM otel.otel_traces
+```
+
+Y con ella concluí que Prometheus no emite `argus.outcome`. **Lo emite**: 24
+veces en catorce días, en su evento `audit.admin_action`, que vive en el ámbito
+**spanevent** y no en los atributos del span.
+
+Lo peor no es la consulta: es que **ya se lo había dicho a ellos**. En `A-35`
+escribí *«ninguna de las validaciones nuevas os toca, porque no emitís ni
+`argus.outcome` ni `argus.guardrail`»*, apoyado en la misma medición ciega. Hay
+que corregirlo en el canal.
+
+### Es la tercera
+
+| | dónde se escapó |
+|---|---|
+| D-092 | la seudonimización cubría `span` y `log`, no `spanevent` — un seudónimo roto por el ámbito que faltaba |
+| D-098 | la política `auditoria` necesitaba `ottl_condition` porque `string_attribute` solo mira el span |
+| **D-113** | la **medición** mira `SpanAttributes` y no `Events.Attributes` |
+
+Las tres tienen la misma forma: **el evento de auditoría de Prometheus vive en
+el ámbito que nadie mira por defecto**, y es justo el dato que más importa
+reconstruir. Y las tres veces lo encontré después de afirmar algo.
+
+La diferencia esta vez es el sitio: ya no es el código, es **cómo mido**. Un
+defecto en el código lo caza una prueba; un defecto en la consulta con la que
+compruebo cosas se propaga a todo lo que afirmo con ella, y pasa el filtro
+porque el número sale.
+
+### Qué se hace
+
+- Corregir `A-35` en el canal de Prometheus, con el número.
+- Y la consecuencia que importa para ellos: **el vocabulario cerrado de
+  `argus.outcome` no se les comprueba en el SDK**, porque `Step.outcome()`
+  escribe atributos de span y su evento de auditoría lo construyen a mano.
+  Sus valores de hoy (`ok`, `error`) son válidos; lo que no existe es nada que
+  lo garantice mañana. Es el argumento con el que Aeon nos pidió validación en
+  la ingesta, y ahora hay un segundo equipo en el mismo caso.

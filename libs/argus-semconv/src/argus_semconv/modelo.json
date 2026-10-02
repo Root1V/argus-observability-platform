@@ -215,6 +215,21 @@
           ]
         },
         {
+          "id": "argus.denied_by",
+          "type": "enum",
+          "brief": "QUE CLASE de decision paro el paso, y solo tiene sentido cuando `argus.outcome` vale `denied`: `policy` una regla, `human` una persona autenticada que ejercio su veto, `budget` un limite agotado. NO enciende el camino caliente. Una denegacion es el sistema haciendo lo correcto, no un incidente; `argus.guardrail` es para un run que se paro y hay que mirar ya. Lo que SI hace es conservarse entera: la politica `auditoria` del gateway se queda el 100% de las trazas con `argus.outcome=denied`, asi que esta dimension no se muestrea. Una denegacion SIN este campo no es un error, es una denegacion que no se puede atribuir — y el hueco no se ve al consultar, porque un `GROUP BY` sobre un campo ausente devuelve una fila y no una queja. El SDK avisa al emitirla.",
+          "members": [
+            "policy",
+            "human",
+            "budget"
+          ],
+          "examples": [
+            "policy",
+            "human",
+            "budget"
+          ]
+        },
+        {
           "id": "argus.duration_ms",
           "type": "int",
           "brief": ""

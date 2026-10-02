@@ -49,6 +49,7 @@ const (
 const (
 	ArgusEvent = "argus.event"
 	ArgusOutcome = "argus.outcome"
+	ArgusDeniedBy = "argus.denied_by"
 	ArgusDurationMs = "argus.duration_ms"
 	ArgusStepDepth = "argus.step.depth"
 )

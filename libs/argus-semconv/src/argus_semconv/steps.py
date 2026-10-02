@@ -103,6 +103,28 @@ class Step:
             )
         return self.set(**{A.ARGUS_OUTCOME: value})
 
+    def denied(self, by: str) -> Step:
+        """El paso se nego. `by` dice QUE CLASE de decision lo paro.
+
+        Existe como UNA llamada y no como dos porque el fallo de este par no es
+        poner un valor malo, es poner medio par: `denied` sin `by` deja una
+        denegacion que no se puede atribuir, y `by` sin `denied` cuelga la
+        dimension de algo que no fue una denegacion. Las dos mitades sueltas se
+        escriben sin error y las dos rompen el `GROUP BY` que es la unica razon
+        por la que el campo existe.
+
+        `argus.denied_by` lo pidio Aeon, y su argumento era consecuencia de una
+        recomendacion NUESTRA: les dijimos que no pusieran `argus.guardrail` en
+        una denegacion de politica —porque ese campo enciende el camino
+        caliente— y con eso dejamos de tener cualquier portador de quien denego.
+
+        NO marca `argus.hot`, al contrario que `error()`. Una denegacion es el
+        sistema haciendo lo correcto. Lo que si pasa es que la traza se conserva
+        entera: la politica `auditoria` del gateway se queda el 100% de las
+        trazas con `argus.outcome=denied`.
+        """
+        return self.set(**{A.ARGUS_OUTCOME: "denied", A.ARGUS_DENIED_BY: by})
+
     def error(self, error_type: str, *, retryable: bool | None = None) -> Step:
         self.set(**{A.ERROR_TYPE: error_type, A.ARGUS_OUTCOME: "error", A.ARGUS_HOT: True})
         if retryable is not None:
@@ -112,6 +134,55 @@ class Step:
         except Exception:  # noqa: BLE001
             pass
         return self
+
+    def _avisar_de_la_atribucion(self) -> None:
+        """Comprueba el par `denied` / `denied_by` sobre el estado RESUELTO.
+
+        Aqui y no en `outcome()` por un motivo que ya me costo una ronda: un
+        aviso que mira un campo antes de que el paso acabe se dispara sobre
+        quien va a ponerlo bien en la linea siguiente. Lo que hay que mirar es
+        lo que se emite, no lo que se ha escrito hasta ahora (D-110).
+
+        Y por eso valida tambien el VALOR aqui: asi cubre a quien escribe el
+        atributo con `set()` en vez de con `denied()`, que es como lo haran los
+        servicios Go que emiten nuestros atributos a mano.
+        """
+        desenlace = self._fields.get(A.ARGUS_OUTCOME)
+        quien = self._fields.get(A.ARGUS_DENIED_BY)
+        evento = self._fields.get(A.ARGUS_EVENT, "?")
+
+        if desenlace == "denied" and quien is None:
+            warnings.warn(
+                f"Argus: {evento!r} se nego sin decir quien.\n"
+                f"  `argus.outcome=denied` sin `argus.denied_by` deja una "
+                f"denegacion que no se puede atribuir, y el hueco no se ve al "
+                f"consultar: un GROUP BY sobre un campo ausente devuelve una "
+                f"fila, no una queja.\n"
+                f"  Usa `s.denied(by=...)` con uno de: "
+                f"{', '.join(A.ARGUS_DENIED_BY_VALUES)}.",
+                RuntimeWarning,
+                stacklevel=4,
+            )
+        elif quien is not None and desenlace != "denied":
+            # La otra mitad del par. Cuelga la dimension de algo que no fue
+            # una denegacion, asi que `GROUP BY argus.denied_by` cuenta pasos
+            # que siguieron adelante.
+            warnings.warn(
+                f"Argus: {evento!r} lleva `argus.denied_by={quien!r}` y su "
+                f"desenlace es {desenlace!r}, no `denied`.\n"
+                f"  Esa dimension solo tiene sentido sobre una denegacion; "
+                f"asi contamina cualquier recuento de denegaciones.",
+                RuntimeWarning,
+                stacklevel=4,
+            )
+        elif quien is not None and quien not in A.ARGUS_DENIED_BY_VALUES:
+            warnings.warn(
+                f"argus.denied_by={quien!r} no esta en el vocabulario: "
+                f"{', '.join(A.ARGUS_DENIED_BY_VALUES)}. Se escribe igual, pero "
+                f"no agrupara con el resto del portafolio.",
+                RuntimeWarning,
+                stacklevel=4,
+            )
 
     def _finalize(self) -> None:
         elapsed_ms = int((time.perf_counter() - self._started) * 1000)
@@ -124,6 +195,8 @@ class Step:
         # registrado cada espera como un exito (D-097). Para eso existe
         # `suspended`.
         self._fields.setdefault(A.ARGUS_OUTCOME, "ok")
+
+        self._avisar_de_la_atribucion()
 
         # Marca para el camino caliente: si la operacion supero el objetivo de
         # latencia de su componente, el Collector agente la enruta a deteccion
