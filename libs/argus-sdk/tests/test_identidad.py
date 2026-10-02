@@ -166,3 +166,73 @@ def test_el_aviso_del_entorno_mira_el_valor_RESUELTO(monkeypatch) -> None:
         cfg = Config.from_env("idp-api")
     assert cfg.environment == "bare-metal"
     assert [a for a in capturados if "no esta en el vocabulario" in str(a.message)]
+
+
+# --- La via estandar cuenta como identidad puesta ---------------------------
+
+
+def test_el_namespace_por_la_via_estandar_no_avisa(monkeypatch) -> None:
+    """`OTEL_RESOURCE_ATTRIBUTES` es la via de migracion que documentamos.
+
+    La primera version de este aviso miraba solo `ARGUS_NAMESPACE` y daba un
+    falso positivo contra la configuracion de Prometheus, que pone su identidad
+    entera por esa via. O sea que avisaba precisamente a quien siguio la ruta
+    que le dimos (D-110).
+
+    Es el mismo error que el aviso venia a arreglar —comprobar la variable que
+    espero en vez del valor real— cometido un nivel mas afuera, en el mismo
+    cambio.
+    """
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "gateway")
+    monkeypatch.setenv(
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "service.namespace=prometheus-inference-platform,deployment.environment.name=development",
+    )
+    with warnings.catch_warnings(record=True) as capturados:
+        warnings.simplefilter("always")
+        cfg = Config.from_env()
+    assert [a for a in capturados if "identidad" in str(a.message)] == []
+    assert cfg.namespace == "prometheus-inference-platform"
+
+
+def test_el_entorno_por_la_via_estandar_se_adopta(monkeypatch) -> None:
+    """Y llega al Config, no solo al aviso: `langfuse.environment` lo refleja."""
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "gateway")
+    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=staging")
+    monkeypatch.setenv("ARGUS_NAMESPACE", "x")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cfg = Config.from_env()
+    assert cfg.environment == "staging"
+
+
+def test_un_entorno_invalido_por_la_via_estandar_SI_avisa(monkeypatch) -> None:
+    """Adoptarlo no significa aceptarlo: `bare-metal` llega igual y avisa."""
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "gateway")
+    monkeypatch.setenv("ARGUS_NAMESPACE", "x")
+    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=bare-metal")
+    with warnings.catch_warnings(record=True) as capturados:
+        warnings.simplefilter("always")
+        cfg = Config.from_env()
+    assert cfg.environment == "bare-metal"
+    assert [a for a in capturados if "no esta en el vocabulario" in str(a.message)]
+
+
+def test_las_variables_argus_ganan_a_la_via_estandar(monkeypatch) -> None:
+    """Lo explicito pisa la variable, que es la regla de D-072."""
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "gateway")
+    monkeypatch.setenv("ARGUS_NAMESPACE", "elegido-a-mano")
+    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=de-la-variable")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cfg = Config.from_env()
+    assert cfg.namespace == "elegido-a-mano"
+
+
+def test_hay_un_solo_parser() -> None:
+    """Habia dos y no coincidian: `_resource` sabia de la via estandar y los
+    avisos no. Uno solo es lo que impide que vuelvan a divergir."""
+    from argus import _resource
+    from argus._config import atributos_del_entorno_otel
+
+    assert _resource.atributos_del_entorno_otel is atributos_del_entorno_otel
