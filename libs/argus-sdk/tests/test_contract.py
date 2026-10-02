@@ -10,6 +10,8 @@ import subprocess
 import sys
 import textwrap
 
+from argus._config import Config
+
 TIMEOUT = 120
 
 
@@ -300,3 +302,48 @@ def test_grpc_headers_are_lowercased() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
+
+
+def test_sin_endpoint_SI_se_exporta() -> None:
+    """La otra lectura de «no-op sin configurar», que es la cara.
+
+    El punto 3 del contrato dice «no-op si NO llamas a `init()`», y eso lo
+    verifica `test_helpers_work_without_init`. Pero la frase se leia tambien
+    como «sin endpoint no se exporta», y esa lectura es FALSA: tras `init()`
+    el endpoint cae a localhost y se manda de verdad.
+
+    Prosodia la leyo asi —lo escribieron en su propio `.env.example`— y su
+    suite de tests acabo metiendo 1.797 registros en el almacen compartido,
+    899 de ellos mientras verificaban que no metian registros raros (D-111).
+
+    Esta prueba fija la verdad incomoda para que la documentacion no pueda
+    volver a sugerir la comoda.
+    """
+    cfg = Config.from_env("sin-endpoint")
+    assert cfg.endpoint, "sin endpoint configurado deberia caer a uno por defecto"
+    assert "localhost" in cfg.endpoint or "127.0.0.1" in cfg.endpoint
+    assert not cfg.disabled, (
+        "no configurar un endpoint NO desactiva la telemetria: "
+        "la unica forma es ARGUS_DISABLED"
+    )
+
+
+def test_la_unica_forma_de_no_exportar_es_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("ARGUS_DISABLED", "1")
+    assert Config.from_env("apagado").disabled is True
+
+
+def test_el_contrato_no_dice_que_sin_endpoint_no_se_exporta() -> None:
+    """El README es lo que la gente lee, y es donde estaba la ambiguedad.
+
+    Se comprueba el texto porque el defecto no estaba en el codigo: el codigo
+    siempre hizo esto. Estaba en una frase que invitaba a la lectura contraria
+    y que ademas se presentaba como «verificada por tests».
+    """
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "No-op si NO llamas a `init()`" in readme, (
+        "el contrato volvio a la redaccion ambigua"
+    )
+    assert "ARGUS_DISABLED=1" in readme, "falta decir cual es la unica forma de apagar"

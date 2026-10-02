@@ -5223,3 +5223,90 @@ llegan a ningún canal humano» a un equipo cuyos incidentes sí llegan.
 Publicado en `1.0.0a17`. `a16` estuvo publicada veinte minutos y nadie la
 adoptó; se queda en PyPI porque retirarla rompería a quien la hubiera cogido
 entre medias, y lo que hace mal es avisar de más, no romper nada.
+
+---
+
+## D-111 · La frase no era falsa: era ambigua, y la lectura cómoda costó 1.797 registros
+
+> **Fallo de plataforma** · descubierto 2026-10-02 · el punto 3 del contrato del SDK decía «No-op sin configurar», que se lee como «sin endpoint no se exporta» — falso— además de como «sin `init()` no pasa nada» — cierto y lo único que la prueba verifica
+
+**Contexto**: Prosodia encontró el origen de 1.797 registros suyos en nuestro
+almacén. Eran corridas de `pytest`: el `conftest.py` importa la app, la app
+llama a `argus.init()` al importarse, y **sin endpoint configurado el SDK no se
+calla: cae a `localhost:4318` y exporta de verdad.**
+
+Su `.env.example` decía *«sin `OTEL_EXPORTER_OTLP_ENDPOINT` no se exporta nada
+y el coste es cero»*. Lo corrigieron. Y escribieron:
+
+> *«Lo escribimos nosotros, es falso, y es justo la frase que impide buscar
+> este fallo.»*
+
+### Lo mismo estaba en nuestro contrato, y conviene ser exacto
+
+```
+3. **No-op sin configurar.** Los decoradores funcionan con coste cero.
+```
+
+**No es falso.** `test_helpers_work_without_init` lo verifica: sin llamar a
+`init()`, los decoradores no hacen nada. Es la propiedad que permite
+instrumentar librerías propias sin imponer telemetría, y es correcta.
+
+El defecto es que *«sin configurar»* admite dos lecturas:
+
+| lectura | ¿cierta? | ¿la verifica la prueba? |
+|---|---|---|
+| sin llamar a `init()` | sí | sí |
+| sin configurar un endpoint | **no** | no |
+
+Y las cinco líneas del contrato van bajo *«Verificado por tests, no por buenas
+intenciones»*, así que la lectura falsa venía con un sello de garantía que no
+le correspondía.
+
+**Una frase ambigua con una lectura peligrosa es peor que una frase falsa**,
+porque la falsa se descubre al contrastarla y la ambigua se confirma sola:
+quien la lee mal encuentra apoyo en el texto.
+
+### Qué se hace
+
+- El punto 3 dice ahora *«No-op si NO llamas a `init()`»*, y lleva debajo la
+  advertencia explícita de la otra lectura con el nombre de la única forma de
+  apagar: `ARGUS_DISABLED=1`.
+- Lo mismo en `PLAN.md`, que tenía la misma frase.
+- **Tres pruebas nuevas** que fijan la verdad incómoda: que sin endpoint se
+  exporta, que lo único que apaga es `ARGUS_DISABLED`, y que el README no
+  vuelve a la redacción ambigua.
+
+La tercera comprueba el **texto**, y es a propósito: el defecto nunca estuvo en
+el código. El código siempre hizo esto.
+
+### Y cuatro cosas más que Prosodia pagó por descubrir
+
+Van al README con su nombre, porque las cuatro fallan en silencio:
+
+| | |
+|---|---|
+| **Tests y CI** | si tu suite importa la app, tu suite exporta. `ARGUS_DISABLED=1` en el `conftest` raíz |
+| **CLIs y lotes** | `init()` antes de tu logging; la traza raíz se abre a mano; el `namespace` explícito o se auto-excluye |
+| **ASGI** | uvicorn hace `dictConfig` **después** del import, así que enganchar los loggers del servidor ahí se pierde sin error |
+| **Muestreo** | es de trazas, no de registros: 40 peticiones dieron 40 registros y **2 spans** |
+
+La del muestreo es la que más cambia el consejo que damos. *Si una ruta
+importa, sus spans solos no la cubren* — y eso no estaba dicho en ningún sitio.
+
+### Los 1.797 registros
+
+Se quedan. No son suyos para borrar —lo dicen ellos y tienen razón— y tampoco
+nuestros para borrar sin pensarlo: están en la misma tabla que todo lo demás y
+una consulta mal escrita se lleva por delante lo que no toca. Están
+identificados (`unknown-service`, rutas de `pytest-of-…` en el cuerpo) y ahí
+quedan.
+
+### Lo que me corrijo a mí mismo
+
+Al revisar el canal le dije al usuario que mi documentación *«dice exactamente
+lo mismo que ellos corrigieron»* y que era **falsa**. No lo era: era ambigua, y
+la prueba que decía verificarla verificaba la lectura buena.
+
+La diferencia importa para el arreglo —no había que cambiar el código— y
+importa para el relato: Prosodia escribió algo falso en su `.env.example`;
+nosotros escribimos algo cierto de una forma que invitaba a escribir eso.
