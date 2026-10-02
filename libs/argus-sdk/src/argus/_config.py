@@ -138,6 +138,31 @@ def _avisar_de_la_configuracion(endpoint: str, protocol: str) -> None:
 
 
 
+
+def atributos_del_entorno_otel() -> dict[str, str]:
+    """Lo que trae `OTEL_RESOURCE_ATTRIBUTES`, como diccionario.
+
+    Es la via de migracion que nuestro propio README documenta —*«para que una
+    app que ya tiene OTel migre sin tocar codigo»*— asi que cualquier
+    comprobacion de identidad tiene que mirarla. No hacerlo avisa precisamente
+    a quien siguio la ruta que le dimos.
+
+    Vive aqui y no en `_resource.py` para que haya UN parser: la primera
+    version de los avisos de D-109 miraba solo las variables `ARGUS_*` y daba
+    dos falsos positivos contra la configuracion de Prometheus, que pone su
+    identidad entera por esta via (D-110).
+    """
+    crudo = os.getenv("OTEL_RESOURCE_ATTRIBUTES", "")
+    salida: dict[str, str] = {}
+    for parte in crudo.split(","):
+        if "=" not in parte:
+            continue
+        clave, _, valor = parte.partition("=")
+        clave, valor = clave.strip(), valor.strip()
+        if clave and valor:
+            salida[clave] = valor
+    return salida
+
 # Lo que sale cuando nadie dijo como se llama esto.
 SERVICIO_DESCONOCIDO: Final = "unknown-service"
 
@@ -349,7 +374,10 @@ class Config:
             or os.getenv("OTEL_SERVICE_NAME")
             or SERVICIO_DESCONOCIDO
         )
-        resolved_namespace = os.getenv("ARGUS_NAMESPACE", "")
+        del_otel = atributos_del_entorno_otel()
+        # La via estandar cuenta como identidad puesta: es la que documentamos
+        # para migrar sin tocar codigo.
+        resolved_namespace = os.getenv("ARGUS_NAMESPACE") or del_otel.get("service.namespace", "")
         _avisar_de_la_identidad(resolved_service, resolved_namespace)
 
         protocol = os.getenv("ARGUS_PROTOCOL") or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or ""
@@ -412,6 +440,10 @@ class Config:
             cfg.instance_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         if not cfg.namespace:
             cfg.namespace = cfg.service
+        if not cfg.environment:
+            # Sin inventar: solo se adopta lo que la via estandar ya declaro.
+            cfg.environment = del_otel.get("deployment.environment.name", "")
+
         # El entorno NO se inventa. Antes caia a `local`, que no esta en el
         # vocabulario del estandar que D-106 cerro — asi que este SDK sellaba
         # en silencio un valor invalido, y el aviso de D-106 no podia verlo
@@ -426,7 +458,9 @@ class Config:
 
         # Al final y sobre el valor RESUELTO, no sobre la variable: un defecto
         # fuera de vocabulario tiene que avisar igual que uno escrito a mano.
-        _avisar_del_entorno(cfg.environment)
+        # El valor que de verdad llega al almacen puede venir de la via
+        # estandar, que el detector de recursos aplica y este Config no leia.
+        _avisar_del_entorno(cfg.environment or del_otel.get("deployment.environment.name", ""))
 
         return cfg
 

@@ -12,18 +12,21 @@ simplemente los atributos no aparecen.
 
 from __future__ import annotations
 
-import os
-
 from argus_semconv import attributes as A
 from opentelemetry.sdk.resources import Resource
 
-from ._config import Config
+from ._config import Config, atributos_del_entorno_otel
 
 
 def _del_entorno() -> set[str]:
-    """Claves que OTEL_RESOURCE_ATTRIBUTES ya trae."""
-    crudo = os.getenv("OTEL_RESOURCE_ATTRIBUTES", "")
-    return {p.split("=", 1)[0].strip() for p in crudo.split(",") if "=" in p}
+    """Claves que OTEL_RESOURCE_ATTRIBUTES ya trae.
+
+    Delega en `_config` para que haya UN parser. Habia dos y no coincidian:
+    este sabia de la via estandar y el de los avisos de arranque no, asi que
+    los avisos daban falsos positivos contra una identidad que este fichero si
+    veia (D-110).
+    """
+    return set(atributos_del_entorno_otel())
 
 
 def build_resource(cfg: Config, extra: dict[str, object] | None = None) -> Resource:

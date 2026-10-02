@@ -5143,3 +5143,83 @@ Ninguno de los cuatro salió de nuestras pruebas, y los cuatro son el mismo modo
 de fallo: **la aplicación funciona, los datos llegan, y no sirven.** Es el único
 tipo de defecto que no se encuentra usando tu propio software, porque tú ya
 tienes las variables puestas.
+
+---
+
+## D-110 · El mismo error que el aviso venía a arreglar, un nivel más afuera y en el mismo cambio
+
+> **Fallo de plataforma** · descubierto 2026-10-02 · el aviso de identidad de `a16` comprobaba `ARGUS_SERVICE`/`ARGUS_NAMESPACE` y no `OTEL_RESOURCE_ATTRIBUTES`, así que daba **dos falsos positivos** contra la configuración de Prometheus — el único equipo que lo tiene todo puesto
+
+**Contexto**: antes de avisar a los tres equipos de `a16`, fui a comprobar qué
+vería cada uno. Prometheus pone su identidad por la vía estándar:
+
+```
+OTEL_SERVICE_NAME=gateway
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=prometheus-inference-platform,
+                         deployment.environment.name=bare-metal
+```
+
+Y mi aviso nuevo decía:
+
+```
+Argus: arrancando sin identidad.
+  - ARGUS_NAMESPACE: … tus incidentes NO llegan a ningun canal humano
+Argus: sin `deployment.environment.name`. …
+```
+
+**Las dos cosas son falsas.** Las tienen puestas.
+
+### Es literalmente el mismo bug, en el mismo commit
+
+D-109 arregló que el aviso del entorno mirase la variable en vez del valor
+resuelto. Y en ese mismo cambio escribí el aviso de identidad mirando **las
+variables que yo esperaba** en vez de la identidad real.
+
+Un nivel más afuera, con la misma forma, sin verlo. La corrección y la
+repetición del error entraron juntas.
+
+### Y avisa justo a quien siguió la ruta que le dimos
+
+Nuestro propio README dice:
+
+> *«Las estándar de OpenTelemetry (`OTEL_SERVICE_NAME`,
+> `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`) también se
+> respetan, para que una app que ya tiene OTel migre sin tocar código.»*
+
+Prometheus hizo exactamente eso. El aviso les habría dicho que no tienen
+identidad **por usar la vía de migración que documentamos**, que es la peor
+clase de falso positivo: castiga seguir las instrucciones.
+
+### Había dos parsers y no coincidían
+
+`_resource.py` leía `OTEL_RESOURCE_ATTRIBUTES` desde D-072 y sabía no pisar lo
+que trae. Mi aviso no lo sabía. **El recurso que llegaba al almacén estaba
+bien y el aviso sobre ese mismo recurso estaba mal**, en el mismo proceso.
+
+Ahora hay un parser, `atributos_del_entorno_otel()`, y `_resource` lo usa.
+Una prueba comprueba que son el mismo objeto, porque dos parsers que no
+coinciden es lo que acaba de pasar.
+
+### Lo que se arregla además del aviso
+
+`Config.environment` ahora **adopta** el valor de la vía estándar, no solo lo
+consulta para avisar. Antes quedaba vacío aunque el almacén recibiera
+`bare-metal`, así que `langfuse.environment` —que lo espeja— decía otra cosa
+que el recurso.
+
+Adoptarlo no es aceptarlo: `bare-metal` llega igual y **sigue avisando**, que
+es el aviso verdadero y el único que Prometheus debería ver.
+
+### Lo que me salvó
+
+Ir a medir qué vería cada equipo antes de escribirles. No una prueba: las
+pruebas de `a16` pasaban todas, porque las escribí yo con las mismas
+suposiciones que el código.
+
+**Un falso positivo contra el equipo mejor configurado es el peor resultado
+posible de un aviso**, y habría llegado con el mensaje «vuestros incidentes no
+llegan a ningún canal humano» a un equipo cuyos incidentes sí llegan.
+
+Publicado en `1.0.0a17`. `a16` estuvo publicada veinte minutos y nadie la
+adoptó; se queda en PyPI porque retirarla rompería a quien la hubiera cogido
+entre medias, y lo que hace mal es avisar de más, no romper nada.
