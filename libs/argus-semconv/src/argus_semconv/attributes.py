@@ -58,6 +58,8 @@ ARGUS_TARGET_ID: Final[str] = "argus.target.id"
 ARGUS_EVENT: Final[str] = "argus.event"
 ARGUS_OUTCOME: Final[str] = "argus.outcome"
 ARGUS_OUTCOME_VALUES: Final[tuple[str, ...]] = ("ok", "error", "timeout", "cancelled", "degraded", "denied", "suspended",)
+ARGUS_DENIED_BY: Final[str] = "argus.denied_by"
+ARGUS_DENIED_BY_VALUES: Final[tuple[str, ...]] = ("policy", "human", "budget",)
 ARGUS_DURATION_MS: Final[str] = "argus.duration_ms"
 ARGUS_STEP_DEPTH: Final[str] = "argus.step.depth"
 

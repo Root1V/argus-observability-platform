@@ -54,11 +54,23 @@ def test_lo_empaquetado_coincide_con_las_constantes() -> None:
 
 @pytest.mark.parametrize("valor", A.ARGUS_OUTCOME_VALUES)
 def test_los_desenlaces_del_vocabulario_no_avisan(valor: str) -> None:
+    """Un valor del vocabulario no se marca como inventado.
+
+    La asercion se estrecho al anadir `argus.denied_by`: antes decia "ningun
+    aviso que mencione `argus.outcome`" y empezo a fallar con `denied`, porque
+    una denegacion sin atribuir avisa a proposito y su texto cita el campo.
+
+    Fallar estuvo BIEN —es un cambio de comportamiento y lo encontro una prueba
+    que no habia tocado— pero lo que esta prueba afirma es otra cosa: que un
+    valor legitimo no se tache de ilegitimo. El par `denied`/`denied_by` se
+    comprueba abajo, en su propio bloque.
+    """
     with warnings.catch_warnings(record=True) as avisos:
         warnings.simplefilter("always")
         with step("x") as s:
             s.outcome(valor)
-    assert not [a for a in avisos if "argus.outcome" in str(a.message)]
+    tachados = [a for a in avisos if "argus.outcome" in str(a.message) and "no esta en el vocabulario" in str(a.message)]
+    assert not tachados
 
 
 @pytest.mark.parametrize("valor", ["denied_by_policy", "approval_granted", "result", "OK"])
@@ -156,3 +168,115 @@ def test_un_paso_suspendido_no_es_un_guardarrail() -> None:
         s.outcome("suspended")
     assert A.ARGUS_GUARDRAIL not in s.fields
     assert A.ARGUS_HOT not in s.fields
+
+
+# --- `argus.denied_by` ------------------------------------------------------
+#
+# Lo pidio Aeon y lo prometimos hace dos dias. El campo existe porque nuestra
+# propia recomendacion —no pongais `argus.guardrail` en una denegacion de
+# politica— dejo la denegacion sin ningun portador de QUIEN denego.
+#
+# Lo que se fija aqui no es el vocabulario, que es lo facil: es el PAR. Las dos
+# mitades sueltas se escriben sin error y las dos rompen el `GROUP BY` que es
+# la unica razon por la que el campo existe.
+
+
+def _avisos_de(fn) -> list[str]:
+    with warnings.catch_warnings(record=True) as capturados:
+        warnings.simplefilter("always")
+        fn()
+    return [str(a.message) for a in capturados]
+
+
+@pytest.mark.parametrize("valor", A.ARGUS_DENIED_BY_VALUES)
+def test_los_tres_valores_son_los_que_pidio_aeon(valor: str) -> None:
+    """`policy` una regla, `human` una persona, `budget` un limite agotado.
+    Son los tres que nos dieron, y nos cubren exactamente."""
+    assert set(A.ARGUS_DENIED_BY_VALUES) == {"policy", "human", "budget"}
+
+    def emitir() -> None:
+        with step("decision") as s:
+            s.denied(by=valor)
+
+    assert not [a for a in _avisos_de(emitir) if "denied_by" in a]
+
+
+def test_denied_pone_las_dos_mitades() -> None:
+    with step("decision") as s:
+        s.denied(by="policy")
+    assert s.fields[A.ARGUS_OUTCOME] == "denied"
+    assert s.fields[A.ARGUS_DENIED_BY] == "policy"
+
+
+def test_una_denegacion_sin_atribuir_avisa() -> None:
+    """La mitad que importa.
+
+    Es el hueco que Aeon describio: colapsar sus cinco desenlaces a `denied`
+    fue correcto y perdia quien denego. Y el hueco no se ve al consultar —un
+    `GROUP BY` sobre un campo ausente devuelve una fila, no una queja—, asi que
+    el sitio donde tiene que doler es la emision.
+    """
+    def emitir() -> None:
+        with step("decision") as s:
+            s.outcome("denied")
+
+    avisos = [a for a in _avisos_de(emitir) if "sin decir quien" in a]
+    assert avisos, "una denegacion sin atribucion paso en silencio"
+    assert "decision" in avisos[0], "el aviso no dice de que paso habla"
+
+
+def test_la_atribucion_en_dos_llamadas_no_avisa() -> None:
+    """El aviso mira el estado RESUELTO, no el intermedio.
+
+    Esta prueba existe por `a16`: alli un aviso leia un campo antes de que
+    estuviera resuelto y mando dos falsos positivos a un equipo. Poner el par
+    en dos llamadas es correcto y no puede avisar.
+    """
+    def emitir() -> None:
+        with step("decision") as s:
+            s.outcome("denied")
+            s.set(**{A.ARGUS_DENIED_BY: "human"})
+
+    assert not [a for a in _avisos_de(emitir) if "denied" in a]
+
+
+def test_la_otra_mitad_suelta_tambien_avisa() -> None:
+    """`denied_by` sin `denied` cuelga la dimension de un paso que siguio
+    adelante, asi que cualquier recuento de denegaciones lo cuenta."""
+    def emitir() -> None:
+        with step("decision") as s:
+            s.set(**{A.ARGUS_DENIED_BY: "policy"})
+            s.outcome("ok")
+
+    assert [a for a in _avisos_de(emitir) if "no `denied`" in a]
+
+
+def test_un_valor_inventado_avisa_aunque_se_escriba_con_set() -> None:
+    """Cubre a quien emite el atributo a mano, que es como lo hacen los cuatro
+    servicios Go de Aeon: leen `modelo.json` y ponen el atributo ellos."""
+    def emitir() -> None:
+        with step("decision") as s:
+            s.outcome("denied")
+            s.set(**{A.ARGUS_DENIED_BY: "cedar"})
+
+    assert [a for a in _avisos_de(emitir) if "no esta en el vocabulario" in a]
+
+
+def test_una_denegacion_no_enciende_el_camino_caliente() -> None:
+    """La diferencia con `error()`, y el motivo por el que el campo existe.
+
+    Recomendamos a Aeon no marcar `argus.guardrail` en una denegacion porque
+    ese campo pagina en ~2 s, y una denegacion es el sistema haciendo lo
+    correcto. Si `denied()` marcase `argus.hot` estariamos reintroduciendo por
+    la puerta de al lado la fatiga de alertas que ese consejo evitaba.
+    """
+    with step("decision") as s:
+        s.denied(by="policy")
+    assert A.ARGUS_HOT not in s.fields
+    assert A.ARGUS_GUARDRAIL not in s.fields
+
+
+def test_lo_empaquetado_trae_los_valores_de_denied_by() -> None:
+    """Aeon valida contra `modelo.json` desde Go. Si el JSON y el `.py` se
+    desincronizan, ellos comprueban contra una lista y nosotros contra otra."""
+    assert tuple(_miembros("argus.denied_by")) == A.ARGUS_DENIED_BY_VALUES
