@@ -433,7 +433,7 @@ Cinco reglas verificadas con tests, no con buenas intenciones:
 
 1. **Nunca tumba la app.** Inicialización dentro de `try/except` que degrada a no-op y avisa una vez. Colas acotadas con descarte al llenarse: si el Collector cae, la app pierde telemetría, **nunca latencia ni memoria**.
 2. **Idempotente.** `init()` dos veces es no-op la segunda, con aviso, sin excepción, sin spans duplicados.
-3. **No-op si no está configurada.** Sin endpoint, los decoradores funcionan con coste cero.
+3. **No-op si no se llama a `init()`.** Los decoradores funcionan con coste cero, que es lo que permite instrumentar librerías propias. **No confundir con «sin endpoint no se exporta»**: tras `init()` el endpoint cae a `localhost` y se exporta de verdad; la única forma de no exportar es `ARGUS_DISABLED=1` (D-111).
 4. **Cero configuración en el caso normal.** `argus.init()` sin argumentos lee todo del entorno. Los argumentos son para sobrescribir, no para usarse.
 5. **Superficie pública mínima y fijada por test.** Si la API cabe en una pantalla, se adopta.
 

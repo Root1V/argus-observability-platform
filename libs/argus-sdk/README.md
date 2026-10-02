@@ -47,7 +47,14 @@ Verificado por tests en `tests/test_contract.py`, no por buenas intenciones:
 1. **Nunca tumba la aplicación.** Si el Collector está caído, la app pierde
    telemetría, nunca latencia ni memoria.
 2. **Idempotente.** `init()` dos veces es no-op la segunda.
-3. **No-op sin configurar.** Los decoradores funcionan con coste cero.
+3. **No-op si NO llamas a `init()`.** Los decoradores funcionan con coste
+   cero, que es lo que permite instrumentar tus librerías sin imponer
+   telemetría a quien las importe.
+
+   > **Ojo con la otra lectura, porque cuesta cara.** «No-op sin configurar»
+   > NO significa «sin endpoint no se exporta». Una vez llamas a `init()`, el
+   > endpoint cae a `http://localhost:4317` y **se exporta de verdad**. La
+   > única forma de no exportar es `ARGUS_DISABLED=1`. Ver *Tests y CI* abajo.
 4. **Cero configuración en el caso normal.** Todo viene del entorno.
 5. **Superficie pública mínima**, fijada por test.
 
@@ -99,6 +106,95 @@ atribuirse.
 **Nada se inventa para que el aviso desaparezca.** El entorno ausente queda
 ausente: adivinarlo es lo que hizo que este SDK sellara `local` durante semanas
 —un valor que no está en el estándar— sin que nadie lo viera.
+
+
+## Tests y CI: `ARGUS_DISABLED=1`
+
+**Si tu suite importa la app, tu suite exporta telemetría de verdad.**
+
+La cadena no es evidente y la encontró Prosodia con 1.797 registros en el
+almacén compartido:
+
+1. `conftest.py` importa la app de FastAPI.
+2. La app llama a `argus.init()` al importarse — tiene que ser antes de los
+   routers.
+3. Recoger los tests arranca telemetría.
+4. **Sin `OTEL_EXPORTER_OTLP_ENDPOINT`, el SDK no se calla**: cae a
+   `localhost:4318` y manda.
+
+El paso 4 es el que engaña. *No hay endpoint* y *no exportar* son cosas
+distintas, y solo hay una forma de la segunda:
+
+```python
+# conftest.py, en la raíz de la suite, antes de cualquier import
+import os
+os.environ["ARGUS_DISABLED"] = "1"
+```
+
+Se verifica contando: los registros del almacén antes y después de correr la
+suite tienen que ser el mismo número.
+
+## Procesos por lotes y CLIs
+
+Tres cosas que no son evidentes, las tres de Prosodia al instrumentar su CLI:
+
+**1 · `init()` va antes de configurar el logging de tu aplicación.** El puente
+busca un proveedor ya configurado; si configuras después, gana lo tuyo y el
+puente queda sin enganchar. Mismo orden que con el `Executor`: lo tuyo
+primero, lo nuestro encima.
+
+**2 · Hay que abrir la traza raíz a mano.** Un proceso por lotes no tiene
+petición entrante que abra un span, así que sin esto los registros salen todos
+sin `trace_id`:
+
+```python
+with argus.propagate.run("doblaje.cli", app="prosodia"):
+    ...
+```
+
+**3 · Pasa el `namespace` explícitamente.** Si das `service` y no `namespace`,
+el namespace cae al nombre del servicio — así que un driver nuevo del mismo
+producto **se auto-excluye de la consulta por aplicación**:
+
+```python
+argus.init(service="prosodia-cli")                      # namespace = prosodia-cli
+argus.init(service="prosodia-cli", namespace="prosodia")  # correcto
+```
+
+Desde `1.0.0a17` esto avisa al arrancar.
+
+## Aplicaciones ASGI: engancha en el `lifespan`, no en el import
+
+Si quieres los logs del **servidor** (los accesos y errores de uvicorn, que no
+pasan por tu logging), engancharlos donde parece natural —junto a `init()`, al
+importar— **se pierde sin dar error**:
+
+```
+antes de dictConfig:   ['mi-handler']
+después de dictConfig: ['access']
+¿sobrevivió?            False
+```
+
+uvicorn configura su logging con `dictConfig` **después** de importar la app y
+reemplaza los handlers de `uvicorn.access` y `uvicorn.error`. El primer momento
+en que sobrevive es el `lifespan`.
+
+## El muestreo es de trazas, no de registros
+
+El tail sampling del gateway conserva el 100 % de los errores, lo lento, lo
+GenAI y lo que cruza una cola; **el resto va al 10 %**. Los registros no se
+muestrean.
+
+La consecuencia práctica, medida por Prosodia sobre 40 peticiones:
+
+```
+registros exportados   40 de 40
+spans guardados         2 de 40
+```
+
+**Si una ruta te importa, sus spans solos no la cubren.** O emites una línea de
+log por unidad de trabajo —el evento ancho— o marcas lo que importa con
+`argus.hot`, o aceptas ver el 10 %.
 
 ## Propagar el contexto a otro hilo
 
@@ -162,6 +258,24 @@ with argus.propagate.extract_env(name="mi.etapa"):
 
 Les pusimos el mismo nombre y no debimos. El segundo es una decisión de
 seguridad sobre lo que entra; el primero es cómo sale lo tuyo.
+
+
+## Dos sitios donde `step` no va
+
+**Un paso que espera a una persona no lleva SLO.** `argus.step(..., slo_ms=N)`
+pone `argus.hot` por su cuenta cuando el span dura más de N, y `argus.hot`
+enciende el camino caliente: una notificación en segundos. Correcto para un
+paso que debía ser rápido, y una trampa exacta para una espera de aprobación,
+que es operación normal. Su desenlace es `argus.outcome = suspended`.
+
+**Desde código de workflow de Temporal, ni `argus.step` ni `argus.tool`
+directamente.** El SDK resuelve el tracer global y no sabe nada de replays, así
+que un span abierto ahí se vuelve a crear en cada uno. Emite desde una
+Activity.
+
+> Las dos son de Aeon, que las encontró midiendo el contador del camino
+> caliente. La primera es la tercera vía por la que la misma llamada acababa
+> paginando — guardrail, `codes.Error` y SLO.
 
 ## Por qué `localhost` y no el plano central
 
