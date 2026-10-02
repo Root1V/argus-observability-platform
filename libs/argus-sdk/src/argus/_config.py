@@ -137,6 +137,56 @@ def _avisar_de_la_configuracion(endpoint: str, protocol: str) -> None:
         )
 
 
+
+# Lo que sale cuando nadie dijo como se llama esto.
+SERVICIO_DESCONOCIDO: Final = "unknown-service"
+
+
+def _avisar_de_la_identidad(servicio: str, namespace: str) -> None:
+    """Sin identidad, la telemetria llega y no se puede usar.
+
+    Es el mas grave de los avisos de arranque y el ultimo que pusimos.
+
+    Lo reporto Prosodia: arrancaron su stack sin `OTEL_SERVICE_NAME`, los dos
+    procesos salieron como `unknown-service`, **la telemetria se exporto igual
+    y no hubo ningun error**. La unica pista era la linea de `argus.init`, que
+    lo dice si alguien la lee. Cuatrocientos cincuenta registros suyos que ni
+    ellos mismos podian atribuirse, porque el campo que lo diria es el que
+    faltaba (D-109).
+
+    Y el namespace vacio es el mismo fallo con peor consecuencia: el gateway
+    sella `unregistered`, el registro de aplicaciones no lo resuelve, y la
+    criticidad cae a `media` sin canales declarados — asi que sus incidentes
+    se escriben en el log del alert-bus y en ningun sitio mas. Le paso a Aeon
+    durante dias (D-094).
+
+    Un solo aviso para los dos: son la misma categoria —quien eres— y dos
+    avisos seguidos por el mismo arranque se leen como ruido.
+    """
+    faltan = []
+    if servicio == SERVICIO_DESCONOCIDO:
+        faltan.append(
+            "ARGUS_SERVICE (o OTEL_SERVICE_NAME): sin el, nada de lo que mandes "
+            "se puede atribuir ni correlacionar"
+        )
+    if not namespace:
+        faltan.append(
+            "ARGUS_NAMESPACE: sin el, el namespace cae al NOMBRE DEL SERVICIO, "
+            "asi que la identidad de dos niveles desaparece — no se puede "
+            "agrupar por aplicacion — y en el registro entras como provisional, "
+            "o sea sin canales: tus incidentes NO llegan a ningun canal humano"
+        )
+    if not faltan:
+        return
+
+    warnings.warn(
+        "Argus: arrancando sin identidad.\n  - " + "\n  - ".join(faltan)
+        + "\nLa telemetria se exportara igual y sin ningun error, que es lo que "
+        "hace este fallo caro: los datos llegan y no sirven.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
 def _avisar_del_entorno(valor: str) -> None:
     """`deployment.environment.name` tiene vocabulario CERRADO, y es del estandar.
 
@@ -154,6 +204,14 @@ def _avisar_del_entorno(valor: str) -> None:
     dato peor, no un motivo para no arrancar.
     """
     if not valor:
+        warnings.warn(
+            "Argus: sin `deployment.environment.name`. Pon ARGUS_ENVIRONMENT a uno "
+            f"de {', '.join(A.DEPLOYMENT_ENVIRONMENT_NAME_VALUES)}. Ausente es "
+            "preferible a inventado —este SDK ponia `local`, que no esta en el "
+            "estandar— pero sin el no se puede separar produccion de desarrollo.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
         return
     if valor in A.DEPLOYMENT_ENVIRONMENT_NAME_VALUES:
         return
@@ -289,8 +347,10 @@ class Config:
             service
             or os.getenv("ARGUS_SERVICE")
             or os.getenv("OTEL_SERVICE_NAME")
-            or "unknown-service"
+            or SERVICIO_DESCONOCIDO
         )
+        resolved_namespace = os.getenv("ARGUS_NAMESPACE", "")
+        _avisar_de_la_identidad(resolved_service, resolved_namespace)
 
         protocol = os.getenv("ARGUS_PROTOCOL") or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or ""
         if protocol not in ("grpc", "http/protobuf", "http/json"):
@@ -310,11 +370,11 @@ class Config:
         cidrs = tuple(c.strip() for c in os.getenv("ARGUS_TRUSTED_CIDRS", "").split(",") if c.strip())
 
         _avisar_de_la_configuracion(endpoint, protocol)
-        _avisar_del_entorno(os.getenv("ARGUS_ENVIRONMENT") or os.getenv("DEPLOYMENT_ENVIRONMENT", ""))
+
 
         cfg = cls(
             service=resolved_service,
-            namespace=os.getenv("ARGUS_NAMESPACE", ""),
+            namespace=resolved_namespace,
             version=os.getenv("ARGUS_VERSION") or os.getenv("SERVICE_VERSION", ""),
             instance_id=os.getenv("ARGUS_INSTANCE_ID") or os.getenv("HOSTNAME", ""),
             role=os.getenv("ARGUS_ROLE", ""),
@@ -352,8 +412,21 @@ class Config:
             cfg.instance_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         if not cfg.namespace:
             cfg.namespace = cfg.service
-        if not cfg.environment:
-            cfg.environment = "local"
+        # El entorno NO se inventa. Antes caia a `local`, que no esta en el
+        # vocabulario del estandar que D-106 cerro — asi que este SDK sellaba
+        # en silencio un valor invalido, y el aviso de D-106 no podia verlo
+        # porque miraba la variable de entorno y no el valor resuelto.
+        #
+        # Peor: en D-106 contamos que tres equipos mandaban `local` y lo
+        # presentamos como que lo habian inventado ellos. Dos de esos `local`
+        # los ponia este codigo. Prosodia llego a aceptar la culpa por un valor
+        # que nunca escribieron (D-109).
+        #
+        # Ausente es honesto; adivinado es el fallo. Se avisa en su lugar.
+
+        # Al final y sobre el valor RESUELTO, no sobre la variable: un defecto
+        # fuera de vocabulario tiene que avisar igual que uno escrito a mano.
+        _avisar_del_entorno(cfg.environment)
 
         return cfg
 

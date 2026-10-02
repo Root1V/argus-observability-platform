@@ -5038,3 +5038,108 @@ me señalaron.
 **Lo encontré mirando el evento entero en vez de el campo de la pregunta.**
 Y la única razón de mirarlo entero es que las dos veces anteriores el fallo
 estaba justo al lado de donde miraba.
+
+---
+
+## D-109 · El aviso que faltaba, y el valor que este SDK se inventaba
+
+> **Fallo de plataforma** · descubierto 2026-10-01 · `argus.init()` no avisaba cuando faltaba el nombre de servicio o el namespace; y rellenaba `deployment.environment.name` con `local` —un valor que no está en el vocabulario del estándar— sin que el aviso de D-106 pudiera verlo, porque miraba la variable de entorno y no el valor resuelto
+
+**Contexto**: Prosodia reporta en `S-09` un fallo que no veníamos a buscar:
+
+> *«Lo arrancamos sin `OTEL_SERVICE_NAME`. Los dos servicios salieron como
+> `unknown-service`, **la telemetría se exportó igual y no hubo ningún error**.
+> La única pista fue la línea de `argus.init`, que lo dice si uno la lee.»*
+
+Y nos pasaron la cifra: 450 registros suyos en el almacén bajo
+`unknown-service`, de los que **ellos solo reconocían dos**. Fuimos a mirar los
+otros 448 y eran suyos también, de otra corrida. *Ni ellos podían atribuirse sus
+propios registros, porque el campo que lo diría es el que faltaba.*
+
+### El aviso, y por qué cubre dos cosas
+
+`service.name` ausente y `service.namespace` ausente son el mismo fallo con
+consecuencias distintas, y los dos han mordido de verdad:
+
+| falta | qué pasa | a quién le pasó |
+|---|---|---|
+| `ARGUS_SERVICE` | `unknown-service`: nada se puede atribuir ni correlacionar | Prosodia, `S-09` |
+| `ARGUS_NAMESPACE` | cae al nombre del servicio: la identidad de dos niveles desaparece, y en el registro entras como provisional **sin canales** | Aeon, durante días (D-094) |
+
+Un solo aviso para los dos: son la misma categoría —quién eres— y dos avisos
+seguidos por el mismo arranque se leen como ruido.
+
+Y dice explícitamente *«la telemetría se exportará igual y sin ningún error»*,
+porque es la frase que separa esto de un error de configuración normal. Quien lo
+lee tiene que entender que **no va a ver un fallo después**.
+
+### Y escribiéndolo salió lo otro, que es peor
+
+Una prueba falló afirmando `cfg.namespace == ""`. No queda vacío: cae al nombre
+del servicio. Correcto y documentado. Pero tres líneas más abajo:
+
+```python
+if not cfg.environment:
+    cfg.environment = "local"
+```
+
+**Este SDK rellenaba el entorno con `local`.** Un valor que no está en el
+vocabulario del estándar —el que cerramos ayer en D-106— y que el aviso de
+D-106 **no podía ver**, porque comprobaba la variable de entorno y no el valor
+resuelto.
+
+Lo incómodo es lo que eso le hace a D-106. Ahí escribimos:
+
+> *«Los tres equipos mandaban `local`, `local` y `bare-metal`»* … *«Leísteis eso
+> e hicisteis lo razonable: inventar el vuestro.»*
+
+**Dos de esos tres `local` los ponía este código.** Prosodia incluso aceptó la
+culpa —*«escribimos `local` respondiendo a ¿dónde corre esto?»*— por un valor
+que nunca escribieron. Les atribuí una decisión que había tomado mi propio
+default.
+
+### Qué se hace
+
+- **El entorno no se inventa.** Ausente queda ausente, y se avisa. *Ausente es
+  honesto; adivinado era el fallo* — es la misma regla que hizo `ARGUS_HOST`
+  obligatorio en D-104, aplicada un día tarde al campo de al lado.
+- **El aviso del entorno mira el valor resuelto**, no la variable. Un valor
+  inválido escrito a mano ya avisaba desde `a13`; uno puesto por el propio SDK,
+  no. El único sitio donde se ven los dos es el final.
+- `SERVICIO_DESCONOCIDO` deja de ser una cadena suelta, para que la prueba y el
+  código no puedan discrepar sobre cuál es el centinela.
+
+### Tres pruebas que pasaban por el motivo equivocado
+
+Al añadir los avisos, tres pruebas de `a14` se pusieron rojas **sin que su tema
+cambiara**. Afirmaban `avisos == []` queriendo decir «esta combinación no avisa
+de la confianza», y comprobaban «este arranque no avisa de nada».
+
+Es el mismo error que un `pytest.raises(Exception)`: pasa hasta que algo se
+mueve al lado. Ahora filtran por el aviso que les importa.
+
+Y una prueba de `a13` decía lo contrario de lo correcto:
+
+> *«Es opcional. Avisar de que falta sería ruido en cualquier script.»*
+
+Suena razonable y era falso, porque el campo **no quedaba vacío**: se rellenaba
+con `local`. El silencio que esa prueba protegía era el silencio con el que se
+sellaba un valor inválido.
+
+Publicado en `1.0.0a16`.
+
+### El patrón, que ya es una lista
+
+Cuatro avisos de arranque, y los cuatro los encontró alguien que nos adoptó:
+
+| aviso | de quién salió |
+|---|---|
+| `localhost` desde un contenedor | Aeon |
+| protocolo contra el puerto del otro transporte | Aeon |
+| entorno fuera de vocabulario | de medir a los tres |
+| **identidad ausente** | Prosodia |
+
+Ninguno de los cuatro salió de nuestras pruebas, y los cuatro son el mismo modo
+de fallo: **la aplicación funciona, los datos llegan, y no sirven.** Es el único
+tipo de defecto que no se encuentra usando tu propio software, porque tú ya
+tienes las variables puestas.
