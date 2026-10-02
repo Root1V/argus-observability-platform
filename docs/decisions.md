@@ -5427,6 +5427,8 @@ equipo.
 
 ## D-113 · Tercera vez que `spanevent` se queda fuera de la medición
 
+> **Fallo de plataforma** · descubierto 2026-10-02 · la consulta con la que mido qué emite cada equipo leía `SpanAttributes` y no `Events.Attributes`, así que afirmé por escrito a Prometheus que no emiten `argus.outcome` cuando lo emiten 24 veces en catorce días
+
 **Fecha**: 2026-10-02
 
 ### El error
