@@ -28,12 +28,28 @@ def _limpio(monkeypatch):
 
 
 def _config(monkeypatch, **env) -> tuple[Config, list[str]]:
+    """Devuelve solo los avisos SOBRE LA CONFIANZA.
+
+    Antes devolvia todos y las pruebas afirmaban `avisos == []`, que es una
+    afirmacion mas fuerte de la que querian hacer: decian «esta combinacion no
+    avisa» y comprobaban «este arranque no avisa de nada». Al anadir los avisos
+    de identidad y de entorno se pusieron rojas sin que la confianza cambiara
+    (D-109).
+
+    Es el mismo error que un `assertRaises(Exception)`: pasa por el motivo
+    equivocado hasta que algo se mueve al lado.
+    """
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     with warnings.catch_warnings(record=True) as capturados:
         warnings.simplefilter("always")
         cfg = Config.from_env("prueba")
-    return cfg, [str(a.message) for a in capturados]
+    relevantes = [
+        str(a.message)
+        for a in capturados
+        if "confianza" in str(a.message) or "TRUST_INBOUND" in str(a.message)
+    ]
+    return cfg, relevantes
 
 
 def test_el_nombre_viejo_sigue_funcionando(monkeypatch) -> None:

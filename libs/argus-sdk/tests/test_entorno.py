@@ -64,9 +64,22 @@ def test_al_que_confunde_maquina_con_nivel_se_le_dice(monkeypatch, valor: str) -
     assert "host.name" in mensaje
 
 
-def test_sin_entorno_no_se_avisa(monkeypatch) -> None:
-    """Es opcional. Avisar de que falta seria ruido en cualquier script."""
-    assert _avisos(monkeypatch, "") == []
+def test_sin_entorno_SI_se_avisa(monkeypatch) -> None:
+    """Esta prueba decia lo contrario, y su razonamiento habilito el fallo.
+
+    Afirmaba: «es opcional, avisar de que falta seria ruido en cualquier
+    script». Suena razonable y es falso, porque el SDK **no dejaba el campo
+    vacio**: lo rellenaba con `local`, que no esta en el vocabulario del
+    estandar.
+
+    Asi que el silencio que esta prueba protegia era el silencio con el que se
+    sellaba un valor invalido — y el aviso de D-106 no podia verlo porque
+    miraba la variable de entorno y no el valor resuelto (D-109).
+
+    Ahora el entorno ausente queda ausente y avisa. Ausente es honesto;
+    adivinado era el fallo.
+    """
+    assert _avisos(monkeypatch, "") != []
 
 
 def test_un_entorno_invalido_no_impide_arrancar(monkeypatch) -> None:

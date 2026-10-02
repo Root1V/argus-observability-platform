@@ -40,6 +40,11 @@ PERMITIDOS: dict[str, str] = {
     # justamente que el modulo y `ARGUS_PROPAGATE` se llamaban igual: ahi,
     # disfrazar el nombre oculta lo que se esta contando (D-107).
     "argus.propagate": "el modulo de propagacion, no un atributo (D-095, D-107)",
+    # La FUNCION de arranque. Normalmente se escribe `argus.init()` y los
+    # parentesis la salvan de esta comprobacion; aqui aparece sin ellos dentro
+    # de una cita literal de otro equipo, y reescribir su frase para que pase
+    # un test nuestro seria peor que declararla (D-109).
+    "argus.init": "la funcion de arranque, no un atributo (D-109)",
     "argus.usecase": "aparece en PLAN.md como EJEMPLO de nombre mal escrito",
     # Los tres nombres viejos del grupo de inferencia. Siguen citados en el
     # registro de decisiones porque la historia de D-081 no se puede contar sin

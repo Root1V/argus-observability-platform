@@ -58,11 +58,11 @@ se configuran copiando el mismo bloque.
 
 | Variable | Significado | Por defecto |
 |---|---|---|
-| `ARGUS_SERVICE` | El sub-componente (`service.name`) | `unknown-service` |
-| `ARGUS_NAMESPACE` | La aplicación (`service.namespace`) | = servicio |
+| `ARGUS_SERVICE` | El sub-componente (`service.name`). **Sin él se avisa**: nada se puede atribuir ni correlacionar | `unknown-service` |
+| `ARGUS_NAMESPACE` | La aplicación (`service.namespace`). **Sin él se avisa**: la identidad de dos niveles desaparece y entras en el registro sin canales | = servicio |
 | `ARGUS_ROLE` | `api`/`worker`/`scheduler`/`cli`/`model-server`/`frontend` | `api` |
 | `ARGUS_VERSION` | Versión del componente | — |
-| `ARGUS_ENVIRONMENT` | El **nivel** de despliegue: `development` \| `staging` \| `test` \| `production`. Vocabulario del estándar, no nuestro. La máquina es `host.name` y la pone el agente | — |
+| `ARGUS_ENVIRONMENT` | El **nivel** de despliegue: `development` \| `staging` \| `test` \| `production`. Vocabulario del estándar, no nuestro. La máquina es `host.name` y la pone el agente | **ausente** — no se inventa, y se avisa |
 | `ARGUS_ENDPOINT` | Collector **agente local** | `http://localhost:4317` |
 | `ARGUS_PROTOCOL` | `grpc` \| `http/protobuf` | según lo instalado |
 | `ARGUS_TRUST_INBOUND` | Si adoptar un `traceparent` que llega de fuera: `never` \| `trusted` \| `always` | `never` |
@@ -76,6 +76,29 @@ Las estándar de OpenTelemetry (`OTEL_SERVICE_NAME`,
 `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`) también se respetan,
 para que una app que ya tiene OTel migre sin tocar código.
 
+
+
+## Los avisos de arranque
+
+`argus.init()` comprueba cuatro cosas al arrancar y **avisa sin impedir el
+arranque**. Las cuatro son fallos que no dan ningún error: la aplicación
+funciona, la telemetría se exporta, y los datos llegan sin servir.
+
+| aviso | qué pasa si lo ignoras |
+|---|---|
+| **sin identidad** (`ARGUS_SERVICE` / `ARGUS_NAMESPACE`) | nada se puede atribuir, correlacionar ni enrutar; en el registro entras sin canales, o sea tus incidentes no llegan a nadie |
+| **`localhost` desde un contenedor** | no llega ni un span, y el exportador reintenta de fondo sin error |
+| **protocolo contra el puerto del otro transporte** | `UNAVAILABLE` en bucle, para las tres señales |
+| **entorno fuera del vocabulario** o ausente | no se puede separar producción de desarrollo |
+
+Los cuatro salieron de equipos que nos adoptaron, no de nuestras pruebas. Los
+dos primeros los reportó un equipo que perdió una tarde con ellos; el de la
+identidad, uno que descubrió 450 registros suyos que ni ellos podían
+atribuirse.
+
+**Nada se inventa para que el aviso desaparezca.** El entorno ausente queda
+ausente: adivinarlo es lo que hizo que este SDK sellara `local` durante semanas
+—un valor que no está en el estándar— sin que nadie lo viera.
 
 ## Propagar el contexto a otro hilo
 
