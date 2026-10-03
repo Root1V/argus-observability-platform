@@ -525,6 +525,25 @@
           ]
         },
         {
+          "id": "argus.error.kind",
+          "type": "string",
+          "brief": "Clase del error, de cardinalidad cerrada por el emisor. Es la mitad agrupable de un fallo. `unclassified` es un VALOR y no una ausencia: distingue \"no se pudo clasificar\" de \"no es un error\", que es la distincion que un campo vacio pierde.",
+          "examples": [
+            "ReadTimeout",
+            "TypeError",
+            "http-502",
+            "unclassified"
+          ]
+        },
+        {
+          "id": "argus.error.fingerprint",
+          "type": "string",
+          "brief": "`SHA256(service.namespace | service.name | argus.error.kind | nombre del span)`, truncado a 12 caracteres. Solo existe en spans con `status = Error`. NO incluye URLs ni identificadores. Un long-poll cuyo cursor cambia en cada vuelta daria 663 huellas para el mismo problema, que es el estado del que se viene: 747 errores sueltos donde el 89 % era un solo patron, y debajo de el habia fallos que nadie habia visto en seis dias.",
+          "examples": [
+            "6b23f9e76680"
+          ]
+        },
+        {
           "id": "argus.collector.tier",
           "type": "enum",
           "brief": "Que nivel del Collector trato la senal. El gateway lo pone con `insert` y no `upsert`, para no sellar encima el del agente (D-079).",

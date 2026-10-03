@@ -515,6 +515,55 @@ processors:
         probabilistic:
           sampling_percentage: 10
 
+  # Huella de error: agrupar antes de razonar.
+  #
+  # El problema medido el 03/10: 747 spans con error en siete dias, y 663 de
+  # ellos —el 89 %— eran UN patron (el long-poll de vigilancia de Prometheus
+  # registrando los sueños de este portatil). Debajo de ese 89 % habia
+  # `TypeError` de Aeon, un `http-502` de una app sin identificar, y errores en
+  # `auth.validate` y `token.issuance` que nadie habia visto en seis dias.
+  #
+  # 663 errores sueltos no son una lista de problemas: son ruido con el que no
+  # se puede trabajar. Lo que falta no es un agente que los explique, es poder
+  # AGRUPARLOS. Es el modelo de Sentry sin nada de IA: una huella determinista
+  # por error, los iguales caen juntos, y el ML —si llega— entra despues y solo
+  # cuando la huella lexica no encuentra pareja.
+  #
+  # VA EN EL GATEWAY y no en el SDK a proposito: es el unico sitio que ve a
+  # TODOS los emisores. Cuatro servicios Go de Aeon y el evento de auditoria de
+  # Prometheus construyen sus atributos a mano, asi que una huella calculada en
+  # el SDK de Python dejaria fuera justo a quien mas falta le hace.
+  transform/error_fingerprint:
+    error_mode: ignore
+    trace_statements:
+      # 1. Clasificar. `error.type` si esta.
+      - context: span
+        statements:
+          - set(span.attributes["argus.error.kind"], span.attributes["error.type"]) where span.status.code == STATUS_CODE_ERROR and span.attributes["error.type"] != nil
+      # 2. Y si no, el tipo de la excepcion, que vive en el EVENTO.
+      #
+      # Esta es la mitad que rescata los 46 errores que hoy no se pueden
+      # agrupar: marcados `Error` y sin `error.type`, asi que un GROUP BY los
+      # mete todos en el mismo cubo vacio. 703 de los 747 tienen evento de
+      # excepcion, o sea que la materia prima estaba y nadie la subia.
+      - context: spanevent
+        statements:
+          - set(span.attributes["argus.error.kind"], spanevent.attributes["exception.type"]) where spanevent.name == "exception" and span.attributes["argus.error.kind"] == nil
+      # 3. La huella.
+      - context: span
+        statements:
+          # `unclassified` es un valor y no una ausencia: distingue "no se pudo
+          # clasificar" de "no es un error", que es la distincion que un campo
+          # vacio pierde. Mismo criterio que `unknown` en `argus.actor.kind`.
+          - set(span.attributes["argus.error.kind"], "unclassified") where span.status.code == STATUS_CODE_ERROR and span.attributes["argus.error.kind"] == nil
+          # (app, componente, clase, operacion). Es la jerarquia de Sentry sin
+          # los marcos de pila, que en trazas no tenemos.
+          #
+          # NO entra la URL ni ningun id: el `index=` del long-poll cambia en
+          # cada vuelta, asi que incluirlo daria 663 huellas distintas para el
+          # mismo problema — que es exactamente el estado del que venimos.
+          - set(span.attributes["argus.error.fingerprint"], Substring(SHA256(Concat([resource.attributes["service.namespace"], resource.attributes["service.name"], span.attributes["argus.error.kind"], span.name], "|")), 0, 12)) where span.status.code == STATUS_CODE_ERROR
+
   # --- Rama ClickHouse -------------------------------------------------------
   # Fuera el contenido de mensajes. En Langfuse el contenido ES el producto;
   # en ClickHouse son decenas de KB por span sin ninguna consulta que los use.
@@ -647,6 +696,7 @@ service:
         - transform/pseudonymize
         - tail_sampling
         - transform/sampling_retention
+        - transform/error_fingerprint
         - attributes/strip_content
         - batch/clickhouse
       exporters: [clickhouse]

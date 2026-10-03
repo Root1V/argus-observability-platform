@@ -125,6 +125,8 @@ ARGUS_INFERENCE_TOKENS_PER_SECOND: Final[str] = "argus.inference.tokens_per_seco
 # --------------------------------------------------------------------------
 ARGUS_SAMPLING_RETAINED_PCT: Final[str] = "argus.sampling.retained_pct"
 ARGUS_SAMPLING_POLICY: Final[str] = "argus.sampling.policy"
+ARGUS_ERROR_KIND: Final[str] = "argus.error.kind"
+ARGUS_ERROR_FINGERPRINT: Final[str] = "argus.error.fingerprint"
 ARGUS_COLLECTOR_TIER: Final[str] = "argus.collector.tier"
 ARGUS_COLLECTOR_TIER_VALUES: Final[tuple[str, ...]] = ("agent", "gateway",)
 

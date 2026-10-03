@@ -512,6 +512,41 @@ groups:
           un numero sin procedencia, y la primera pregunta sobre un numero raro
           es de donde salio.
         examples: ["baseline", "auditoria", "errors", "marked-hot"]
+      - id: argus.error.kind
+        type: string
+        # Lo pone el gateway, derivado en dos pasos: `error.type` si el emisor
+        # lo puso, y si no el `exception.type` del evento de excepcion, que
+        # vive en otro ambito y que nadie subia. De los 747 errores de una
+        # semana, 46 estaban marcados `Error` SIN `error.type` —o sea,
+        # inagrupables— y 703 tenian evento de excepcion. La materia prima
+        # estaba (D-115).
+        brief: >
+          Clase del error, de cardinalidad cerrada por el emisor. Es la mitad
+          agrupable de un fallo. `unclassified` es un VALOR y no una ausencia:
+          distingue "no se pudo clasificar" de "no es un error", que es la
+          distincion que un campo vacio pierde.
+        examples: ["ReadTimeout", "TypeError", "http-502", "unclassified"]
+      - id: argus.error.fingerprint
+        type: string
+        # El modelo de agrupacion de Sentry sin nada de IA: huella determinista,
+        # los errores iguales caen juntos, y un modelo —si alguna vez llega—
+        # entra DESPUES y solo cuando la huella lexica no encuentra pareja.
+        # Primero lo barato y exacto.
+        #
+        # Se calcula en el GATEWAY y no en el SDK porque es el unico sitio que
+        # ve a todos los emisores: cuatro servicios Go de un equipo y el evento
+        # de auditoria de otro construyen sus atributos a mano.
+        brief: >
+          `SHA256(service.namespace | service.name | argus.error.kind |
+          nombre del span)`, truncado a 12 caracteres. Solo existe en spans con
+          `status = Error`.
+
+          NO incluye URLs ni identificadores. Un long-poll cuyo cursor cambia
+          en cada vuelta daria 663 huellas para el mismo problema, que es el
+          estado del que se viene: 747 errores sueltos donde el 89 % era un
+          solo patron, y debajo de el habia fallos que nadie habia visto en
+          seis dias.
+        examples: ["6b23f9e76680"]
       - id: argus.collector.tier
         type: enum
         members: [agent, gateway]

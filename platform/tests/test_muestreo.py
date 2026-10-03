@@ -265,3 +265,115 @@ def test_la_puerta_no_vive_dentro_de_la_variable_que_el_overlay_sobreescribe() -
         "overlay GenAI la perderia en silencio"
     )
     assert PUERTA in texto.partition("${ARGUS_COLLECTOR_CONFIGS")[0]
+
+
+# ---------------------------------------------------------------------------
+# La huella de error: agrupar antes de razonar (D-115).
+#
+# 663 de 747 errores de una semana eran UN patron, y debajo de ese 89 % habia
+# fallos que nadie habia visto en seis dias. Lo que falta no es un agente que
+# los explique: es poder agruparlos.
+# ---------------------------------------------------------------------------
+
+
+def _sentencias_de_huella(cfg: dict) -> list[tuple[str, str]]:
+    """(ambito, sentencia) en el orden en que corren."""
+    proc = cfg["processors"]["transform/error_fingerprint"]
+    return [(b["context"], s) for b in proc["trace_statements"] for s in b["statements"]]
+
+
+def test_la_huella_no_lleva_url_ni_identificadores(gateway: dict) -> None:
+    """El motivo por el que el campo existe.
+
+    El long-poll que destapo todo esto lleva un cursor que cambia en cada
+    vuelta. Meter la URL en la huella daria 663 huellas para el mismo problema,
+    que es exactamente el estado del que se viene.
+    """
+    huella = [s for _, s in _sentencias_de_huella(gateway) if "argus.error.fingerprint" in s]
+    assert len(huella) == 1, "deberia haber una sola sentencia que calcula la huella"
+    for prohibido in ("url.full", "url.query", "url.path", "argus.target.id", "trace_id", "user.id"):
+        assert prohibido not in huella[0], (
+            f"la huella incluye {prohibido!r}: eso la hace unica por peticion y "
+            f"deja de agrupar nada"
+        )
+
+
+def test_la_huella_lleva_las_cuatro_dimensiones(gateway: dict) -> None:
+    """(app, componente, clase, operacion). La jerarquia de Sentry sin pila."""
+    huella = [s for _, s in _sentencias_de_huella(gateway) if "argus.error.fingerprint" in s][0]
+    for parte in ('service.namespace', 'service.name', 'argus.error.kind', 'span.name'):
+        assert parte in huella, f"la huella no agrupa por {parte}"
+
+
+def test_la_clase_se_rescata_del_evento_de_excepcion(gateway: dict) -> None:
+    """La mitad que rescata los 46 inagrupables.
+
+    Estaban marcados `Error` sin `error.type`, asi que un GROUP BY los metia
+    todos en el mismo cubo vacio. 703 de 747 SI tenian evento de excepcion: la
+    materia prima estaba y nadie la subia, porque vive en otro ambito.
+    """
+    sentencias = _sentencias_de_huella(gateway)
+    desde_evento = [(a, s) for a, s in sentencias if "exception.type" in s]
+    assert desde_evento, "nada rescata la clase del evento de excepcion"
+    ambito, sent = desde_evento[0]
+    assert ambito == "spanevent", (
+        f"se intenta leer `exception.type` desde el ambito {ambito!r}. Los eventos "
+        f"son otro ambito y desde `span` llega nil, sin error — el fallo de D-114"
+    )
+    assert 'span.attributes["argus.error.kind"]' in sent, "se lee el evento y no se sube al span"
+
+
+def test_el_rescate_no_pisa_un_error_type_que_si_estaba(gateway: dict) -> None:
+    """Orden: primero `error.type`, y el evento SOLO si falta.
+
+    Al reves, un span con `error.type=http-502` y un `ValueError` interno se
+    agruparia por el ValueError, que es el detalle de implementacion y no el
+    fallo que ve quien llama.
+    """
+    sentencias = _sentencias_de_huella(gateway)
+    i_tipo = next(i for i, (_, s) in enumerate(sentencias) if 'span.attributes["error.type"]) where' in s)
+    i_evento = next(i for i, (_, s) in enumerate(sentencias) if "exception.type" in s)
+    assert i_tipo < i_evento, "el rescate del evento corre ANTES de leer error.type"
+    sent_evento = sentencias[i_evento][1]
+    assert 'argus.error.kind"] == nil' in sent_evento, (
+        "el rescate no comprueba que la clase siga vacia: pisaria un `error.type` bueno"
+    )
+
+
+def test_sin_clasificar_es_un_valor_y_no_un_hueco(gateway: dict) -> None:
+    """`unclassified` distingue "no se pudo clasificar" de "no es un error".
+
+    Es la decision de `unknown` en `argus.actor.kind` y la de no rellenar en
+    `argus.denied_by`, aplicada aqui: un campo vacio pierde esa distincion.
+    """
+    sentencias = [s for _, s in _sentencias_de_huella(gateway)]
+    assert any('"unclassified"' in s for s in sentencias), "un error sin clase queda sin agrupar"
+
+
+def test_solo_los_errores_llevan_huella(gateway: dict) -> None:
+    """Un span sano con huella haria que cualquier recuento de errores la
+    contara. Todas las escrituras van condicionadas al estado de error."""
+    for ambito, s in _sentencias_de_huella(gateway):
+        if "argus.error.kind" in s or "argus.error.fingerprint" in s:
+            condicionada = "STATUS_CODE_ERROR" in s or 'spanevent.name == "exception"' in s
+            assert condicionada, f"esta sentencia escribe sin comprobar que sea un error:\n  {s}"
+
+
+def test_la_huella_va_despues_del_muestreo_y_antes_del_batch(gateway: dict) -> None:
+    for nombre, tuberia in gateway["service"]["pipelines"].items():
+        procs = tuberia.get("processors", [])
+        if "transform/error_fingerprint" not in procs:
+            continue
+        i = procs.index("transform/error_fingerprint")
+        assert i > procs.index("tail_sampling"), f"{nombre}: huella antes de muestrear"
+        assert i < max(j for j, p in enumerate(procs) if p.startswith("batch")), (
+            f"{nombre}: la huella va despues del batch, que es el ultimo por contrato"
+        )
+
+
+def test_los_atributos_estan_declarados_en_el_modelo() -> None:
+    """Un atributo que llega al almacen y no esta en el modelo es un atributo
+    cuyo significado vive solo en un fichero de configuracion."""
+    from argus_semconv import attributes as A
+    assert A.ARGUS_ERROR_KIND == "argus.error.kind"
+    assert A.ARGUS_ERROR_FINGERPRINT == "argus.error.fingerprint"
