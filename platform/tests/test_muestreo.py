@@ -300,7 +300,7 @@ def test_la_huella_no_lleva_url_ni_identificadores(gateway: dict) -> None:
 
 def test_la_huella_lleva_las_cuatro_dimensiones(gateway: dict) -> None:
     """(app, componente, clase, operacion). La jerarquia de Sentry sin pila."""
-    huella = [s for _, s in _sentencias_de_huella(gateway) if "argus.error.fingerprint" in s][0]
+    huella = next(s for _, s in _sentencias_de_huella(gateway) if "argus.error.fingerprint" in s)
     for parte in ('service.namespace', 'service.name', 'argus.error.kind', 'span.name'):
         assert parte in huella, f"la huella no agrupa por {parte}"
 
@@ -353,7 +353,7 @@ def test_sin_clasificar_es_un_valor_y_no_un_hueco(gateway: dict) -> None:
 def test_solo_los_errores_llevan_huella(gateway: dict) -> None:
     """Un span sano con huella haria que cualquier recuento de errores la
     contara. Todas las escrituras van condicionadas al estado de error."""
-    for ambito, s in _sentencias_de_huella(gateway):
+    for _, s in _sentencias_de_huella(gateway):
         if "argus.error.kind" in s or "argus.error.fingerprint" in s:
             condicionada = "STATUS_CODE_ERROR" in s or 'spanevent.name == "exception"' in s
             assert condicionada, f"esta sentencia escribe sin comprobar que sea un error:\n  {s}"
