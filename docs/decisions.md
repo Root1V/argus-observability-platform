@@ -5588,3 +5588,113 @@ el factor, y se pasa de un número equivocado a ningún número. Por eso hay una
 prueba de que la puerta está en el `command`, y otra de que vive **fuera** de
 `ARGUS_COLLECTOR_CONFIGS` — metida dentro, el overlay de GenAI la perdería al
 sobreescribir esa variable entera, también en silencio.
+
+---
+
+## D-115 · 747 errores sueltos donde el 89 % era uno, y debajo seis días de fallos que nadie vio
+
+**Fecha**: 2026-10-03 · **Versión**: `1.0.0a20`
+
+### El problema, medido
+
+La plataforma lleva semanas acumulando errores sin diagnóstico. El usuario lo
+planteó así —*«ya existen muchos errores en diversos componentes y no tenemos
+diagnóstico, análisis y explicación»*— y propuso ir de menos a más. Tenía razón,
+y mi respuesta anterior (esperar tres semanas de histórico antes de la Fase 3)
+optimizaba el futuro mientras el presente estaba a oscuras.
+
+```
+747 spans con status=Error en 7 días, 48 servicios
+663 (89 %)  un solo patrón: el long-poll de vigilancia de Prometheus
+ 46         marcados Error SIN error.type  -> inagrupables
+  4 de 747  llevan evento ancho            -> casi ninguno con contexto
+735 / 703   sí tienen StatusMessage / evento de excepción
+```
+
+La última línea es la que decide el diseño: **la materia prima estaba.** No
+faltaba capturarla, faltaba poder agruparla.
+
+Debajo de ese 89 % había `TypeError` de Aeon, un `http-502` de una app que ni
+estaba identificada, y errores en `auth.validate` y `token.issuance` **sin tipo**
+con fecha de hoy. **Seis días invisibles**, no por falta de datos sino porque
+663 líneas iguales los tapaban.
+
+### El 89 % resultó ser nuestro portátil
+
+Diagnosticado con dos consultas y sin ningún agente:
+
+```
+long-polls a /v1/backends?index=…&wait=60    n      p50      p95       max
+  terminan bien                            4.233   60,4 s   61,0 s    72,6 s
+  ReadTimeout                                662    566 s  1.062 s  22.343 s
+```
+
+El contrato se honra: p50 de 60,4 s en 4.233 vueltas. Y cruzando los fallos con
+`pmset -g log`: **519 de 662 (78 %) solapan un episodio de sueño de este Mac**,
+con dos coincidencias que no admiten duda —sueño de 371,8 min contra span de
+372,4 min, y sueño de 325,7 min contra span de **325,7 min**—. El span está
+abierto cuando la máquina duerme, el reloj corre, y al despertar el cliente
+levanta `ReadTimeout`. **La duración del error es la duración del sueño.**
+
+**Y casi se lo mandé a Prometheus como un bug suyo.** Tenía escrita la pregunta
+de por qué su watch colgaba once veces más de lo que promete. Es `A-16` otra
+vez —concluir sobre su tráfico sin mirar lo nuestro— y solo se cazó porque 6,2
+horas era una cifra demasiado redonda para ser un bug. Tercera vez que lo que
+salva es *la cifra es demasiado limpia*, no una prueba.
+
+Quedan 143 sin explicar, mediana 8 min: ocho veces el contrato, y preguntados.
+
+### Lo que hace la industria, y el orden importa
+
+- **Sentry agrupa antes de razonar.** Fingerprint por error, los iguales a la
+  misma *issue*, jerarquía determinista: pila → tipo de excepción → mensaje
+  normalizado. **El modelo de ML entra solo como último recurso**, cuando la
+  huella léxica no encuentra pareja. Primero lo barato y exacto.
+- **New Relic** lo empaqueta como *errors inbox*: agrupación más análisis de
+  impacto, «patrones en vez de duplicados».
+- **Los exemplars de OTel** dan métrica → traza → log por `trace_id`, sin ML.
+- **Los modelos de madurez coinciden en que no se saltan niveles**: instrumentar
+  → agrupar y clasificar → evaluar → controlar.
+
+### Qué se hace
+
+`argus.error.kind` y `argus.error.fingerprint`, en el **gateway**.
+
+**En el gateway y no en el SDK**, y es la decisión que importa: es el único
+sitio que ve a todos los emisores. Cuatro servicios Go de Aeon y el evento de
+auditoría de Prometheus construyen sus atributos a mano, así que una huella
+calculada en el SDK de Python dejaría fuera justo a quien más falta le hace —el
+mismo argumento por el que la validación de vocabulario en la ingesta sigue
+siendo necesaria (D-113).
+
+La huella es `(service.namespace, service.name, argus.error.kind, nombre del
+span)`. **No lleva URL ni identificadores**, con prueba: el cursor del long-poll
+cambia en cada vuelta, así que incluirlo daría 663 huellas para un problema.
+
+Y la clase se rescata en dos pasos: `error.type` si está, y si no el
+`exception.type` del **evento**, que es otro ámbito. Esa segunda mitad es la que
+recupera los 46 inagrupables. `unclassified` es un valor y no un hueco, por el
+criterio de `unknown` en `argus.actor.kind`.
+
+Verificado con las formas reales: **35 errores sueltos, 30 URLs distintas → 3
+líneas.**
+
+### Lo que esto cambia respecto a lo que dije
+
+Argumenté que la Fase 3 debía esperar porque con 39 incidentes y 39 huellas
+distintas el agente de memoria no tendría nada que reconocer. Eso era cierto y
+la conclusión estaba mal: **el problema no era la falta de histórico, era la
+falta de agrupación.** Sin huella, cada incidente es único por construcción y
+ninguna cantidad de tiempo lo arregla.
+
+Así que esto no se desvía de la Fase 3: es su prerrequisito, y lo era desde el
+principio sin que lo viera.
+
+### Y un hallazgo del camino
+
+El gateway borra `url.query` —0 supervivientes, comprobado— y **4.665 spans
+llevan la query string dentro de `url.full`**, en claro. Hoy no hay nada
+sensible ahí (`index`, `wait`, `include_hidden`, `repo_id`, `q`; cero `token`,
+`key`, `secret`, `password`, arrobas), y el «hoy» es todo el problema. Cuarta
+vez: **la protección vale lo que vale el sitio menos protegido donde aparece el
+dato.** Queda como `B-26`.

@@ -112,6 +112,8 @@ const (
 const (
 	ArgusSamplingRetainedPct = "argus.sampling.retained_pct"
 	ArgusSamplingPolicy = "argus.sampling.policy"
+	ArgusErrorKind = "argus.error.kind"
+	ArgusErrorFingerprint = "argus.error.fingerprint"
 	ArgusCollectorTier = "argus.collector.tier"
 )
 
