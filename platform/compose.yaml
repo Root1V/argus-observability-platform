@@ -143,7 +143,17 @@ services:
       collector-init: { condition: service_completed_successfully }
     # El overlay GenAI se anade solo cuando Langfuse esta desplegado. Se activa
     # con `ARGUS_COLLECTOR_CONFIGS` desde el .env, o usando compose.genai.yaml.
-    command: ${ARGUS_COLLECTOR_CONFIGS:---config=/etc/otel/gateway.yaml}
+    # La puerta va FUERA de `ARGUS_COLLECTOR_CONFIGS` a proposito: metida
+    # dentro, el overlay GenAI —que sobreescribe esa variable entera— la
+    # perderia sin dar ningun error, y `argus.sampling.retained_pct` dejaria de
+    # escribirse en silencio. Hay una prueba que lo fija.
+    #
+    # `recordpolicy` hace que `tail_sampling` escriba `tailsampling.policy` con
+    # la politica que conservo la traza. Sin ella no se puede saber si un span
+    # sobrevivio al 10 % del baseline o al 100 % de auditoria (D-114).
+    command: >-
+      --feature-gates=processor.tailsamplingprocessor.recordpolicy
+      ${ARGUS_COLLECTOR_CONFIGS:---config=/etc/otel/gateway.yaml}
     environment:
       # Sal de la seudonimizacion. Sin ella, el hash de un UUID conocido se
       # comprueba por fuerza bruta; con ella, el mismo usuario sigue dando el

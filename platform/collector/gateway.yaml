@@ -304,26 +304,71 @@ processors:
           # fue exactamente eso: unos ambitos cubiertos y otros no.
           - set(log.attributes["argus.tenant"], SHA256(Concat([log.attributes["argus.tenant"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["argus.tenant"] != nil
 
-  # El sesgo del muestreo, escrito EN el dato.
+  # El sesgo del muestreo, escrito EN el dato — y ahora el de ESTA traza.
   #
-  # El tail sampling conserva el 100 % de los errores y el 10 % del resto, asi
-  # que **cualquier proporcion entre spans con error y sin error leida de
-  # `otel_traces` esta inflada unas diez veces**. No es hipotetico: el 13/09
-  # concluimos que Prometheus sondeaba ocho veces mas a menudo un backend roto
-  # que uno sano. Su bucle era uniforme; el sesgo era nuestro, y su equipo tuvo
-  # que corregirnos con su propio codigo en la mano.
+  # El tail sampling conserva el 100 % de varias clases de traza y el 10 % del
+  # resto, asi que **cualquier proporcion leida de `otel_traces` esta sesgada**.
+  # No es hipotetico: el 13/09 concluimos que Prometheus sondeaba ocho veces
+  # mas a menudo un backend roto que uno sano. Su bucle era uniforme; el sesgo
+  # era nuestro, y su equipo tuvo que corregirnos con su propio codigo en la
+  # mano. Un agente de RCA leyendo esa tabla sacaria la misma conclusion, y con
+  # mas aplomo que una persona.
   #
-  # Un agente de RCA leyendo esta tabla sacaria la misma conclusion equivocada,
-  # y con mas seguridad que una persona. Asi que el factor viaja en el span: al
-  # menos el sesgo es descubrible sin conocer esta configuracion.
+  # Hasta hoy esto escribia `argus.sampling.baseline_pct = 10` en TODOS los
+  # spans, y resolvia la mitad del problema que lo motivo: el 10 es la tasa del
+  # baseline, no la de esta traza. Una denegacion o un error, que se conservan
+  # al 100 %, llevaban el mismo 10 — asi que corregir con ese factor multiplica
+  # por diez justo lo que ya estaba completo. La tabla de D-054 se corrigio a
+  # mano, sabiendo cuales filas eran errores; el atributo no permitia saberlo.
   #
-  # Las TASAS se sacan de `spanmetrics`, que se deriva antes de muestrear.
-  transform/sampling_bias:
+  # No era un numero falso: era ambiguo —«la tasa del baseline es 10» frente a
+  # «esta traza sobrevivio a un 10 %»— y la lectura comoda es la equivocada.
+  # Es la forma de D-111.
+  #
+  # Ahora se deriva de QUE POLITICA conservo la traza, que el procesador expone
+  # en `tailsampling.policy` con la puerta de funcionalidad
+  # `processor.tailsamplingprocessor.recordpolicy` (ver el `command` del
+  # servicio `collector` en compose.yaml).
+  #
+  # VA DESPUES DE `tail_sampling` EN LA TUBERIA. Antes, el atributo no existe
+  # todavia y no hay nada que leer.
+  #
+  # Si la puerta estuviera apagada, `tailsampling.policy` llega nulo y aqui NO
+  # se escribe nada. Es deliberado: sin saber que conservo la traza, un factor
+  # inventado es peor que ningun factor — la ausencia manda a quien consulta a
+  # las metricas, que es la regla de D-054 («las tasas salen de metricas, nunca
+  # de la tabla de trazas»). Un numero equivocado la rompe en silencio.
+  #
+  # Las TASAS se siguen sacando de `spanmetrics`, derivado antes de muestrear.
+  transform/sampling_retention:
     error_mode: ignore
     trace_statements:
+      # OJO CON EL AMBITO: `recordpolicy` NO escribe en el span, escribe en el
+      # InstrumentationScope. Lo escribi primero como `span.attributes[...]`,
+      # no dio ningun error —`error_mode: ignore` mas una comparacion con nil
+      # no es un fallo, es un `where` que nunca se cumple— y el atributo
+      # simplemente no aparecia. El arreglo de un numero equivocado en
+      # silencio, fallando en silencio (D-114).
       - context: span
         statements:
-          - set(span.attributes["argus.sampling.baseline_pct"], 10)
+          # Nuestro namespace, declarado en el modelo. El del procesador es un
+          # detalle de implementacion y no deberia llegar al almacen.
+          - set(span.attributes["argus.sampling.policy"], instrumentation_scope.attributes["tailsampling.policy"]) where instrumentation_scope.attributes["tailsampling.policy"] != nil
+          # El numero que de verdad sirve para corregir: que porcentaje de
+          # trazas como esta se conservo. El `10` tiene que coincidir con el
+          # `sampling_percentage` de la politica `baseline` de abajo, y hay una
+          # prueba que lo comprueba contra este mismo fichero.
+          - set(span.attributes["argus.sampling.retained_pct"], 10) where instrumentation_scope.attributes["tailsampling.policy"] == "baseline"
+          - set(span.attributes["argus.sampling.retained_pct"], 100) where instrumentation_scope.attributes["tailsampling.policy"] != nil and instrumentation_scope.attributes["tailsampling.policy"] != "baseline"
+      # Fuera los internos del procesador, DESPUES de leerlos. Van en el
+      # ambito del scope, que es donde los pone la puerta, y la puerta los
+      # pone en todas las ramas que comparten esta instancia de `tail_sampling`
+      # —incluida la de Langfuse—.
+      - context: scope
+        statements:
+          - delete_key(scope.attributes, "tailsampling.policy")
+          - delete_key(scope.attributes, "tailsampling.composite_policy")
+          - delete_key(scope.attributes, "tailsampling.cached_decision")
 
   # --- Muestreo --------------------------------------------------------------
   # AVISO: el tail sampling exige que TODOS los spans de una traza lleguen a la
@@ -600,8 +645,8 @@ service:
         - resource/gateway
         - redaction
         - transform/pseudonymize
-        - transform/sampling_bias
         - tail_sampling
+        - transform/sampling_retention
         - attributes/strip_content
         - batch/clickhouse
       exporters: [clickhouse]

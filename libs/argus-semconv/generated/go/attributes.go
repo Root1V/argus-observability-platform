@@ -110,7 +110,8 @@ const (
 
 // platform: Puestos por el Collector, no por quien emite
 const (
-	ArgusSamplingBaselinePct = "argus.sampling.baseline_pct"
+	ArgusSamplingRetainedPct = "argus.sampling.retained_pct"
+	ArgusSamplingPolicy = "argus.sampling.policy"
 	ArgusCollectorTier = "argus.collector.tier"
 )
 
