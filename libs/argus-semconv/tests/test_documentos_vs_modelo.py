@@ -54,6 +54,13 @@ PERMITIDOS: dict[str, str] = {
     "argus.first_token_ms": "nombre histórico, citado en decisions.md (D-081)",
     "argus.backend.circuit_state": "nombre histórico, citado en decisions.md (D-081)",
     "argus.cost_usd": "nombre histórico; hoy es argus.inference.cost_usd (D-081)",
+    # Retirado en D-114. Era un 10 FIJO en todos los spans: la tasa del
+    # baseline y no la de esta traza, asi que corregir con el multiplicaba por
+    # diez los errores y las denegaciones, que se conservan al 100 %. Hoy es
+    # `argus.sampling.retained_pct`, derivado de la politica que conservo la
+    # traza. Sigue citado en decisions.md porque D-054 y D-081 lo nombran y la
+    # historia no se reescribe.
+    "argus.sampling.baseline_pct": "retirado; hoy es argus.sampling.retained_pct (D-114)",
     # Nombres que un equipo PROPUSO y que decidimos NO adoptar porque el
     # estándar ya los tiene. Se citan en D-086 para poder contar por qué se
     # rechazaron; no pueden volver a aparecer en material que mandemos fuera.

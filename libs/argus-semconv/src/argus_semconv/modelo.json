@@ -505,9 +505,24 @@
       "brief": "Puestos por el Collector, no por quien emite",
       "attributes": [
         {
-          "id": "argus.sampling.baseline_pct",
+          "id": "argus.sampling.retained_pct",
           "type": "int",
-          "brief": "Porcentaje de muestreo de base aplicado por el gateway. Va en el span porque sin el, cualquier ratio calculado sobre trazas almacenadas esta sesgado y no hay forma de saberlo al consultar."
+          "brief": "Que PORCENTAJE de trazas como esta conservo el muestreo del gateway. El factor de correccion es `100 / retained_pct`, y vale 1 para todo lo que se conserva entero: errores, denegaciones, GenAI, camino caliente y auditoria. Va en el span porque sin el, cualquier proporcion calculada sobre trazas almacenadas esta sesgada y no hay forma de saberlo al consultar. Y aun con el: las TASAS salen de `spanmetrics`, que se deriva antes de muestrear (D-054).",
+          "examples": [
+            10,
+            100
+          ]
+        },
+        {
+          "id": "argus.sampling.policy",
+          "type": "string",
+          "brief": "Nombre de la politica de `tail_sampling` que conservo la traza, de cardinalidad cerrada por la configuracion del gateway. Es la EVIDENCIA de `argus.sampling.retained_pct`: sin ella el porcentaje es un numero sin procedencia, y la primera pregunta sobre un numero raro es de donde salio.",
+          "examples": [
+            "baseline",
+            "auditoria",
+            "errors",
+            "marked-hot"
+          ]
         },
         {
           "id": "argus.collector.tier",

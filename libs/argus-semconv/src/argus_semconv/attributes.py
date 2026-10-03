@@ -123,7 +123,8 @@ ARGUS_INFERENCE_TOKENS_PER_SECOND: Final[str] = "argus.inference.tokens_per_seco
 # --------------------------------------------------------------------------
 # platform: Puestos por el Collector, no por quien emite
 # --------------------------------------------------------------------------
-ARGUS_SAMPLING_BASELINE_PCT: Final[str] = "argus.sampling.baseline_pct"
+ARGUS_SAMPLING_RETAINED_PCT: Final[str] = "argus.sampling.retained_pct"
+ARGUS_SAMPLING_POLICY: Final[str] = "argus.sampling.policy"
 ARGUS_COLLECTOR_TIER: Final[str] = "argus.collector.tier"
 ARGUS_COLLECTOR_TIER_VALUES: Final[tuple[str, ...]] = ("agent", "gateway",)
 

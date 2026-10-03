@@ -5475,3 +5475,116 @@ porque el número sale.
   Sus valores de hoy (`ok`, `error`) son válidos; lo que no existe es nada que
   lo garantice mañana. Es el argumento con el que Aeon nos pidió validación en
   la ingesta, y ahora hay un segundo equipo en el mismo caso.
+
+---
+
+## D-114 · El factor del sesgo era una constante, y el sesgo no lo es
+
+> **Fallo de plataforma** · descubierto 2026-10-02 · `argus.sampling.baseline_pct` valía 10 en TODOS los spans, también en los errores y las denegaciones que el muestreo conserva al 100 %, así que corregir un recuento con ese factor lo multiplicaba por diez justo donde ya estaba completo
+
+**Fecha**: 2026-10-03 · **Versión**: `1.0.0a19`
+
+### El defecto
+
+D-054 puso el factor de muestreo dentro del dato por un motivo bueno: el 13/09
+concluimos que Prometheus sondeaba ocho veces más un backend roto que uno sano,
+su bucle era uniforme, y el sesgo era nuestro. La lección fue que el sesgo tenía
+que ser **descubrible sin conocer la configuración del Collector**.
+
+Pero lo que se escribió fue una constante:
+
+```yaml
+- set(span.attributes["argus.sampling.baseline_pct"], 10)
+```
+
+Y el muestreo **no es uniforme**: `tail_sampling` conserva el 100 % por cinco
+políticas distintas (`errors`, `auditoria`, `genai-always`, `marked-hot`,
+`slow`) y el 10 % por `baseline`. Un error y una petición normal llevaban el
+mismo 10.
+
+**Resuelve la mitad del problema que lo motivó.** La tabla de corrección de
+D-054 lo enseña sin querer:
+
+| | almacenado | real |
+|---|---|---|
+| 404 del backend roto | 190 | ~190 |
+| 200 de los sanos | 115 | ~1150 |
+
+Esa corrección se hizo **a mano**, sabiendo cuáles filas eran errores. El
+atributo que nació de ese incidente no permite saberlo.
+
+No era un número falso: era **ambiguo** —«la tasa del baseline es 10» frente a
+«esta traza sobrevivió a un 10 %»— y la lectura cómoda es la equivocada. Es
+D-111 otra vez, en un número en vez de en una frase. Y como allí, el sello de
+garantía lo daba el sitio: un atributo que viaja en el dato se lee como un
+hecho sobre ese dato.
+
+Salió a flote verificando `argus.denied_by` (D-112): las denegaciones son una
+dimensión nueva que los equipos van a contar, y las conserva `auditoria` al
+100 %.
+
+### El arreglo
+
+`argus.sampling.retained_pct` — qué porcentaje de trazas **como esta** se
+conservó — derivado de la política que de verdad la conservó, más
+`argus.sampling.policy` como evidencia. El factor de corrección es
+`100 / retained_pct`, y vale 1 para todo lo que se guarda entero.
+
+Medido en el almacén, con la tubería real:
+
+```
+trabajo.normal      baseline    10     8 almacenados
+fallo.duro          errors     100     1
+decision.denegada   auditoria  100     1
+```
+
+Con el atributo viejo las tres filas decían 10.
+
+### Tres cosas que se decidieron y por qué
+
+**No se rellena cuando no se sabe.** Si la puerta del Collector está apagada,
+no hay política y **no se escribe nada**. Un factor inventado rompe el cálculo
+en silencio; su ausencia manda a quien consulta a las métricas, que es donde
+D-054 dice que viven las tasas. Es la misma decisión que no hacer
+`setdefault("unknown")` en `argus.denied_by`.
+
+**Se sustituye, no se añade al lado.** Dejar `baseline_pct` junto a
+`retained_pct` sería dejar la trampa con una señal al lado. Queda declarado
+como nombre retirado en el test de documentos, porque D-054 y D-081 lo citan y
+la historia no se reescribe.
+
+**La prueba que hace fiable el número.** `retained_pct` es *derivado*: el 10 del
+transform y el `sampling_percentage: 10` de la política son dos sitios del
+mismo fichero. Una prueba los compara. Sin ella, bajar el baseline al 5 % dejaría
+el almacén diciendo 10 y ninguna corrección fallaría de forma visible.
+
+### Lo que costó, que es lo instructivo
+
+**1 · El arreglo falló en silencio, igual que el defecto.** La puerta
+`recordpolicy` no escribe en el span: escribe en el **InstrumentationScope**. Lo
+escribí como `span.attributes["tailsampling.policy"]`, y `error_mode: ignore`
+más una comparación contra `nil` **no es un error** — es un `where` que nunca se
+cumple. Cero errores en el log, atributo ausente, y los tests de configuración
+en verde porque comprueban el fichero y no el resultado.
+
+Es la cuarta vez que un ámbito equivocado cuesta tiempo (D-092 `spanevent` en la
+seudonimización, D-098 `string_attribute` en el muestreo, D-113 la consulta de
+medición) y la primera en `scope`. El patrón ya no es casualidad: **en este
+Collector, lo que se escribe en un ámbito distinto del que miras no da ningún
+error, da un vacío.**
+
+**2 · `docker compose up -d` no redesplegó nada.** El fichero va montado, así
+que cambiarlo no cambia la definición del servicio y compose deja el contenedor
+como está — sin decirlo. Verifiqué contra el almacén, vi los atributos vacíos, y
+estuve un rato buscando el fallo en el OTTL que ya estaba bien. Lo delató
+`StartedAt`. Tercera forma distinta de «editar la fuente no es desplegar»
+(copia vieja del vigilante, imagen del canario sin reconstruir, y ahora
+contenedor sin recrear): **un cambio de configuración necesita `restart`
+explícito.**
+
+Las dos juntas dan el aviso que importa: **este arreglo sin su despliegue es
+peor que el defecto.** Sin la puerta encendida no hay política, no se escribe
+el factor, y se pasa de un número equivocado a ningún número. Por eso hay una
+prueba de que la puerta está en el `command`, y otra de que vive **fuera** de
+`ARGUS_COLLECTOR_CONFIGS` — metida dentro, el overlay de GenAI la perdería al
+sobreescribir esa variable entera, también en silencio.

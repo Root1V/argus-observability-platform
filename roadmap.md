@@ -89,7 +89,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F1-19` | ✅ | **Seudonimización implementada** | Estaba diseñada y no existía: UUIDs de usuario en crudo. Hasheados con sal, verificado — D-050 |
 | `F1-20` | ✅ | **Canal de coordinación con Prometheus** | Fichero compartido; 5 respuestas y 8 entradas nuevas, incluido un incidente real suyo — D-052 |
 | `F1-21` | ✅ | **Canal Telegram** | Google bloqueó Chat y las contraseñas de aplicación. Telegram edita mensajes: divulgación progresiva real — D-053 |
-| `F1-22` | ✅ | **Sesgo del muestreo, escrito en el dato** | Concluimos mal sobre el tráfico de Prometheus; su equipo nos corrigió. `argus.sampling.baseline_pct` — D-054 |
+| `F1-22` | ✅ | **Sesgo del muestreo, escrito en el dato** | Concluimos mal sobre el tráfico de Prometheus; su equipo nos corrigió. `argus.sampling.retained_pct`, derivado de la política que conservó la traza — D-054, y D-114 cuando se vio que un factor fijo resolvía la mitad |
 | `F1-23` | ✅ | **Salvaguardas de canal** | Destino de pruebas denunciado; todo `page` enruta al canal humano — D-056, D-057 |
 | `F1-24` | ✅ | **Sonda de silencio: crecimiento por serie** | Una duplicación del exportador se leía como actividad: un muerto parecía vivo, otra vez — D-060 |
 | `F1-25` | ✅ | **`argus.first_token_ms`** | El TTFT visible solo existía en 13 de 247 peticiones con modelos que razonan — D-061 |

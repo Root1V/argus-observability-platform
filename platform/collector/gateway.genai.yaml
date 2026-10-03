@@ -54,6 +54,11 @@ service:
         - redaction
         - transform/pseudonymize
         - tail_sampling
+        # Comparte instancia de `tail_sampling` con la rama de ClickHouse, asi
+        # que la puerta `recordpolicy` le pone aqui tambien los `tailsampling.*`.
+        # Este processor los retira; de paso la retencion viaja igual, que es
+        # cierta en las dos ramas.
+        - transform/sampling_retention
         - filter/genai_only
         - batch/langfuse
       exporters: [otlphttp/langfuse]
