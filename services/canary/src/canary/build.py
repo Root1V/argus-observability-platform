@@ -140,7 +140,10 @@ def _sondas_silencio(settings: Settings) -> list[SondaSilencio]:
             #
             # Lo que SI habria que vigilar en un caso asi es un doblaje que
             # empieza y no termina, no la ausencia de trafico. Es otra sonda y
-            # no existe todavia: anotado como F2-16.
+            # no existe todavia: anotado como F2-19 en el roadmap.
+            #
+            # Decia `F2-16`, que ya estaba usado y cerrado (vmalert): el
+            # puntero no daba ningun error, solo apuntaba a otra cosa.
             if not latido:
                 continue
 

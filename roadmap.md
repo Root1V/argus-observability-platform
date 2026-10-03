@@ -99,6 +99,7 @@ Objetivo: telemetría unificada de tres apps, en al menos dos máquinas.
 | `F2-18` | ✅ | **Reglas de saturación del host** | Con aviso explícito de que en macOS miden la VM, no el Mac — D-063 |
 | `F2-14` | 💭 | `make channel-test` recorre TODAS las apps activas | Hoy solo prueba `argus`: el fallo de enrutado de otra app no lo ve — D-057 |
 | `F2-15` | 💭 | Exponer incidentes resueltos en la API | `/incidents` solo muestra abiertos; una tormenta pasada es invisible — D-059 |
+| `F2-19` | ⏳ | **Sonda de «un doblaje que empieza y no termina»** | Lo que hay que vigilar en una app sin tráfico constante no es el silencio, sino un trabajo que arranca y no cierra. Anotado en `canary/build.py`, que apuntaba a `F2-16` — un id ya usado y cerrado — D-094 |
 
 ### F1b · Los SDKs propios ⏳
 
@@ -289,3 +290,9 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-11` | 💭 | Red privada tipo Tailscale con nombre estable | Necesario antes de `F1-10` |
 | `B-12` | ❌ | Grafana OnCall | OSS archivado en marzo de 2026 |
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |
+| `B-19` | ⏳ | **Cola durable de notificaciones** | Hoy una notificación que falla se pierde. Trae su propia pregunta —qué hacer con un aviso de hace ocho horas cuando el incidente ya se resolvió— y merece decidirse a propósito. `dispatch.send_failed` es la señal mientras tanto — D-080 |
+| `B-20` | ✅ | **El canario reconcilia en vez de recordar** | Cerrado: cada fallo confirmado se reenvía cada ciclo y el receptor expira por `last_seen_at` — D-100 |
+| `B-21` | ⏳ | **El desfase de vmalert al dormir la máquina** | **Es una decisión, no trabajo**: informar aguas arriba, o que el vigilante reinicie vmalert al detectarlo. A favor de automatizar: la detección funciona y la reparación es reiniciar un contenedor, reversible y acotado — D-091, D-101 |
+| `B-22` | ⏳ | **Modo consola para verificaciones en vivo** | Verificando la reconciliación provoqué **4 notificaciones reales** de Telegram. Hoy no vuelve a pasar por suerte, no por diseño: una verificación no debería poder despertar a nadie — D-100 |
+| `B-23` | ⏳ | **Validar los nombres que van a los CANALES, no solo a `docs/`** | `B-18` cerró el hueco para `docs/**.md`, y los tres nombres inventados que Prometheus implementó se los mandamos por el canal, que vive fuera del repositorio y no se comprueba — D-067, D-081 |
+| `B-24` | ⏳ | **`test_un_canal_caido_no_impide_que_los_demas_reciban` es una carrera** | Pasa en solitario y falla en la suite completa: fija un límite de **1,0 s de reloj de pared** con un worker, y bajo carga el canal sano no llega a planificarse. La propiedad es correcta —el reintento se reprograma, no duerme—; lo que hay que cambiar es la medición, de tiempo a **orden**. Un test inestable en el camino de notificación enseña a ignorar el rojo, que es el único sitio donde eso no se puede permitir |
