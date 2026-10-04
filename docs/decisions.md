@@ -5698,3 +5698,101 @@ sensible ahí (`index`, `wait`, `include_hidden`, `repo_id`, `q`; cero `token`,
 `key`, `secret`, `password`, arrobas), y el «hoy» es todo el problema. Cuarta
 vez: **la protección vale lo que vale el sitio menos protegido donde aparece el
 dato.** Queda como `B-26`.
+
+---
+
+## D-116 · El evento ancho existía y no se emitía donde las cosas fallan
+
+> **Fallo de plataforma** · descubierto 2026-10-04 · de 747 spans con error en siete días, **cuatro** llevaban evento ancho y los cuatro eran sondas nuestras del mismo día: `emit_wide_event` es API pública que la aplicación tiene que llamar, y ninguna la llamaba
+
+**Fecha**: 2026-10-04 · **Versión**: `1.0.0a21`
+
+### El defecto
+
+El plan describe los wide events como pieza central —*«que tus wide events SEAN
+tus spans enriquecidos»*— y el SDK los implementa desde la Fase 1. Medido:
+
+```
+747 spans con error en 7 días, 48 servicios
+  4 con `argus.event`   ->  y los cuatro son sondas nuestras del 03/10
+735 con StatusMessage
+703 con evento de excepción
+```
+
+**Ningún error real de ningún equipo tenía evento ancho.** No por falta de
+datos: `emit_wide_event` está exportado en `__all__`, documentado, y **nadie en
+el SDK lo llama**. Un patrón que hay que invocar a mano en el sitio donde las
+cosas fallan es un patrón que no existe donde hace falta.
+
+Es la tercera forma de lo mismo esta semana: D-109 (el aviso de identidad que
+no existía), D-115 (la huella que había que poder calcular), y esta. Las tres
+son *la capacidad estaba construida y el camino por defecto no la usaba*.
+
+### La decisión que importa: un `SpanProcessor`, no un decorador
+
+**Los errores no ocurren donde pusiste el decorador.** De los 747, los que más
+importaban salían de spans auto-instrumentados —un `GET` de httpx, un
+`auth.validate`, una activity de Temporal— que ningún `argus.step` envuelve.
+
+Un `SpanProcessor.on_end` ve **cada** span que cierra en el proceso,
+instrumentado por nosotros o no, así que la cobertura deja de depender de que
+alguien se acordara. Y se engancha también en la rama de coexistencia —cuando
+la app ya tenía su propio `TracerProvider`— porque una app a medio migrar es
+justo donde menos contexto hay cuando algo falla.
+
+Lo que lleva, y por qué cada cosa:
+
+| | |
+|---|---|
+| la clase | `error.type`, y si no el `exception.type` del **evento**. Misma jerarquía que el gateway, y la segunda mitad rescata los 46 inagrupables |
+| `unclassified` | un **valor**, no un hueco. Tercera vez que esa decisión se repite |
+| el contexto de la instrumentación | ruta, método, código, sistema de BD. Gratis, y es lo que explica |
+| **nunca** el contenido GenAI | decenas de KB por span, y esto existe para leerse. En trazas ya se borra; aquí no se copia |
+| recortes | 512 caracteres por valor, 48 campos, y `argus.wide.truncated` si se corta — truncar en silencio es peor que no truncar |
+
+### Cinco capas del mismo defecto de correlación
+
+Lo instructivo de esta entrada. Un evento ancho que no lleva a su traza no
+sirve para lo único que se le pide, y en `on_end` **el span que falló ya se
+cerró**: el activo es el padre o ninguno. Eso rompe a la vez todo lo que lee el
+contexto ambiental, y lo descubrí capa por capa:
+
+| capa | qué decía | cómo se vio |
+|---|---|---|
+| el `LogRecord` | **bien**, porque puse `trace_id` a mano | prueba en verde |
+| la línea JSON formateada | `trace_id: none` | mirando la salida real de la sonda |
+| el campo `TraceId` de OTLP | **vacío** — y es el que usa el almacén para el `JOIN` | consultando ClickHouse |
+
+Las dos primeras pruebas pasaban mientras la columna del almacén llegaba vacía.
+**Parchear cada consumidor era perseguir capas**; lo correcto es re-activar el
+contexto del span que falló mientras se emite, y entonces las tres aciertan
+solas. Hay una prueba por capa, y la de OTLP es la única que se ve desde el
+almacén.
+
+De paso quedó un arreglo general en el filtro de correlación: **lo explícito
+gana a lo ambiental.** Quien emite puede saber más que el contexto activo.
+
+### Verificado en el almacén
+
+```
+evento          clase            mensaje         span al que salta   huella        politica
+GET             ReadTimeout                      GET                 3149609a09ef  errors
+auth.validate   PermissionError  scope ausente   auth.validate       e765dc07162e  errors
+```
+
+Un `INNER JOIN` por `TraceId` + `SpanId`. De un fallo salen ahora **la línea que
+lo explica, la traza exacta, la huella con la que contarlo, y la política que
+dice que no se muestreó** — las tres piezas de esta semana compuestas.
+
+### Lo que no cubre, dicho claro
+
+- **Solo en proceso.** Un error que nunca llega a un span de Python no deja
+  evento ancho. Los servicios Go de Aeon necesitan el equivalente en su lado.
+- **El evento ancho no se muestrea; su traza sí.** Para un error no importa
+  —`errors` conserva el 100 %— pero si alguna vez se emiten eventos anchos de
+  operaciones normales, la línea estará y su traza puede no estar. Va al README.
+- **Siete propiedades con prueba, y las siete verificadas mutando el código.**
+  Dos de las mutaciones estaban mal escritas y las tomé por pruebas que no
+  cazaban: una rompía la sintaxis y otra no coincidía con el texto. **Una
+  mutación que no muta no demuestra nada**, y se parece mucho a una prueba
+  sólida.

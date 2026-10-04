@@ -79,10 +79,12 @@ def configure_tracing(cfg: Config, resource: Any) -> TracerProvider | None:
             stacklevel=3,
         )
         _attach_processor(existing, cfg)
+        _attach_wide_event(existing)
         return None
 
     provider = TracerProvider(resource=resource, sampler=ParentBased(ALWAYS_ON))
     _attach_processor(provider, cfg)
+    _attach_wide_event(provider)
 
     if cfg.console:
         provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
@@ -95,6 +97,29 @@ def configure_tracing(cfg: Config, resource: Any) -> TracerProvider | None:
     )
 
     return provider
+
+
+def _attach_wide_event(provider: TracerProvider) -> None:
+    """Un evento ancho por span que falla.
+
+    Va tambien en la rama de coexistencia —cuando la app ya tenia su propio
+    TracerProvider— porque una app a medio migrar es exactamente donde menos
+    contexto hay cuando algo falla.
+
+    No depende del exportador ni del endpoint: emite por el canal de registro,
+    asi que funciona igual con `ARGUS_DISABLED=1` y en una app que no exporta
+    trazas a ningun sitio.
+    """
+    from ._wide import EventoAnchoEnElFallo
+
+    try:
+        provider.add_span_processor(EventoAnchoEnElFallo())
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(
+            f"Argus no pudo instalar el evento ancho en el fallo: {exc}",
+            RuntimeWarning,
+            stacklevel=4,
+        )
 
 
 def _attach_processor(provider: TracerProvider, cfg: Config) -> None:

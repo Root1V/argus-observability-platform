@@ -35,6 +35,23 @@ class TraceCorrelationFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # Lo EXPLICITO gana a lo ambiental.
+        #
+        # Quien emite puede saber mas que el contexto activo, y el caso que lo
+        # destapo es el evento ancho en el fallo: se emite desde `on_end`,
+        # donde el span que fallo ya se cerro y el activo es el padre o
+        # ninguno. Sin esta guarda, la linea que existe para llevar a esa traza
+        # salia con `trace_id: none` — el unico campo que no se le puede
+        # perdonar.
+        #
+        # Y no lo caz ninguna prueba al principio: la del evento ancho miraba
+        # el `LogRecord`, donde el valor SI estaba. El filtro lo pisaba una
+        # capa mas abajo, al formatear. Cuarta vez esta semana que la
+        # comprobacion mira un nivel y el defecto vive en el siguiente.
+        ya_puesto = getattr(record, "trace_id", None)
+        if ya_puesto and ya_puesto != "none":
+            return True
+
         span = trace.get_current_span()
         ctx = span.get_span_context()
         if ctx.is_valid:
