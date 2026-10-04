@@ -324,6 +324,56 @@ completo, porque el ruido se nota y un registro con huecos no.
 `enduser.pseudo.id`, que son del estándar y que el gateway seudonimiza. La
 cardinalidad cerrada de aquí es justo lo que permite agrupar sin tocar a nadie.
 
+## Cuando algo falla, deja una línea que lo explica
+
+No hay que llamar a nada. `init()` instala un procesador que, **por cada span
+que termina en error**, emite un evento ancho con el contexto que ya había:
+
+```json
+{"level":"error","app":"idp","service":"idp-api","event":"auth.validate",
+ "trace_id":"40e4bdd71c47e645…","span_id":"a1b2…",
+ "argus.outcome":"error","error.type":"PermissionError",
+ "error.message":"scope ausente","argus.duration_ms":12,
+ "http.route":"/admin/api/auth/login","http.response.status_code":500}
+```
+
+**Por qué un procesador y no un decorador.** Los errores no ocurren donde
+pusiste el decorador. De 747 errores reales medidos en una semana, los que más
+importaban salían de spans **auto-instrumentados** —un `GET` de httpx, un
+`auth.validate`, una activity de Temporal— que ningún `argus.step` envuelve. Un
+procesador ve cada span que cierra en el proceso, así que la cobertura no
+depende de que alguien se acordara.
+
+| | |
+|---|---|
+| **Solo en el fallo** | un evento ancho por cada span sería el volumen que este patrón viene a reducir. Los errores son la excepción por construcción |
+| **La clase, siempre** | `error.type` si lo pusiste, y si no el `exception.type` del evento de excepción. Si no hay ninguno, `unclassified` — que es un **valor**, no un hueco |
+| **Nunca el contenido de GenAI** | `gen_ai.input.messages` y compañía no se copian. Son decenas de KB y esto existe para leerse |
+| **Valores recortados** | a 512 caracteres, y como mucho 48 campos. Si se trunca, lo dice con `argus.wide.truncated` |
+| **No tumba la app** | `on_end` corre en tu hilo. Nunca levanta, y lleva guardia de reentrancia |
+
+**Y lleva a su traza.** El `trace_id` es el del span **que falló**, no el del
+contexto activo — en `on_end` ese span ya se cerró, así que lo ingenuo
+apuntaría al padre o a nada. Eso hace que esto funcione:
+
+```sql
+SELECT l.LogAttributes['argus.event'], l.LogAttributes['error.message'],
+       t.SpanName, t.SpanAttributes['argus.error.fingerprint']
+FROM otel.otel_logs AS l
+INNER JOIN otel.otel_traces AS t
+  ON t.TraceId = l.TraceId AND t.SpanId = l.SpanId
+WHERE l.LogAttributes['argus.outcome'] = 'error'
+```
+
+De un fallo sacas: la línea que lo explica, la traza exacta, y la **huella** con
+la que contarlo junto a los iguales.
+
+> **El evento ancho no se muestrea; su traza sí.** Los registros no pasan por el
+> tail sampling y las trazas sí. Para un error no importa —la política `errors`
+> conserva el 100 %, y el span lo dice en `argus.sampling.retained_pct`— pero si
+> alguna vez emites eventos anchos de operaciones normales, la línea estará y su
+> traza puede no estar.
+
 ## Por qué `localhost` y no el plano central
 
 Las aplicaciones exportan **siempre** al Collector agente de su propia máquina.
