@@ -544,6 +544,11 @@
           ]
         },
         {
+          "id": "argus.wide.truncated",
+          "type": "boolean",
+          "brief": "El evento ancho se recorto: la operacion tenia mas de 48 atributos. Existe porque truncar en silencio es peor que no truncar — quien lee no sabe que falta."
+        },
+        {
           "id": "argus.collector.tier",
           "type": "enum",
           "brief": "Que nivel del Collector trato la senal. El gateway lo pone con `insert` y no `upsert`, para no sellar encima el del agente (D-079).",

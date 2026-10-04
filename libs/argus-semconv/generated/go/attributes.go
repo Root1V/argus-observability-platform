@@ -114,6 +114,7 @@ const (
 	ArgusSamplingPolicy = "argus.sampling.policy"
 	ArgusErrorKind = "argus.error.kind"
 	ArgusErrorFingerprint = "argus.error.fingerprint"
+	ArgusWideTruncated = "argus.wide.truncated"
 	ArgusCollectorTier = "argus.collector.tier"
 )
 

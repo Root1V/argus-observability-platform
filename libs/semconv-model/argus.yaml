@@ -547,6 +547,16 @@ groups:
           solo patron, y debajo de el habia fallos que nadie habia visto en
           seis dias.
         examples: ["6b23f9e76680"]
+      - id: argus.wide.truncated
+        type: boolean
+        # Lo pone el SDK al recortar el evento ancho de un fallo. Lo cazo la
+        # prueba que compara los nombres citados en documentacion contra el
+        # modelo: lo emitia y no estaba declarado, que es el hueco de D-081 en
+        # pequeño — un nombre que el paquete no conoce.
+        brief: >
+          El evento ancho se recorto: la operacion tenia mas de 48 atributos.
+          Existe porque truncar en silencio es peor que no truncar — quien lee
+          no sabe que falta.
       - id: argus.collector.tier
         type: enum
         members: [agent, gateway]

@@ -45,6 +45,10 @@ PERMITIDOS: dict[str, str] = {
     # de una cita literal de otro equipo, y reescribir su frase para que pase
     # un test nuestro seria peor que declararla (D-109).
     "argus.init": "la funcion de arranque, no un atributo (D-109)",
+    # El decorador / gestor de contexto. Se cita en decisions.md al explicar
+    # por que el evento ancho va en un `SpanProcessor` y no ahi: los errores no
+    # ocurren donde pusiste el decorador (D-116).
+    "argus.step": "el decorador de unidad de trabajo, no un atributo (D-116)",
     "argus.usecase": "aparece en PLAN.md como EJEMPLO de nombre mal escrito",
     # Los tres nombres viejos del grupo de inferencia. Siguen citados en el
     # registro de decisiones porque la historia de D-081 no se puede contar sin
