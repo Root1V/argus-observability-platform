@@ -111,6 +111,23 @@
     # mantenia vivo el aspecto de una API muerta. Lo encontro su equipo al
     # revisar por que estos componentes no emitian.
     - {id: manager-tui, rol: cli}
+    # `text-embeddings-inference`, cuatro instancias en el nodo `lab`: un
+    # reranker, embeddings, NLI y clasificacion. Lo avisaron en P-37 §4 y HOY
+    # NO EMITE NADA: tiene `--otlp-endpoint` y puerto Prometheus, los dos sin
+    # conectar.
+    #
+    # Declarado en `planificado` y no en `activo` a proposito: `activo`
+    # enciende la sonda de silencio, y un componente que todavia no esta
+    # cableado gritaria cada cinco minutos por algo sabido (D-094). Pasa a
+    # `activo` cuando confirmen el cableado y veamos sus spans.
+    #
+    # UN SOLO `service.name` para las cuatro instancias, no cuatro. Es la
+    # decision de D-062 aplicada: el modelo servido es una DIMENSION
+    # (`gen_ai.request.model`), no un nombre de servicio — si cada modelo
+    # fuera un servicio, los alias partirian los paneles y "como esta TEI"
+    # dejaria de ser una pregunta. Las instancias se separan con
+    # `service.instance.id`.
+    - {id: tei, rol: model-server, slo: {p95_ms: 2000}}
     # `manager-core` NO esta aqui, a peticion suya (P-05): es una libreria que
     # importan `manager-api` y la TUI, sin punto de entrada propio. No puede
     # emitir como servicio ni ahora ni nunca; sus spans salen bajo la identidad
