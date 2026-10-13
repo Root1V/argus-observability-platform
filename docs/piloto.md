@@ -89,14 +89,14 @@ Desde PyPI, como cualquier otra dependencia. Nada de `--find-links`, ni de
 índices privados, ni de ruedas pasadas a mano.
 
 ```bash
-pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a17"
+pip install "argus-obs-sdk[asgi,client,sql]==1.0.0a21"
 ```
 
 En el `pyproject.toml` de tu aplicación:
 
 ```toml
 dependencies = [
-  "argus-obs-sdk[asgi,client,sql]==1.0.0a17",
+  "argus-obs-sdk[asgi,client,sql]==1.0.0a21",
 ]
 ```
 
@@ -150,6 +150,21 @@ ARGUS_ENDPOINT=http://localhost:4317
 ARGUS_ENVIRONMENT=development
 ARGUS_SLO_MS=8000        # por encima de esto, el span se marca para detección
 ```
+
+> **Por qué aquí dice 4317 y en el Paso 1 decía 4318.** El puerto lo manda el
+> **transporte**, no el paso: `4317` es gRPC y `4318` es HTTP, y eso es del
+> estándar, no nuestro. El Paso 1 fija `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
+> y por eso va al 4318; `argus.init()` sale por **gRPC por defecto** y va al
+> 4317. Los dos ejemplos son correctos para su camino.
+>
+> Si no fijas `ARGUS_ENDPOINT`, no tienes que decidir nada: el SDK pone el
+> puerto que corresponde al transporte que haya elegido. Se fija a mano solo
+> para apuntar a otro sitio — y entonces **tiene que coincidir con el
+> transporte**, que es el error que esta nota viene a evitar.
+>
+> Lo preguntó Veritium (`VRT-ARG-001 §4`) leyendo los dos pasos seguidos, y
+> tenían razón en preguntar: el documento daba dos números para la misma
+> variable sin decir de qué dependían.
 
 Eso te da: trazas, métricas, logs correlacionados, y auto-instrumentación de
 todo lo que tengas instalado.
