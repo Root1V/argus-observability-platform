@@ -5917,7 +5917,15 @@ fichero.
 
 > **Fallo de plataforma** · descubierto 2026-10-14 · la firma de un error en el `alert-bus` era `error_type or span.status.message`, y el respaldo es texto libre: 460 errores idénticos de Postgres sin `error.type` dieron **335 firmas distintas**, 335 incidentes y 335 notificaciones, hasta saturar el canal humano
 
-**Fecha**: 2026-10-14 · **Versión**: `1.0.0a23`
+**Fecha**: 2026-10-14 · **Versión**: ninguna — el arreglo está en el
+`alert-bus`, que es un servicio que desplegamos nosotros y no una librería
+publicada
+
+> **Corrección.** Esta entrada decía `1.0.0a23`, y esa versión **no existe**:
+> las librerías están en `a22` y este cambio no toca ninguna. Se lo afirmé
+> además a Veritium en `ARG-VRT-003`, corregido allí también. Escribí un número
+> de versión por costumbre, en el único sitio donde no tocaba — y para ellos la
+> diferencia importa, porque no tienen nada que instalar.
 
 ### Lo que pasó
 
