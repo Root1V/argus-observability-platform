@@ -236,3 +236,68 @@ def test_hay_un_solo_parser() -> None:
     from argus._config import atributos_del_entorno_otel
 
     assert _resource.atributos_del_entorno_otel is atributos_del_entorno_otel
+
+
+# ---------------------------------------------------------------------------
+# El aviso mira el valor RESUELTO, incluidos los argumentos de `init()`.
+#
+# Lo encontro Veritium el primer dia de su integracion, con la forma que
+# documenta la seccion 3 de nuestra propia guia del piloto:
+#
+#     argus.init("veritium-api", namespace="veritium", role="api")
+#
+# El namespace llegaba bien y el aviso decia «arrancando sin identidad: los
+# datos llegan y no sirven». Un equipo nuevo que lea eso cree que su
+# telemetria no vale.
+#
+# Es D-110 por TERCERA vez: `OTEL_RESOURCE_ATTRIBUTES` en `a16`, el entorno
+# despues, y ahora los argumentos. Las tres veces el aviso era correcto en su
+# intencion y falso en su momento.
+# ---------------------------------------------------------------------------
+
+
+def test_el_namespace_por_argumento_no_dispara_el_aviso(monkeypatch) -> None:
+    for v in ("ARGUS_SERVICE", "ARGUS_NAMESPACE", "OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"):
+        monkeypatch.delenv(v, raising=False)
+
+    with warnings.catch_warnings(record=True) as avisos:
+        warnings.simplefilter("always")
+        cfg = Config.from_env("veritium-api", namespace="veritium", role="api")
+
+    assert cfg.service == "veritium-api"
+    assert cfg.namespace == "veritium"
+    sin_identidad = [a for a in avisos if "sin identidad" in str(a.message)]
+    assert not sin_identidad, (
+        "la forma que documenta la guia del piloto dispara el aviso de identidad "
+        "ausente con la identidad puesta"
+    )
+
+
+def test_pero_sigue_avisando_cuando_falta_de_verdad(monkeypatch) -> None:
+    """La otra mitad, y la que importa: no se ha silenciado el aviso.
+
+    Un arreglo que quita un falso positivo quitando la comprobacion entera es
+    peor que el falso positivo.
+    """
+    for v in ("ARGUS_SERVICE", "ARGUS_NAMESPACE", "OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"):
+        monkeypatch.delenv(v, raising=False)
+
+    with warnings.catch_warnings(record=True) as avisos:
+        warnings.simplefilter("always")
+        Config.from_env()
+
+    assert [a for a in avisos if "sin identidad" in str(a.message)], (
+        "sin servicio ni namespace el aviso tiene que saltar"
+    )
+
+
+def test_el_namespace_solo_tambien_avisa(monkeypatch) -> None:
+    """Medio puesto es medio ausente: un servicio sin aplicacion no agrupa."""
+    for v in ("ARGUS_SERVICE", "ARGUS_NAMESPACE", "OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"):
+        monkeypatch.delenv(v, raising=False)
+
+    with warnings.catch_warnings(record=True) as avisos:
+        warnings.simplefilter("always")
+        Config.from_env("veritium-api")   # servicio si, namespace no
+
+    assert [a for a in avisos if "sin identidad" in str(a.message)]

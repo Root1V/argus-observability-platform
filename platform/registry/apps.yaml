@@ -52,20 +52,51 @@
     - {id: collector-gateway, rol: infra}
   depende_de: [clickhouse, victoriametrics]
 
-- id: intelligent-document-platform
-  # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
-  nombre_visible: IDP
-  estado: planificado
+- id: veritium
+  # El rediseño de lo que aqui se llamaba `intelligent-document-platform`. Su
+  # equipo eligio el nombre, y el namespace que emiten es `veritium`.
+  #
+  # SIN alias del nombre viejo, a diferencia de Prometheus: `edge-ai-inference`
+  # habia estado emitiendo y el alias evitaba que su trafico entrara como
+  # `provisional` durante la ventana. Aqui se comprobo primero —cero spans con
+  # `intelligent-document-platform` en todo el historico— asi que un alias
+  # seria una entrada que no protege de nada y que alguien tendria que retirar.
+  nombre_visible: Veritium
+  # ACTIVO desde el 14/10, y en este orden: cablearon, lo verificamos en el
+  # almacen, y entonces se paso. `activo` enciende la sonda de silencio, asi
+  # que declararlo antes habria generado un incidente cada cinco minutos.
+  estado: activo
   criticidad: alta
   dueño: emeric
   canales:
     page: [telegram, console]
     ticket: [console]
   componentes:
-    - {id: idp-api, rol: api, slo: {p95_ms: 8000}}
-    - {id: idp-worker, rol: worker}
-    - {id: idp-ocr, rol: model-server, slo: {p95_ms: 30000}}
-  depende_de: [postgres-main, minio-main]
+    # Verificado en `otel.otel_traces` antes de activar: namespace `veritium`,
+    # rol y entorno correctos en los dos.
+    #
+    # El SLO sale de MEDIR y no de suponer: el `POST .../reprocess` encola y
+    # vuelve en 77 ms —el trabajo de 16,6 s se lo lleva el worker— asi que el
+    # p95 de la API es de centenares de milisegundos, no de los 8000 que
+    # heredaba de `idp-api`. Un SLO diez veces mas flojo de lo necesario no
+    # avisa de nada.
+    - {id: veritium-api, rol: api, slo: {p95_ms: 1000}}
+    # `latido: false` porque lo pidieron y el motivo es correcto: los casos
+    # llegan a rafagas, asi que un worker callado es operacion normal. Apaga la
+    # sonda de silencio y NO le quita nada mas — criticidad, canales y runbook
+    # siguen igual. Es el mismo caso que Prosodia.
+    - {id: veritium-worker, rol: worker, latido: false}
+    #
+    # `idp-ocr` RETIRADO a peticion suya: el OCR es una libreria que importan la
+    # API y el worker, sin punto de entrada propio, asi que sus spans salen bajo
+    # la identidad de quien la importa. Un componente es un proceso desplegable
+    # por separado; una libreria declarada aqui es esperar para siempre una
+    # conexion que no puede ocurrir. Es exactamente lo que Prometheus nos pidio
+    # con `manager-core` (P-05).
+  # Lo que consumen, segun su propio contexto en el canal compartido. Alimenta
+  # la supresion de alertas sintoma: si aeon o la inferencia caen, lo de
+  # Veritium es consecuencia y no causa.
+  depende_de: [aeon-ai, prometheus-inference-platform, postgres-main, minio-main]
   tipo_ia: [llm-api, ocr, extraccion-estructurada]
 
 # APLICACION PILOTO. El nombre lo eligio su equipo el 13/09/2026:

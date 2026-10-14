@@ -5796,3 +5796,117 @@ dice que no se muestreó** — las tres piezas de esta semana compuestas.
   cazaban: una rompía la sintaxis y otra no coincidía con el texto. **Una
   mutación que no muta no demuestra nada**, y se parece mucho a una prueba
   sólida.
+
+---
+
+## D-117 · `http.route` llevaba el id dentro, y la clave que lo evitaba no existía
+
+> **Fallo de plataforma** · descubierto 2026-10-14 · `ASGIMiddleware` leía `scope.get("route_path")` para la plantilla de ruta, y esa clave no existe en ASGI ni en Starlette: aparecía una sola vez en todo el repositorio, en la línea que la leía, así que siempre caía al path resuelto y `POST /v1/cases/{case_id}/reprocess` llegaba al almacén con el UUID dentro
+
+**Fecha**: 2026-10-14 · **Versión**: `1.0.0a22`
+
+### El defecto
+
+```python
+route = scope.get("route_path") or path     # `route_path` NO EXISTE
+```
+
+Starlette expone la ruta resuelta en `scope["route"]`, un objeto con `.path` =
+la plantilla. `route_path` no es de nadie. El `or path` lo tapaba.
+
+Medido sobre el tráfico real de Veritium el día que se integraron:
+
+```
+http.route  /v1/cases/c1919a15-e1f0-4711-8f6f-2dcd5436cdd9/reprocess
+SpanName    POST /v1/cases/c1919a15-e1f0-4711-8f6f-2dcd5436cdd9/reprocess
+```
+
+**Rompe tres cosas, las tres en silencio:**
+
+1. `GROUP BY http.route` da **una fila por caso**, o sea ninguna respuesta.
+2. `spanmetrics` deriva **una serie por caso**: cardinalidad sin techo en el
+   almacén de métricas.
+3. Y `argus.error.fingerprint` incluye el nombre del span, así que **cada
+   expediente que fallara tendría una huella distinta** — exactamente lo que
+   D-115 construyó para evitar, derrotado por un campo de más arriba.
+
+La tercera es la que más duele: el arreglo de la semana pasada quedaba anulado
+por un defecto de hace meses, y ninguno de los dos daba error.
+
+### Por qué duró tanto
+
+**Con una ruta estática el path resuelto ES la plantilla.** Así que `/mcp`
+salía perfecto, los diez tests del middleware pasaban, y solo fallaba en las
+rutas con parámetro — que son las que importan.
+
+Y los tests no podían cazarlo por construcción: **construyen el `scope` a
+mano**, como un diccionario, y la plantilla la pone el **router**. Un `scope`
+inventado nunca tiene `route`, así que la rama buena jamás se ejercitaba. Es
+la cuarta vez esta semana que el instrumento decide la conclusión: aquí el
+instrumento era un diccionario literal.
+
+La prueba nueva monta una aplicación FastAPI de verdad. Con el defecto puesto
+falla; los diez viejos siguen pasando, que es la demostración de que no lo
+cubrían.
+
+### Y el otro, que es D-110 por tercera vez
+
+Veritium reportó además que `argus.init("veritium-api", namespace="veritium")`
+—**la forma que documenta la sección 3 de nuestra propia guía del piloto**—
+disparaba *«arrancando sin identidad»* con el namespace bien puesto.
+
+`Config.from_env` resolvía el namespace **solo desde el entorno** y avisaba
+antes de aplicar los argumentos de `init()`. El aviso movido tras los
+argumentos, y **antes** del relleno que hace caer el namespace al nombre del
+servicio, porque después no distinguiría «lo puso» de «se lo rellenamos».
+
+Tercera vez con esta forma exacta: `a16` con `OTEL_RESOURCE_ATTRIBUTES`, luego
+el entorno, y ahora los argumentos. **Las tres veces el aviso era correcto en
+su intención y falso en su momento.** Hay prueba de las dos mitades: que la
+forma documentada no avise, y que siga avisando cuando la identidad falta de
+verdad — un arreglo que quita el falso positivo quitando la comprobación es
+peor que el falso positivo.
+
+### Lo que el mismo día cerró el criterio 5 del piloto
+
+Veritium entregó la traza `5fada06a68c2852fd0a3f3919ce73b88`, y es la primera
+vez que ese criterio se cumple **con tráfico real** y no con una reproducción:
+
+```
+217 spans · 1 traza · 1 raiz (POST .../reprocess en veritium-api)
+veritium-api -> aeon -> Temporal -> veritium-worker (3 activities)
+conservada al 100% por la politica `slow`
+```
+
+**Una unidad de trabajo que cruza API → cola → worker produce UNA sola traza.**
+Con el `TracingInterceptor` de `temporalio`, que es lo que les recomendamos.
+
+Con una observación que hay que decir: la traza tiene **3 padres huérfanos**, y
+son el salto de aeon. aeon **propaga el contexto y no emite nada** para
+`POST /runs` —cero spans de esa ruta en doce horas— así que el `trace_id`
+sobrevive y la cadena se sostiene, pero una vista de cascada muestra tres
+subárboles flotando. No es defecto de Veritium ni del muestreo. Va avisado a
+aeon.
+
+### El registro
+
+`intelligent-document-platform` pasa a `veritium`, y **sin alias del nombre
+viejo**: se comprobó primero que ese namespace nunca emitió —cero spans en todo
+el histórico— así que un alias sería una entrada que no protege de nada y que
+alguien tendría que retirar. Es la diferencia con Prometheus, donde el nombre
+viejo sí estaba en uso.
+
+`idp-ocr` retirado a petición suya: es una librería que importan la API y el
+worker, sin punto de entrada propio. Un componente es un proceso desplegable
+por separado. Es lo mismo que Prometheus pidió con `manager-core`.
+
+`veritium-worker` con `latido: false` porque los casos llegan a ráfagas, y
+`veritium-api` con **un SLO medido y no supuesto**: el `reprocess` encola y
+vuelve en **77 ms** —los 16,6 s se los lleva el worker— así que heredar los
+8000 ms de `idp-api` era un umbral diez veces más flojo de lo necesario, que no
+avisa de nada. Queda en 1000.
+
+Y pasa a `activo` en el orden que les dijimos: cablean, lo verificamos en el
+almacén, y entonces se activa. Verificado además que el registro **se recargó
+en caliente** en el alert-bus (`registry.reloaded`, `apps: 12`) y no solo en el
+fichero.

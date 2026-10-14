@@ -378,7 +378,8 @@ class Config:
         # La via estandar cuenta como identidad puesta: es la que documentamos
         # para migrar sin tocar codigo.
         resolved_namespace = os.getenv("ARGUS_NAMESPACE") or del_otel.get("service.namespace", "")
-        _avisar_de_la_identidad(resolved_service, resolved_namespace)
+        # El aviso de identidad NO se da aqui: ver mas abajo, tras aplicar los
+        # argumentos de `init()`.
 
         protocol = os.getenv("ARGUS_PROTOCOL") or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or ""
         if protocol not in ("grpc", "http/protobuf", "http/json"):
@@ -433,6 +434,24 @@ class Config:
             campo for campo in ("namespace", "role", "environment", "version", "instance_id")
             if getattr(cfg, campo)
         }
+        # El aviso de identidad, sobre el valor RESUELTO y no sobre la variable.
+        #
+        # Aqui y no arriba porque arriba el namespace se leia SOLO del entorno,
+        # asi que `init("x", namespace="y")` —la forma que documenta la guia del
+        # piloto— disparaba «arrancando sin identidad» con el namespace bien
+        # puesto. Lo encontro Veritium el primer dia de su integracion, leyendo
+        # nuestra propia guia.
+        #
+        # Es D-110 por TERCERA vez: un aviso que mira un valor antes de que este
+        # resuelto. La primera fue `OTEL_RESOURCE_ATTRIBUTES` en `a16`, la
+        # segunda el entorno, y esta los argumentos de `init()`. Las tres veces
+        # el aviso era correcto en su intencion y falso en su momento.
+        #
+        # Y va ANTES del relleno de namespace de unas lineas mas abajo: alli
+        # `cfg.namespace` cae al nombre del servicio, asi que comprobarlo
+        # despues no distinguiria «lo puso» de «se lo rellenamos».
+        _avisar_de_la_identidad(cfg.service, cfg.namespace)
+
         if not cfg.role:
             cfg.role = "api"
 
