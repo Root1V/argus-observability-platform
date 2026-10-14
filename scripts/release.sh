@@ -55,6 +55,16 @@ PY
   printf '  %-24s %s\n' "$(basename "$lib")" "$VERSION"
 done
 
+# La guia del piloto fija la version a instalar, y es el PRIMER documento que
+# lee un equipo nuevo. Veritium se encontro con que mandaba `a17` cuando las
+# librerias iban por `a21`: cuatro versiones de diferencia, y ningun error.
+#
+# Hay una prueba que compara las dos y falla si se separan. La prueba sola no
+# bastaba: salto en la publicacion siguiente, porque este script subia una
+# mitad y no la otra. Una prueba que falla en cada release es una prueba que
+# alguien acaba borrando, asi que el script sube las dos.
+python3 tools/sync_version_doc.py "$VERSION"
+
 uv sync --quiet
 printf '%sOK  %s dependencias resueltas\n' "$VERDE" "$OFF"
 
