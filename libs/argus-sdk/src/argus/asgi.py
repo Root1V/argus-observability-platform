@@ -76,8 +76,21 @@ class ASGIMiddleware:
             token = context.attach(parent)
 
         method = scope.get("method", "GET")
-        route = scope.get("route_path") or path
-        # Nombre segun semconv estable: `{METHOD} {route}`.
+        # Provisional: la PLANTILLA de ruta no existe todavia.
+        #
+        # El router no ha corrido aun —este middleware envuelve la aplicacion—
+        # asi que aqui solo hay el path resuelto. La plantilla se pone al
+        # cerrar, en `_renombrar_con_la_plantilla`.
+        #
+        # Hasta hoy esta linea decia `scope.get("route_path") or path`, y
+        # `route_path` NO ES UNA CLAVE DE ASGI NI DE STARLETTE: aparecia una
+        # sola vez en todo el repositorio, en la linea que la leia. Asi que
+        # siempre caia al path resuelto.
+        #
+        # Con una ruta estatica el path resuelto ES la plantilla, asi que
+        # parecia correcto. Solo fallaba en las rutas con parametro, que son
+        # las que importan (D-117).
+        route = path
         name = f"{method} {route}"
 
         status_holder: dict[str, int] = {}
@@ -98,6 +111,7 @@ class ASGIMiddleware:
                     span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
                     raise
                 finally:
+                    _renombrar_con_la_plantilla(span, scope, method)
                     self._finalize(span, status_holder.get("status"))
         finally:
             if token is not None:
@@ -148,6 +162,41 @@ def _parse_networks(cidrs: Sequence[str]) -> list[ipaddress.IPv4Network | ipaddr
 
 def _headers_to_dict(raw: Iterable[tuple[bytes, bytes]]) -> dict[str, str]:
     return {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw}
+
+
+def _renombrar_con_la_plantilla(span: trace.Span, scope: Scope, method: str) -> None:
+    """Pone `http.route` y el nombre del span con la PLANTILLA de la ruta.
+
+    Starlette expone la ruta resuelta en `scope["route"]`, y eso solo existe
+    DESPUES de que el router haya corrido — o sea, no cuando este middleware
+    abre el span, sino cuando lo cierra.
+
+    Por que importa, medido sobre trafico real de Veritium: su
+    `POST /v1/cases/{case_id}/reprocess` llegaba al almacen con el UUID del
+    caso dentro, en `http.route` **y en el nombre del span**. Eso rompe tres
+    cosas a la vez, y las tres en silencio:
+
+      - `GROUP BY http.route` da una fila por caso, o sea ninguna respuesta.
+      - `spanmetrics` deriva una serie por caso: cardinalidad sin techo en el
+        almacen de metricas.
+      - Y nuestra propia huella de error incluye el nombre del span, asi que
+        cada expediente que fallara tendria una huella distinta — justo lo que
+        `argus.error.fingerprint` existe para evitar.
+
+    Es la tercera cosa que se agrupa por un identificador sin querer: antes
+    fueron el cursor del long-poll de Prometheus y sus rutas de `{action}`.
+
+    No levanta nunca: corre en el camino de la peticion.
+    """
+    try:
+        objeto = scope.get("route")
+        plantilla = getattr(objeto, "path", None)
+        if not plantilla or not isinstance(plantilla, str):
+            return
+        span.set_attribute("http.route", plantilla)
+        span.update_name(f"{method} {plantilla}")
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _set_http_attributes(span: trace.Span, scope: Scope, method: str, route: str, path: str) -> None:
