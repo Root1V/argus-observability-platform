@@ -140,6 +140,80 @@ def _signal_from_span(
     )
 
 
+def _firma_del_error(span: Any, attrs: dict[str, Any]) -> str:
+    """La firma de un error, de cardinalidad ACOTADA. Nunca texto libre.
+
+    Hasta el 14/10 esto era:
+
+        signature = str(error_type or span.status.message or "error")
+
+    El comentario de al lado decia —con razon— que `error.type` es de
+    cardinalidad cerrada «asi que sirve de firma». Y el respaldo era el MENSAJE,
+    que es lo contrario. El razonamiento correcto pegado a una linea que hacia
+    lo opuesto.
+
+    Lo que costo: Veritium emitio 460 errores de Postgres en 22 minutos sin
+    `error.type`, asi que la firma fue el mensaje entero —incluida la linea
+    `DETAIL:` con los UUID de la fila y su timestamp—. **335 firmas distintas
+    para UN error**, 335 incidentes y 335 notificaciones. El componente cuyo
+    trabajo es deduplicar, multiplicando (D-118).
+
+    La jerarquia es la misma que ya aplican el gateway (`argus.error.kind`) y el
+    evento ancho del SDK. Es la TERCERA vez que se escribe, y eso es una señal:
+    deberia vivir en `argus-obs-semconv`, que es lo unico que los tres pueden
+    importar. Queda anotado y no se hace de paso.
+    """
+    # 1. Lo que el emisor declaro, si lo declaro. Cerrado por contrato.
+    if tipo := attrs.get(A.ERROR_TYPE):
+        return str(tipo)
+
+    # 2. Lo que el gateway ya derivo, si esta senal paso por el. En el camino
+    #    caliente no pasa —va del agente directo aqui— asi que no se puede
+    #    contar con el, pero si esta es bueno.
+    if kind := attrs.get("argus.error.kind"):
+        return str(kind)
+
+    # 3. El tipo de la EXCEPCION, que vive en el evento. Es un nombre de clase,
+    #    asi que esta acotado, y lo pone el emisor sin pedirlo: en el caso de
+    #    Veritium estaba en 460 de 460 mientras `error.type` estaba en 2.
+    try:
+        for evento in getattr(span, "events", ()) or ():
+            if getattr(evento, "name", "") != "exception":
+                continue
+            ea = _attrs(getattr(evento, "attributes", ()) or ())
+            if tipo := ea.get("exception.type"):
+                return str(tipo)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 4. La operacion. `argus.event` es de cardinalidad cerrada por contrato, y
+    #    el nombre del span lo es por convencion — con la plantilla de ruta y no
+    #    el path resuelto, que es lo que D-117 arreglo.
+    if evento := attrs.get(A.ARGUS_EVENT):
+        return str(evento)
+    if nombre := getattr(span, "name", ""):
+        return str(nombre)
+
+    return "error"
+
+
+# El mensaje NO entra en la firma, pero si en el titulo: es lo que una persona
+# necesita leer UNA vez. Primera linea y recortado, porque un `DETAIL:` de
+# Postgres son parrafos.
+_MAX_TITULO = 160
+
+
+def _titulo_del_error(signature: str, span: Any, component: str) -> str:
+    base = f"{signature} en {component}"
+    mensaje = (getattr(span.status, "message", "") or "").strip()
+    if not mensaje or mensaje == signature:
+        return base
+    primera = mensaje.splitlines()[0].strip()
+    if len(primera) > _MAX_TITULO:
+        primera = primera[:_MAX_TITULO] + "…"
+    return f"{base}: {primera}"
+
+
 def _classify(span: Any, attrs: dict[str, Any], component: str) -> tuple[SignalKind | None, str, str]:
     """Decide que clase de senal es, si es alguna.
 
@@ -155,15 +229,15 @@ def _classify(span: Any, attrs: dict[str, Any], component: str) -> tuple[SignalK
             f"Guardarrail «{guardrail}» incumplido en {component}",
         )
 
-    # 2. Error. `error.type` es de cardinalidad cerrada, asi que sirve de firma.
+    # 2. Error. La firma tiene que ser de CARDINALIDAD ACOTADA, siempre.
     is_error = span.status.code == _STATUS_ERROR
     error_type = attrs.get(A.ERROR_TYPE)
     if is_error or error_type:
-        signature = str(error_type or span.status.message or "error")
+        signature = _firma_del_error(span, attrs)
         return (
             SignalKind.ERROR,
             signature,
-            f"{signature} en {component}",
+            _titulo_del_error(signature, span, component),
         )
 
     # 3. SLO superado. Lo marca el SDK al cerrar el paso.

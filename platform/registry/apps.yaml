@@ -68,8 +68,44 @@
   estado: activo
   criticidad: alta
   dueño: emeric
+  # TELEGRAM DESACTIVADO el 14/10 a peticion del dueño de la plataforma.
+  #
+  # Motivo: 335 notificaciones por UN solo error suyo —un `NotNullViolationError`
+  # con la columna `tenant` a null en `webhook_deliveries`— que saturaron el
+  # canal humano. Y la causa de que fueran 335 y no UNA es NUESTRA: el
+  # `alert-bus` construia la firma con el mensaje de error completo, que incluye
+  # la linea `DETAIL:` de Postgres con los UUID de la fila y su timestamp. Cada
+  # ocurrencia, una firma distinta. Ver D-118.
+  #
+  # Se deja en `console` y NO se baja a `provisional`: la deteccion sigue
+  # entera, los incidentes se siguen registrando, y lo unico que se apaga es
+  # despertar a una persona. Silenciar y dejar de mirar son cosas distintas.
+  #
+  # SE REACTIVA cuando: (1) su equipo arregle el `tenant` null, y (2) se
+  # verifique en el almacen que el error ya no llega. No antes.
+  # SILENCIO DECLARADO, no un canal mal puesto.
+  #
+  # Existe como campo propio porque `page: [console]` a secas es
+  # indistinguible de un error de configuracion, y hay una prueba que falla
+  # justo por eso: «la consola es el log del alert-bus, no la mira nadie».
+  # Dejar pasar esa prueba sin mas convertiria el invariante en papel.
+  #
+  # Asi que el silencio se declara, con fecha, motivo y CONDICION de vuelta.
+  # Un silencio sin condicion de vuelta es un silencio permanente que nadie
+  # recuerda haber decidido.
+  silenciado:
+    desde: 2026-10-14
+    quien: emeric
+    motivo: >
+      335 notificaciones por UN solo error suyo saturaron el canal humano. La
+      causa de que fueran 335 y no una era NUESTRA (D-118): el alert-bus
+      firmaba por el mensaje completo, que incluia la linea `DETAIL:` de
+      Postgres con los UUID de la fila. Arreglado en el mismo cambio.
+    reactivar_cuando: >
+      (1) Veritium arregle el `tenant` null en `webhook_deliveries`, y (2) se
+      verifique en el almacen que el error dejo de llegar durante 24 h.
   canales:
-    page: [telegram, console]
+    page: [console]
     ticket: [console]
   componentes:
     # Verificado en `otel.otel_traces` antes de activar: namespace `veritium`,

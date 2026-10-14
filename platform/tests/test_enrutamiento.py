@@ -62,6 +62,19 @@ def test_cada_activa_avisa_a_alguien(app: dict) -> None:
 
     destinos = canales.get(nivel) or SOLO_CONSOLA
     humanos = [c for c in destinos if c != "console"]
+
+    # Un silencio DECLARADO es una decision; `page: [console]` a secas es
+    # indistinguible de una errata. Por eso la excepcion exige el campo, con
+    # fecha, motivo y condicion de vuelta — un silencio sin condicion de vuelta
+    # es permanente y nadie recuerda haberlo decidido (D-118).
+    if not humanos and (silencio := app.get("silenciado")):
+        faltan = [k for k in ("desde", "quien", "motivo", "reactivar_cuando") if not silencio.get(k)]
+        assert not faltan, (
+            f"`{app['id']}` esta en consola y declara `silenciado`, pero le faltan "
+            f"{faltan}. Un silencio sin condicion de vuelta no se puede auditar."
+        )
+        pytest.skip(f"silencio declarado desde {silencio['desde']} por {silencio['quien']}")
+
     assert humanos, (
         f"`{app['id']}` es `activo` con criticidad `{app.get('criticidad','media')}`, "
         f"asi que su aviso maximo es `{nivel}` — y va a {destinos}. "

@@ -5910,3 +5910,99 @@ Y pasa a `activo` en el orden que les dijimos: cablean, lo verificamos en el
 almacén, y entonces se activa. Verificado además que el registro **se recargó
 en caliente** en el alert-bus (`registry.reloaded`, `apps: 12`) y no solo en el
 fichero.
+
+---
+
+## D-118 · El componente cuyo trabajo es deduplicar multiplicó por 335
+
+> **Fallo de plataforma** · descubierto 2026-10-14 · la firma de un error en el `alert-bus` era `error_type or span.status.message`, y el respaldo es texto libre: 460 errores idénticos de Postgres sin `error.type` dieron **335 firmas distintas**, 335 incidentes y 335 notificaciones, hasta saturar el canal humano
+
+**Fecha**: 2026-10-14 · **Versión**: `1.0.0a23`
+
+### Lo que pasó
+
+Veritium —integrados el día anterior— emitió 460 errores en 22 minutos: la
+columna `tenant` a null en `webhook_deliveries`. Un solo defecto suyo, repetido.
+
+El dueño de la plataforma pidió apagar las notificaciones porque Telegram
+estaba saturado. **Y la saturación no la causó el volumen de Veritium: la causó
+nuestra deduplicación.**
+
+```python
+signature = str(error_type or span.status.message or "error")
+```
+
+El comentario de la línea de arriba decía, **con razón**, que `error.type` «es
+de cardinalidad cerrada, así que sirve de firma». El respaldo era el mensaje,
+que tiene la propiedad opuesta. Y Postgres adjunta al mensaje una línea
+`DETAIL:` con los UUID de la fila que falló y su timestamp:
+
+```
+DETAIL:  Failing row contains (b929521c-…, 77e22778-…, 2026-10-14 11:18:11.307931+00, …).
+```
+
+Una firma por ocurrencia. **El razonamiento correcto pegado a una línea que
+hacía lo contrario** — la forma de D-111, otra vez.
+
+Medido: `error.type` presente en **2 de 460**; el evento de excepción, en **460
+de 460**. La materia prima acotada estaba ahí y no se miraba.
+
+### Tercera vez esta semana que algo se agrupa por un identificador
+
+| | dónde |
+|---|---|
+| D-115 | el cursor del long-poll iba a entrar en la huella: 663 huellas para un problema |
+| D-117 | la plantilla de ruta llevaba el UUID del caso, y con ella el nombre del span |
+| **D-118** | la firma del incidente llevaba el `DETAIL:` de Postgres |
+
+Las tres son la misma frase: **lo que agrupa no puede contener lo que
+distingue.** Y en esta el coste fue inmediato y sobre una persona.
+
+### El arreglo
+
+Jerarquía acotada, la misma que ya aplican el gateway y el evento ancho:
+`error.type` → `argus.error.kind` → `exception.type` del evento → `argus.event`
+o el nombre del span → `"error"`. **Nunca el mensaje.**
+
+El mensaje **sí** va al título, en una línea y recortado a 160 caracteres: es
+lo que una persona necesita leer una vez, y sin él el incidente diría
+`NotNullViolationError en veritium-api` sin decir de qué columna habla. Acotar
+la firma no puede costar la información.
+
+**Es la tercera vez que escribo esa jerarquía** —gateway, SDK y ahora
+alert-bus— y eso es una señal: debería vivir en `argus-obs-semconv`, que es lo
+único que los tres pueden importar. Queda como `B-27` y no se hace de paso.
+
+La prueba reproduce el caso real: 400 ocurrencias con `DETAIL:` variable. Con
+el defecto da **400 firmas**; con el arreglo, **una**.
+
+### El silencio, y por qué es un campo y no un canal mal puesto
+
+Telegram apagado para Veritium a petición del dueño. Eso rompió
+`test_cada_activa_avisa_a_alguien`, y el test tenía razón: *«la consola es el
+log del alert-bus, no la mira nadie»*. Dejarlo pasar habría convertido el
+invariante en papel.
+
+Así que el silencio se **declara**:
+
+```yaml
+silenciado:
+  desde: 2026-10-14
+  quien: emeric
+  motivo: …
+  reactivar_cuando: …
+```
+
+Y la prueba acepta la excepción **solo** si el campo está completo. **Un
+silencio sin condición de vuelta es un silencio permanente que nadie recuerda
+haber decidido.** Verificado quitando `reactivar_cuando`: la prueba falla.
+
+Es el mismo principio de toda la semana —`unclassified`, `unknown`, ausente y
+no cero—: **un hecho declarado, no una ausencia que se interpreta.**
+
+### Lo que no se hizo, y es de ellos
+
+El `tenant` null es código de Veritium y no se toca desde aquí. Se les pide
+con el dato que tenemos: 460 ocurrencias entre las 11:10 y las 11:32, en
+`webhook_deliveries`, y nada después. Telegram vuelve cuando lo arreglen y se
+verifique 24 h limpias — las dos condiciones, escritas en el registro.
