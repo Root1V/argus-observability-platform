@@ -1,5 +1,7 @@
 """Sube la version de la guia del piloto. Lo llama release.sh."""
-import pathlib, re, sys
+import pathlib
+import re
+import sys
 
 version = sys.argv[1]
 p = pathlib.Path("docs/piloto.md")
