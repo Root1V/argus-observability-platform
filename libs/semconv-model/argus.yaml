@@ -557,6 +557,20 @@ groups:
           El evento ancho se recorto: la operacion tenia mas de 48 atributos.
           Existe porque truncar en silencio es peor que no truncar — quien lee
           no sabe que falta.
+      - id: argus.redaction.app_pattern
+        type: boolean
+        # Lo pone el gateway cuando un patron de redaccion POR APLICACION caza
+        # algo. Existe porque el processor `redaction` lleva su propio contador
+        # y no sabe aplicar patrones por app; el `transform` que si sabe no
+        # cuenta nada, asi que sin esta marca el tercer criterio de aceptacion
+        # de Veritium (`VRT-ARG-003`) no se podia cumplir.
+        #
+        # Se pone ANTES del reemplazo: despues no queda nada que detectar.
+        brief: >
+          Un patron de redaccion propio de esta aplicacion cazo algo en este
+          span. Lo que importa no es el caso suelto sino el AGREGADO: un pico
+          significa que una aplicacion empezo a filtrar datos personales, y esa
+          es la unica forma de enterarse de que la primera capa fallo.
       - id: argus.collector.tier
         type: enum
         members: [agent, gateway]

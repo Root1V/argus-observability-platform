@@ -6113,3 +6113,91 @@ buena durante un momento.
 parece mucho a una prueba sólida. Lo que lo cazó fue comprobar que el fichero
 cambió antes de leer el resultado, que es lo que debería hacer siempre y no
 cuando me acuerdo.
+
+---
+
+## D-121 · Nuestra red de privacidad era de un país, y eso lo decide quién la escribió
+
+**Fecha**: 2026-10-15 · **Versión**: `1.0.0a24`
+
+### Lo que Veritium encontró
+
+El `redaction` del gateway es la segunda capa de privacidad, y nuestra propia
+guía dice que **es la que importa**: *un fallo de instrumentación en una app no
+se convierte en una fuga en el almacén*. Para Veritium no actuaba.
+
+```
+patron de documento:  \b\d{8}[A-HJ-NP-TV-Z]\b   <- ocho digitos Y UNA LETRA
+```
+
+Es el DNI **español**. El peruano son ocho dígitos solos y no lo reconoce.
+Tampoco el carné de extranjería (9–12) ni el RUC (11). Y el de teléfono exige
+separadores, así que un celular escrito seguido pasa.
+
+**La capa que existe para cuando la primera falla no conocía los
+identificadores del país de una de las cuatro aplicaciones integradas.** Para
+esa aplicación, la red no estaba.
+
+Y no es hipotético: el `NotNullViolationError` que saturó el canal (D-118)
+traía el `DETAIL:` de Postgres con **la fila entera**.
+
+### Por qué no se amplía el patrón global
+
+Veritium lo propuso como alternativa y lo descartó en el mismo mensaje, con
+razón: un `\b\d{8}\b` para todos taparía fechas como `20261015` y cualquier
+contador de ocho cifras de cualquier equipo. Nuestro propio comentario del
+teléfono dice lo mismo desde hace semanas — *una tirada suelta de dígitos es
+casi siempre un identificador, un timestamp o un contador* — así que su
+observación y nuestro razonamiento coincidían; lo que faltaba era la vía.
+
+### Lo que se hace, y una cosa que no es lo que pidieron
+
+`transform/redaccion_por_app`, con OTTL acotado por `service.namespace`.
+**No se puede hacer con el processor `redaction`**: sus `blocked_values` son
+globales a la instancia.
+
+Cubre los tres ámbitos donde vive el texto libre: `span.status.message` y
+`error.message` en el span, `exception.message` y `exception.stacktrace` en el
+**evento** —el ámbito que se escapó en D-092, D-098 y D-113— y el cuerpo y
+`error.message` en los registros.
+
+**Pidieron que los patrones vivieran en el registro de la app y están en la
+configuración del Collector.** El motivo es el de esta semana: el registro es
+dato y se **recarga en caliente**; esta configuración es estática y necesita
+reiniciar. Un patrón de privacidad declarado en el registro **se leería como
+activo mientras no hace nada** hasta el siguiente reinicio, y para un control
+que protege a personas ese es el peor modo de fallo que se puede elegir. Es
+D-114 y D-117 aplicados a algo que importa más.
+
+### El tercer criterio no se cumplía, y era el valioso
+
+Su criterio tenía tres partes y **la tercera no se cumplía**: *«el conteo de
+redacciones sube»*. Ese contador es del processor `redaction`; `transform` no
+cuenta nada.
+
+Y es la parte que de verdad sirve, por nuestro propio plan: *un pico en el
+conteo de redacciones significa que alguna app empezó a filtrar PII*. Un caso
+suelto no dice nada; el agregado es la única forma de enterarse de que la
+primera capa falló.
+
+Así que `argus.redaction.app_pattern`, puesto con `IsMatch` **antes** del
+reemplazo —después no queda nada que detectar— y declarado en el modelo.
+Verificado en el almacén: `veritium: 2`, y la otra app sin marca.
+
+### Lo que esto NO arregla, dicho antes de que lo descubran
+
+El `mask` del SDK sigue con los patrones globales. Así que un dato peruano
+enmascarado en origen y uno enmascarado en el gateway **no salen iguales**, y
+eso contradice el comentario de `_content.py` que dice que las dos capas tienen
+que coincidir *«o los datos salen distintos según por dónde pasen»*.
+
+Se acepta porque esta capa es la red y la de origen es suya —tienen su
+`scrub.py`— pero es una asimetría real, y la escribo aquí porque la alternativa
+es que la encuentren ellos.
+
+### Y el carné de extranjería se queda fuera a propósito
+
+Pidieron DNI (8), CE (9–12) y RUC (11). Van el de 8 y el de 11. **El rango 9–12
+incluye 10, que es un timestamp epoch en segundos**, así que redactarlo
+convertiría cada marca de tiempo en `[CE]`. Queda como decisión suya con el
+dato delante, no como olvido.

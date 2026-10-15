@@ -533,6 +533,67 @@ processors:
   # TODOS los emisores. Cuatro servicios Go de Aeon y el evento de auditoria de
   # Prometheus construyen sus atributos a mano, asi que una huella calculada en
   # el SDK de Python dejaria fuera justo a quien mas falta le hace.
+  # Redaccion POR APLICACION. Lo pidio Veritium (`VRT-ARG-003`).
+  #
+  # El `redaction` de arriba es global y de un pais: su patron de documento es
+  # `\b\d{8}[A-HJ-NP-TV-Z]\b` —ocho digitos **y una letra**, que es el DNI
+  # espanol— asi que el peruano, ocho digitos solos, no lo reconoce. Y el de
+  # telefono exige separadores, con buen criterio: una tirada suelta de diez
+  # digitos es casi siempre un identificador, un timestamp o un contador, y
+  # redactarla destruye datos utiles sin proteger nada.
+  #
+  # POR QUE NO SE AMPLIA EL PATRON GLOBAL. Un `\b\d{8}\b` para todos taparia
+  # fechas como `20261015` y cualquier contador de ocho cifras de cualquier
+  # equipo. Veritium propuso esta via precisamente por eso, y tienen razon.
+  #
+  # POR QUE NO VIVE EN EL REGISTRO, que es lo que pidieron. El registro es dato
+  # y se recarga EN CALIENTE; esta configuracion es estatica y necesita
+  # reiniciar el proceso. Un patron de privacidad declarado en el registro se
+  # leeria como activo mientras no hiciera nada hasta el siguiente reinicio, y
+  # para un control de privacidad ese es el peor modo de fallo posible — es la
+  # forma de D-114 y D-117 aplicada a algo que protege a personas. Si alguna vez
+  # se genera la configuracion del Collector desde el registro, su sitio es ahi.
+  #
+  # LO QUE ESTO NO ARREGLA, dicho aqui para que no se lea como mas de lo que es:
+  # el `mask` del SDK sigue con los patrones globales, asi que un dato peruano
+  # enmascarado en origen y uno enmascarado aqui NO salen iguales. Las dos capas
+  # dejan de coincidir, y eso contradice el comentario de `_content.py`. Se
+  # acepta porque esta capa es la red y la de origen es suya —`scrub.py`—, pero
+  # es una asimetria real y no un detalle.
+  transform/redaccion_por_app:
+    error_mode: ignore
+    trace_statements:
+      # Donde vive el texto libre de un error. El `DETAIL:` de Postgres que
+      # provoco `ARG-VRT-003` llegaba por `status.message`.
+      # La MARCA va antes del reemplazo: despues ya no queda nada que detectar.
+      #
+      # Existe porque el tercer criterio de aceptacion de Veritium era que «el
+      # conteo de redacciones suba», y ese contador es del processor
+      # `redaction`, que no sabe hacer esto por aplicacion. `transform` no
+      # cuenta nada, asi que la marca es lo que lo hace contable — y el conteo
+      # es la parte que de verdad sirve: un pico significa que una aplicacion
+      # empezo a filtrar datos personales.
+      - context: span
+        statements:
+          - set(span.attributes["argus.redaction.app_pattern"], true) where resource.attributes["service.namespace"] == "veritium" and (IsMatch(span.status.message, "\\b\\d{8}\\b") or IsMatch(span.status.message, "\\b\\d{11}\\b") or IsMatch(span.attributes["error.message"], "\\b\\d{8}\\b") or IsMatch(span.attributes["error.message"], "\\b\\d{11}\\b"))
+          - replace_pattern(span.status.message, "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(span.status.message, "\\b\\d{11}\\b", "[RUC]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(span.attributes["error.message"], "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(span.attributes["error.message"], "\\b\\d{11}\\b", "[RUC]") where resource.attributes["service.namespace"] == "veritium"
+      # El evento de excepcion es otro ambito. Es el que se escapo en D-092.
+      - context: spanevent
+        statements:
+          - replace_pattern(spanevent.attributes["exception.message"], "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(spanevent.attributes["exception.message"], "\\b\\d{11}\\b", "[RUC]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(spanevent.attributes["exception.stacktrace"], "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(log.body, "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(log.body, "\\b\\d{11}\\b", "[RUC]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(log.attributes["error.message"], "\\b\\d{8}\\b", "[DNI]") where resource.attributes["service.namespace"] == "veritium"
+          - replace_pattern(log.attributes["error.message"], "\\b\\d{11}\\b", "[RUC]") where resource.attributes["service.namespace"] == "veritium"
+
   transform/error_fingerprint:
     error_mode: ignore
     trace_statements:
@@ -693,6 +754,7 @@ service:
         - memory_limiter
         - resource/gateway
         - redaction
+        - transform/redaccion_por_app
         - transform/pseudonymize
         - tail_sampling
         - transform/sampling_retention
@@ -712,6 +774,7 @@ service:
         - memory_limiter
         - resource/gateway
         - redaction
+        - transform/redaccion_por_app
         - transform/pseudonymize
         - batch/clickhouse
       exporters: [clickhouse]
