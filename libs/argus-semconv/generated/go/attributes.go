@@ -115,6 +115,7 @@ const (
 	ArgusErrorKind = "argus.error.kind"
 	ArgusErrorFingerprint = "argus.error.fingerprint"
 	ArgusWideTruncated = "argus.wide.truncated"
+	ArgusRedactionAppPattern = "argus.redaction.app_pattern"
 	ArgusCollectorTier = "argus.collector.tier"
 )
 
