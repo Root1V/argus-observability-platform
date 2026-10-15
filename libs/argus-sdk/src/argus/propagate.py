@@ -31,6 +31,8 @@ from argus_semconv import attributes as A
 from opentelemetry import baggage, context, propagate, trace
 from opentelemetry.trace import SpanKind
 
+from . import _scope
+
 # Clave con la que viaja el contexto cuando no hay cabeceras y hay que meterlo
 # en el propio payload (colas Redis artesanales, por ejemplo).
 PAYLOAD_KEY = "_argus_ctx"
@@ -65,7 +67,11 @@ def extract_headers(
     """
     parent = propagate.extract(carrier or {})
     token = context.attach(parent)
-    tracer = trace.get_tracer("argus-sdk")
+    tracer = trace.get_tracer(
+        "argus-sdk",
+        _scope.version_paquete(),
+        attributes=_scope.atributos(),
+    )
     try:
         with tracer.start_as_current_span(name, kind=kind) as span:
             yield span
@@ -139,7 +145,11 @@ def run(name: str, *, run_id: str | None = None, app: str | None = None) -> Iter
     resolved_run_id = run_id or uuid.uuid4().hex
     token = set_baggage(**{k: v for k, v in {A.ARGUS_RUN_ID: resolved_run_id, A.ARGUS_APP: app}.items() if v})
 
-    tracer = trace.get_tracer("argus-sdk")
+    tracer = trace.get_tracer(
+        "argus-sdk",
+        _scope.version_paquete(),
+        attributes=_scope.atributos(),
+    )
     try:
         with tracer.start_as_current_span(name, kind=SpanKind.INTERNAL) as span:
             span.set_attribute(A.ARGUS_RUN_ID, resolved_run_id)

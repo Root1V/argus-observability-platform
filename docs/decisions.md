@@ -6014,3 +6014,80 @@ El `tenant` null es código de Veritium y no se toca desde aquí. Se les pide
 con el dato que tenemos: 460 ocurrencias entre las 11:10 y las 11:32, en
 `webhook_deliveries`, y nada después. Telegram vuelve cuando lo arreglen y se
 verifique 24 h limpias — las dos condiciones, escritas en el registro.
+
+---
+
+## D-119 · El SDK no decía qué versión era, y D-082 ya lo había arreglado en el otro paquete
+
+> **Fallo de plataforma** · descubierto 2026-10-14 · los tres `get_tracer("argus-sdk")` del SDK no pasaban versión de scope, así que ningún span dice qué versión de nuestro código lo emitió: a la pregunta «¿qué versión de argus corre cada equipo?» solo se podía contestar de uno de los cuatro, y de rebote
+
+**Fecha**: 2026-10-14 · **Versión**: `1.0.0a23`
+
+### Cómo se notó
+
+El dueño de la plataforma pidió la lista de qué espero y de quién, para
+revisarlo con cada equipo. Una fila obvia de esa lista es **qué versión corre
+cada uno**, y resultó que no se podía medir:
+
+```
+veritium    argus-semconv 1.0.0a21   <- por `semconv`, no por el SDK
+veritium    argus-sdk     (vacio)
+```
+
+De los cuatro equipos integrados, la versión solo se pudo medir de **uno**, y
+de rebote: Veritium usa `argus-semconv` además del SDK. De Prometheus, Prosodia
+y Aeon la respuesta era **lo que nos habían dicho, no lo que medimos** — que es
+exactamente la distinción que llevo toda la semana cobrándole a otros.
+
+### Y el arreglo ya existía, en el otro paquete
+
+`argus-semconv` declara la versión del paquete en el scope **desde `1.0.0a4`**,
+y lo hace porque se arregló: hasta entonces registraba ahí la versión del
+MODELO, que vale `1.0.0` desde hace mucho, así que un prelanzamiento y una
+estable declaraban lo mismo y en el almacén no se podían separar (D-082).
+
+**Ese arreglo no se aplicó al SDK.** Y el SDK quedó peor que el estado que
+D-082 corrigió: allí había un número equivocado, aquí **no había número**.
+
+Es la misma forma que llevo coleccionando toda la semana, y esta vez contra mí
+mismo con la lección ya escrita: *una verdad en dos sitios, y el que nadie toca
+es el que se consulta.* El fichero `_scope.py` de `semconv` explica el problema
+y la solución en su docstring. Lo había leído.
+
+### Qué se hace
+
+`libs/argus-sdk/src/argus/_scope.py`, espejo del de `semconv`: la versión del
+paquete en el scope, y `argus.sdk.package` como atributo para distinguir un
+span del middleware de uno de un decorador de `semconv`.
+
+**Una propiedad útil del arreglo: la ausencia pasa a ser informativa.** Un span
+de `argus-sdk` sin versión de scope es, desde ahora, un emisor anterior a
+`a23`. Así que la lista que no se podía hacer se puede hacer incluso para quien
+no haya subido.
+
+### La prueba, y por qué recorre el árbol y no el texto
+
+Lo que falló no fue un tracer, fue **que uno de los tres se quedó atrás**. Así
+que la prueba no comprueba un tracer concreto: recorre el paquete y exige que
+**no haya ninguno** sin versión.
+
+La primera versión era una expresión regular sobre el fuente, y su único
+hallazgo fue **el docstring de `_scope.py`**, que cita la línea mala para
+explicarla. Un `grep` no distingue código de prosa, y en este repositorio la
+prosa habla mucho del código — ya me costó una vez una comprobación que casaba
+dentro de una cadena. Reescrita con `ast`, que solo ve llamadas.
+
+Y hay una prueba de la prueba: que el docstring **siga citando** la línea mala.
+Si esta comprobación volviera a ser un `grep`, lo probable es que alguien
+borrara la cita en vez de la expresión regular.
+
+### Y mi mutación estaba rota otra vez
+
+Al verificar que la prueba caza una regresión, la primera mutación **no se
+aplicó** —la cadena no casaba por la indentación— y la prueba pasó. La tomé por
+buena durante un momento.
+
+**Tercera vez esta semana.** Una mutación que no muta no demuestra nada y se
+parece mucho a una prueba sólida. Lo que lo cazó fue comprobar que el fichero
+cambió antes de leer el resultado, que es lo que debería hacer siempre y no
+cuando me acuerdo.

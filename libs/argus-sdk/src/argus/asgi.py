@@ -27,6 +27,7 @@ from argus_semconv import attributes as A
 from opentelemetry import context, propagate, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
+from . import _scope
 from ._config import TrustMode
 
 Scope = dict[str, Any]
@@ -57,7 +58,11 @@ class ASGIMiddleware:
         self.networks = tuple(_parse_networks(trusted_cidrs))
         self.excluded = frozenset(excluded_paths) if excluded_paths is not None else DEFAULT_EXCLUDED
         self.slo_ms = slo_ms
-        self._tracer = trace.get_tracer("argus-sdk")
+        self._tracer = trace.get_tracer(
+            "argus-sdk",
+            _scope.version_paquete(),
+            attributes=_scope.atributos(),
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
