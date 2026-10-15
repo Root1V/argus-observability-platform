@@ -266,10 +266,23 @@
   tipo_ia: [asr, diarizacion, traduccion, tts]
 
 - id: aeon-ai
-  # Activa desde el 29/09: los cinco servicios emiten con identidad correcta.
-  # Se promueve porque mientras estuvo `planificado` sin canales, sus
-  # incidentes iban al `["console"]` por defecto — el log de nuestro propio
-  # servicio, que no mira nadie (D-094).
+  # DOS ENTRADAS, y las pidieron ellos (`AEON-SYN-001`, respondiendo a
+  # `ARG-AEON-005`). Esta es el stack de DESARROLLO, que es el unico que nos
+  # apunta hoy.
+  #
+  # Lo que lo decidio es un dato suyo que yo no tenia: **no existe produccion de
+  # aeon**. Su `deploy/` solo tiene compose, `deploy/helm` lleva meses siendo un
+  # directorio vacio, y su colector apunta por defecto a su Tempo local — asi
+  # que alcanzarnos exige poner `ARGUS_ENDPOINT` a mano.
+  #
+  # Yo habia medido «12 dias sin emitir» y lo presente como un hecho sobre
+  # aeon. Era un hecho sobre QUE ME LLEGA: sus suites emiten mucho y son
+  # invisibles aqui por diseño. Su silencio es RUIDO, no sintoma, y lo que
+  # sobraba era mi expectativa.
+  #
+  # Antes esta entrada mezclaba las dos cosas: el `activo` describia un
+  # despliegue y el `latido: false` otro.
+  nombre_visible: aeon (desarrollo)
   estado: activo
   criticidad: media
   dueño: emeric
@@ -277,32 +290,53 @@
     page: [telegram, console]
     ticket: [telegram, console]
   componentes:
-    # `latido: false` en los cinco, y NO es lo que ellos pidieron.
+    # `latido: false` en los cinco, y AHORA SI es lo que piden.
     #
-    # Dijeron «corren siempre, sin latido: false — si uno se calla, es una
-    # noticia», y tienen razon sobre su produccion. Pero avisaron a la vez de
-    # que en desarrollo los levantan y los bajan a mano constantemente, y
-    # preguntaron si nuestra sonda distingue por entorno.
+    # El 29/09 dijeron «corren siempre, sin `latido: false` — si uno se calla,
+    # es una noticia», y lo puse en false al reves de lo que pedian. Hoy dicen
+    # que esa frase describia PRODUCCION y que la escribieron antes de saber que
+    # no la habria todavia: aplicarla a un stack que esta caido la mayor parte
+    # del tiempo «convertiria la sonda en algo que nadie mira, que es peor que
+    # no tenerla».
     #
-    # No distingue: `_sondas_silencio` mira `estado` y `rol`, y nada mas. Con
-    # `latido: true` les avisariamos cada cinco minutos de algo sabido, que es
-    # como se ensena a ignorar al canario.
-    #
-    # Asi que va en false HASTA que pase una de las dos: que salgan de
-    # `local`, o que la sonda aprenda a distinguir entorno. Es una decision
-    # suya y esta preguntada.
+    # Asi que la configuracion no cambia y el motivo si: ya no es una decision
+    # mia a su pesar, es la suya.
     - {id: control-plane, rol: api, latido: false}
     - {id: modelgw, rol: api, latido: false}
     - {id: toolgw, rol: api, latido: false}
-    # Nos faltaba: son CINCO y teniamos cuatro. Gobierna los runs sobre
-    # Temporal (start/cancel/pause/resume/approve).
     - {id: runcontroller, rol: api, latido: false}
     - {id: worker, rol: worker, latido: false}
   depende_de: [postgres-main, temporal]
   tipo_ia: [agentes, llm-local]
 
-# Los laboratorios van con criticidad baja a proposito: un experimento no puede
-# generar guardias por mucho que falle.
+- id: aeon-ai-prod
+  # PRODUCCION, que hoy NO EXISTE. Declarada en `planificado` para que el dia
+  # que exista no entre como `provisional` —que fuerza criticidad media y pierde
+  # canales y runbook (D-094)— y para que la decision del latido este tomada de
+  # antemano y no en caliente.
+  #
+  # `latido: true` desde el primer dia, que es la frase que ellos escribieron el
+  # 29/09 y que aqui si aplica: **si uno se calla, es una noticia**.
+  #
+  # Avisan ellos cuando exista. Ese es tambien el momento de decidir si `B-29`
+  # —que la sonda distinga por entorno— sigue haciendo falta o si estas dos
+  # entradas ya lo resuelven.
+  nombre_visible: aeon (produccion)
+  estado: planificado
+  criticidad: alta
+  dueño: emeric
+  canales:
+    page: [telegram, console]
+    ticket: [telegram, console]
+  componentes:
+    - {id: control-plane, rol: api}
+    - {id: modelgw, rol: api}
+    - {id: toolgw, rol: api}
+    - {id: runcontroller, rol: api}
+    - {id: worker, rol: worker}
+  depende_de: [postgres-main, temporal]
+  tipo_ia: [agentes, llm-local]
+
 - id: llm-benchmark
   # Planificada: esta en el roadmap (F1-11, F7-02) pero aun no emite.
   estado: planificado
