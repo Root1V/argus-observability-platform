@@ -83,30 +83,25 @@
   #
   # SE REACTIVA cuando: (1) su equipo arregle el `tenant` null, y (2) se
   # verifique en el almacen que el error ya no llega. No antes.
-  # SILENCIO DECLARADO, no un canal mal puesto.
+  # TELEGRAM REACTIVADO el 15/10, cumplidas las dos condiciones que se
+  # escribieron al apagarlo:
   #
-  # Existe como campo propio porque `page: [console]` a secas es
-  # indistinguible de un error de configuracion, y hay una prueba que falla
-  # justo por eso: «la consola es el log del alert-bus, no la mira nadie».
-  # Dejar pasar esa prueba sin mas convertiria el invariante en papel.
+  #   1. Veritium arreglo la causa. No era su codigo actual: era un proceso
+  #      VIEJO. Migraron `webhook_deliveries` exigiendo `tenant` a las 11:03 y
+  #      la API seguia corriendo con el codigo anterior, insertando cada 2 s
+  #      sin ese campo. La reiniciaron a las 11:32 — que es exactamente el
+  #      final de la ventana que medimos desde aqui.
   #
-  # Asi que el silencio se declara, con fecha, motivo y CONDICION de vuelta.
-  # Un silencio sin condicion de vuelta es un silencio permanente que nadie
-  # recuerda haber decidido.
-  silenciado:
-    desde: 2026-10-14
-    quien: emeric
-    motivo: >
-      335 notificaciones por UN solo error suyo saturaron el canal humano. La
-      causa de que fueran 335 y no una era NUESTRA (D-118): el alert-bus
-      firmaba por el mensaje completo, que incluia la linea `DETAIL:` de
-      Postgres con los UUID de la fila. Arreglado en el mismo cambio.
-    reactivar_cuando: >
-      (1) Veritium arregle el `tenant` null en `webhook_deliveries`, y (2) se
-      verifique en el almacen que el error dejo de llegar durante 24 h.
+  #   2. 26 horas limpias, medidas: ultimo error el 14/10 a las 11:32:43, cero
+  #      ocurrencias en 24 h. Y con 107.191 spans en 25 horas distintas, asi
+  #      que las 24 h significan algo — 24 horas limpias sin trafico no habrian
+  #      probado nada.
+  #
+  # La causa de que fueran 335 avisos y no UNO era nuestra (D-118) y tambien
+  # esta arreglada, asi que una reaparicion ya no satura el canal.
   canales:
-    page: [console]
-    ticket: [console]
+    page: [telegram, console]
+    ticket: [telegram, console]
   componentes:
     # Verificado en `otel.otel_traces` antes de activar: namespace `veritium`,
     # rol y entorno correctos en los dos.
