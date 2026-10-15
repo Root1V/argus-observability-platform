@@ -194,7 +194,31 @@
     # fuera un servicio, los alias partirian los paneles y "como esta TEI"
     # dejaria de ser una pregunta. Las instancias se separan con
     # `service.instance.id`.
-    - {id: tei, rol: model-server, slo: {p95_ms: 2000}}
+    #
+    # SLO MEDIDO por su equipo (P-42 §2), no supuesto. Mis 2000 ms eran una
+    # suposicion y ellos la tumbaron con el argumento correcto: con ese umbral,
+    # el reranker tendria que degradarse 6x para disparar.
+    #
+    # LA CARGA DE REFERENCIA VA CON EL NUMERO, porque sin ella el umbral no
+    # significa nada: la latencia de un reranker la manda el NUMERO DE
+    # DOCUMENTOS, no la peticion. Medido contra TEI directamente, sin su
+    # gateway en medio y con la maquina tranquila:
+    #
+    #    1 doc   (65 tok)      p95   15,7 ms
+    #   10 docs  (690 tok)     p95   61,8 ms
+    #   50 docs  (3.443 tok)   p95  340,3 ms
+    #
+    # ~6,5 ms por documento mas ~9 ms fijos. Lineal.
+    #
+    # El trafico real de rerank de su plataforma —597 llamadas— da p50 de 1.976
+    # tokens y p95 de 2.652. A esa carga, el p95 de TEI esta en ~340 ms. Los
+    # 500 dejan 1,4x de margen: disparan ante una degradacion de verdad y no
+    # ante ruido. Por debajo de 400 avisaria por tamano de lote y no por salud.
+    #
+    # SIGUE EN `planificado`: el 15/10 dicen que lo cablearon y en el almacen no
+    # hay NI UN span de `tei`, mientras sus otros tres servicios emiten a la vez.
+    # Pasa a `activo` cuando los veamos, que es el mismo orden de siempre.
+    - {id: tei, rol: model-server, slo: {p95_ms: 500}}
     # `manager-core` NO esta aqui, a peticion suya (P-05): es una libreria que
     # importan `manager-api` y la TUI, sin punto de entrada propio. No puede
     # emitir como servicio ni ahora ni nunca; sus spans salen bajo la identidad
