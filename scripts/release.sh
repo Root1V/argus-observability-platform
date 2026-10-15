@@ -85,7 +85,27 @@ printf '%sOK  %s ruedas construidas\n' "$VERDE" "$OFF"
 ls -1 dist/*.whl | sed 's|dist/|       |'
 
 git add -A
-git commit -q -m "Version $VERSION de las librerias"
+# `--allow-empty` no, pero tampoco abortar si no hay nada que commitear.
+#
+# Pasa asi, y ya ha pasado dos veces: una pasada falla en las pruebas DESPUES de
+# haber subido las versiones, el bump se queda en el arbol, y el arreglo de lo
+# que fallo se lo lleva con un `git add -A`. En la pasada siguiente las
+# versiones ya estan commiteadas, `git commit` sale con 1, y con `set -e` el
+# script muere **justo antes de etiquetar** — asi que construye las ruedas, dice
+# OK, y no deja etiqueta. Las dos veces tuve que etiquetar a mano.
+#
+# Lo que importa de este paso no es que haya un commit nuevo: es que la etiqueta
+# exista y apunte al estado exacto que se probo.
+if git diff --cached --quiet; then
+  printf '%s     nada que commitear: las versiones ya estaban en el arbol%s\n' "$GRIS" "$OFF"
+else
+  git commit -q -m "Version $VERSION de las librerias"
+fi
+
+if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+  printf '%sLa etiqueta v%s ya existe. No se reescribe.%s\n' "$ROJO" "$VERSION" "$OFF"
+  exit 1
+fi
 git tag -a "v$VERSION" -m "Librerias $VERSION"
 
 printf '\n%s── Como la instala una aplicacion %s\n\n' "$BOLD" "$OFF"
