@@ -229,7 +229,15 @@ services:
       ALERTBUS_DISPATCH_QUEUE_SIZE: ${ALERTBUS_DISPATCH_QUEUE_SIZE:-1000}
       # Se observa a si mismo: seria absurdo que la pieza que detecta
       # incidentes fuera la unica sin telemetria.
-      ARGUS_ENDPOINT: http://collector:4317
+      # 4318 y NO 4317, y el motivo costo 25 dias de ceguera.
+      #
+      # Estos dos servicios no instalan el extra `grpc`, asi que el SDK habla
+      # OTLP/HTTP JSON — y lo mandaba al 4317, que es el puerto de gRPC. Nada
+      # llegaba. El aviso de arranque del SDK lo decia correctamente en CADA
+      # arranque desde el 20/09 y nadie lo leia: es un `RuntimeWarning` a
+      # stderr, asi que no llega al almacen, no abre incidente y no despierta a
+      # nadie (D-122).
+      ARGUS_ENDPOINT: http://collector:4318
       ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
     volumes:
@@ -260,7 +268,15 @@ services:
       CANARY_CLICKHOUSE_URL: http://clickhouse:8123/
       CANARY_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
       CANARY_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      ARGUS_ENDPOINT: http://collector:4317
+      # 4318 y NO 4317, y el motivo costo 25 dias de ceguera.
+      #
+      # Estos dos servicios no instalan el extra `grpc`, asi que el SDK habla
+      # OTLP/HTTP JSON — y lo mandaba al 4317, que es el puerto de gRPC. Nada
+      # llegaba. El aviso de arranque del SDK lo decia correctamente en CADA
+      # arranque desde el 20/09 y nadie lo leia: es un `RuntimeWarning` a
+      # stderr, asi que no llega al almacen, no abre incidente y no despierta a
+      # nadie (D-122).
+      ARGUS_ENDPOINT: http://collector:4318
       ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
     volumes:

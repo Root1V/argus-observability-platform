@@ -15,7 +15,7 @@ from pathlib import Path
 import yaml
 
 from .config import Settings
-from .probes import Sonda, SondaHTTP, SondaSilencio
+from .probes import Sonda, SondaDeIngesta, SondaHTTP, SondaSilencio
 
 log = logging.getLogger("canary.build")
 
@@ -35,6 +35,7 @@ ROLES_SIN_LATIDO = {"cli", "library", "frontend", "infra"}
 def cargar(settings: Settings) -> list[Sonda]:
     sondas: list[Sonda] = []
     sondas.extend(_sondas_http(settings))
+    sondas.extend(_sonda_de_ingesta(settings))
     sondas.extend(_sondas_silencio(settings))
     log.info("canary.probes_loaded", extra={"total": len(sondas)})
     return sondas
@@ -79,6 +80,28 @@ def _sondas_http(settings: Settings) -> list[SondaHTTP]:
             expected_status=e.get("estado_esperado"),
         )
         for e in entradas
+    ]
+
+
+def _sonda_de_ingesta(settings: Settings) -> list[SondaDeIngesta]:
+    """UNA, y de la plataforma, no de cada aplicacion.
+
+    Lo que comprueba es la tuberia compartida: si `gateway -> ClickHouse` esta
+    roto, lo esta para todos. Una por aplicacion seria el mismo hecho repetido
+    N veces en el canal humano.
+    """
+    if not settings.clickhouse_password:
+        log.info("canary.ingesta_sin_credenciales")
+        return []
+    return [
+        SondaDeIngesta(
+            app="argus",
+            component="ingesta",
+            clickhouse_url=settings.clickhouse_url,
+            usuario=settings.clickhouse_user,
+            password=settings.clickhouse_password,
+            plazo_s=settings.ingesta_plazo_s,
+        )
     ]
 
 

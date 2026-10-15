@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # cada microcorte de red es uno que acaba silenciado.
     fallos_para_alertar: int = 2
 
+    # --- Sonda de ingesta ----------------------------------------------------
+    # Plazo para que un span emitido aparezca en el almacen. El suelo son los
+    # 30 s de `decision_wait` del muestreo del gateway mas el lote y la
+    # insercion; la sonda no acepta menos y lo dice.
+    ingesta_plazo_s: int = 90
+
     # --- Sonda de silencio ---------------------------------------------------
     clickhouse_url: str = "http://clickhouse:8123/"
     clickhouse_user: str = "argus"

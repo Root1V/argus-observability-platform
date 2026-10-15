@@ -6201,3 +6201,106 @@ Pidieron DNI (8), CE (9–12) y RUC (11). Van el de 8 y el de 11. **El rango 9�
 incluye 10, que es un timestamp epoch en segundos**, así que redactarlo
 convertiría cada marca de tiempo en `[CE]`. Queda como decisión suya con el
 dato delante, no como olvido.
+
+---
+
+## D-122 · La plataforma no se observaba a sí misma, el aviso lo decía, y nadie leía stderr
+
+> **Fallo de plataforma** · descubierto 2026-10-15 · `canary` y `alert-bus` exportaban OTLP/HTTP JSON al puerto **4317**, que es el de gRPC, así que no llegó ni un span al almacén desde el **20 de septiembre** — 609 horas. El aviso de arranque del SDK lo detectaba correctamente en cada arranque y nadie lo leía, porque es un `RuntimeWarning` a stderr
+
+**Fecha**: 2026-10-15 · **Versión**: `1.0.0a25`
+
+### La frase que lo encontró es de Prometheus
+
+> *«Una sonda de disponibilidad que ejercita menos superficie que el servicio
+> declara es una sonda que certifica lo que no probó.»*
+
+Les pasó con un modelo de visión que llevaba meses sin poder ver mientras su
+sonda decía sano — porque una sonda de disponibilidad manda texto. Lo apunté
+como deuda nuestra porque **nuestro canario tenía esa forma exacta**: cuatro
+sondas HTTP contra `/healthz`, `/ping`, `/health` y el `health_check` del
+Collector. Las cuatro dicen que un proceso contesta.
+
+**Ninguna decía que la telemetría llegue al almacén**, que es la única función
+distintiva de esta plataforma.
+
+### Lo que la sonda nueva encontró en su primer ciclo
+
+```
+spans de `canary` y `alert-bus` en el almacen
+  ultimo:  2026-09-20 02:08   ->  609 horas
+mientras, en la ultima hora:
+  veritium 12.084 · prometheus-inference-platform 3.209
+```
+
+**Argus no se observaba a sí misma desde hacía 25 días.** Y la cadena de verdes
+es completa: `/healthz` 200, `/ping` 200, el `health_check` del Collector 200, y
+las sondas de silencio de `argus` no aplican porque sus dos componentes son de
+rol `infra`, que está en `ROLES_SIN_LATIDO`.
+
+### La causa, y es de las que dan vergüenza
+
+```
+otelcol_receiver_accepted_spans_total{transport="http"}   25.828
+otelcol_receiver_refused_spans_total{transport="http"}         0
+gRPC:  ningun contador — no habia llegado nada nunca
+```
+
+Los dos servicios no instalan el extra `grpc`, así que el SDK habla **OTLP/HTTP
+JSON** y lo mandaban al **4317**, que es el puerto de gRPC. Nada llegaba, y no
+había error: un POST HTTP a un puerto gRPC se pierde sin ruido.
+
+### Y lo peor: el aviso existía, funcionaba, y lo escribí yo
+
+```
+RuntimeWarning: Argus: protocolo 'http/json' contra el puerto 4317, que es el
+de grpc (http/json usa el 4318). Si no lo has elegido a proposito, el protocolo
+se autodetecto por los paquetes instalados: fija ARGUS_PROTOCOL.
+```
+
+Ese aviso lo construí en `a16` **para exactamente este caso**, y llevaba
+imprimiéndose en cada arranque del canario desde entonces. Diagnóstico perfecto,
+texto exacto, acción concreta.
+
+**Nadie lo leyó**, porque un `RuntimeWarning` va a stderr: no llega al almacén,
+no abre incidente, no despierta a nadie y no aparece en ningún tablero.
+
+Es la versión más dura de lo que Axonium me dijo esta semana —*«un aviso que no
+entiendes no se silencia»*— porque aquí no es que no se entendiera: **es que no
+se veía**. Y la ironía exacta es que el servicio ciego era el canario: el
+proceso cuyo trabajo es que ningún silencio pase inadvertido.
+
+### Lo que se hace
+
+**El arreglo inmediato**: los dos al 4318. Verificado — el aviso dejó de tener
+motivo y la telemetría de la plataforma vuelve a llegar.
+
+**El arreglo que importa**: `SondaDeIngesta`. Manda un span con una marca
+**única por ejecución** y comprueba que se puede consultar en ClickHouse. Si no
+aparece en el plazo, `CAIDO`.
+
+Tres decisiones que la hacen una sonda y no un adorno:
+
+| | |
+|---|---|
+| **marca única** | sin ella, una fila de hace una hora la haría pasar con la ingesta parada — la misma sonda que certifica lo que no probó, dentro de la clase escrita para evitarlo |
+| **política de muestreo propia** | sin ella sería una tirada de dados del 10 % y reportaría caído nueve de cada diez veces: un canario que se silencia solo |
+| **plazo con suelo** | el muestreo espera 30 s a que la traza cierre. Un plazo menor es un generador de falsos caídos, y la sonda se niega a aceptarlo |
+
+Y **no se llama «extremo a extremo»**, que es lo que me salía escribir. Mide
+`gateway → muestreo → ClickHouse`; el salto del Collector **agente** no lo
+cubre, porque este canario exporta al gateway. Nombrarla por más superficie de
+la que ejercita sería repetir el defecto que viene a arreglar.
+
+### Lo que queda abierto, y es más grande que esto
+
+**Los avisos de arranque del SDK no son una señal de la plataforma.** Son
+`warnings` de Python. Todo lo que construí en `a16`, `a17` y `a23` —identidad
+ausente, entorno fuera de vocabulario, protocolo contra el puerto equivocado—
+vive en stderr, en los logs de un contenedor que nadie abre.
+
+Cuatro equipos integrados y cada uno de esos avisos es exactamente el tipo de
+cosa que uno quiere ver **el día que integra**. Queda como `B-30`: que un aviso
+de arranque llegue al almacén como evento y pueda abrir un incidente de
+severidad baja. Hoy el único que lo habría visto es quien ya estaba mirando el
+sitio correcto.

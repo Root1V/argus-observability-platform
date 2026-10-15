@@ -510,6 +510,20 @@ processors:
             - 'attributes["argus.outcome"] == "denied"'
             - 'attributes["argus.outcome"] == "suspended"'
 
+      # La sonda de ingesta del canario. SIN ESTO la sonda seria una tirada de
+      # dados del 10 % y reportaria la plataforma caida nueve de cada diez
+      # veces — o sea, un canario que se silencia solo.
+      #
+      # No enciende el camino caliente: el filtro del agente enruta por
+      # `argus.hot`, estado de error o `argus.guardrail`, y este span no lleva
+      # ninguno. Se conserva para poder consultarla, no para notificar.
+      - name: canario-ingesta
+        type: ottl_condition
+        ottl_condition:
+          error_mode: ignore
+          span:
+            - 'attributes["argus.event"] == "canary.ingesta"'
+
       - name: baseline
         type: probabilistic
         probabilistic:

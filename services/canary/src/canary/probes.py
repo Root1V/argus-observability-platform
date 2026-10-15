@@ -5,12 +5,20 @@ Separadas del planificador para que se puedan probar sin relojes ni esperas.
 
 from __future__ import annotations
 
+import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import Final, Protocol
 
 import httpx
+
+# La sonda de ingesta se reconoce por estos dos. El `argus.event` tiene una
+# politica propia en el muestreo del gateway: sin ella, la sonda seria una
+# tirada de dados del 10% y reportaria caido nueve de cada diez veces.
+EVENTO_INGESTA: Final = "canary.ingesta"
+ATRIBUTO_MARCA: Final = "argus.canary.marca"
 
 
 class Resultado(StrEnum):
@@ -244,3 +252,142 @@ def _escapar(valor: str) -> str:
     controlamos; aun asi, no interpolar sin escapar.
     """
     return valor.replace("\\", "\\\\").replace("'", "\\'")
+
+
+class SondaDeIngesta:
+    """Manda un span y comprueba que se puede consultar en el almacen.
+
+    **Por que existe**, y la frase es de Prometheus: *una sonda de
+    disponibilidad que ejercita menos superficie que el servicio declara es una
+    sonda que certifica lo que no probo*. Les paso con un modelo de vision que
+    llevaba meses sin poder ver mientras su sonda decia sano, porque una sonda
+    de disponibilidad manda texto.
+
+    Las cuatro sondas HTTP de este canario tienen esa forma exacta: pegan a
+    `/healthz`, `/ping`, `/health` y al `health_check` del Collector. Las cuatro
+    dicen que un proceso contesta. **Ninguna dice que la telemetria enviada
+    llegue al almacen**, que es la unica funcion distintiva de esta plataforma:
+
+    - ClickHouse puede contestar a `/ping` con la base `otel` borrada.
+    - El Collector puede estar sano con una tuberia desactivada por un error de
+      configuracion, o con la cola de exportacion llena y descartando.
+    - Y el `alert-bus` puede responder a `/healthz` con su receptor OTLP roto.
+
+    En los tres casos el tablero diria verde y no llegaria un solo span.
+
+    **Lo que esta sonda NO cubre, dicho aqui y no en un sitio mas comodo:** el
+    salto del Collector AGENTE. Este canario exporta a `ARGUS_ENDPOINT`, que en
+    el despliegue del plano central es el gateway, asi que mide
+    `gateway -> muestreo -> ClickHouse`. Un agente caido en la maquina de una
+    aplicacion no lo detecta esto, lo detecta la sonda de silencio de esa app.
+    Nombrarla `extremo a extremo` seria repetir el defecto que viene a arreglar.
+    """
+
+    # El muestreo del gateway espera a que la traza cierre antes de decidir
+    # (`decision_wait: 30s`), y despues vienen el lote y la insercion. Un plazo
+    # mas corto que eso convertiria la sonda en un generador de falsos caidos.
+    ESPERA_MINIMA_S: Final = 30
+
+    def __init__(
+        self,
+        *,
+        app: str,
+        component: str,
+        clickhouse_url: str,
+        usuario: str,
+        password: str,
+        plazo_s: int = 90,
+        timeout_s: float = 15.0,
+    ) -> None:
+        self.app = app
+        self.component = component
+        self._url = clickhouse_url
+        self._usuario = usuario
+        self._password = password
+        self.plazo_s = max(plazo_s, self.ESPERA_MINIMA_S + 15)
+        self.timeout_s = timeout_s
+
+    async def ejecutar(self) -> Medicion:
+        base = {
+            "objetivo": f"{self.app}/{self.component}",
+            "app": self.app,
+            "component": self.component,
+        }
+        # Marca UNICA por ejecucion. Sin ella, una fila de hace una hora haria
+        # pasar la sonda mientras la ingesta esta parada — que es la forma de
+        # sonda que certifica lo que no probo, otra vez y en esta misma clase.
+        marca = uuid.uuid4().hex
+        inicio = time.perf_counter()
+
+        try:
+            self._emitir(marca)
+        except Exception as exc:  # noqa: BLE001
+            return Medicion(
+                **base,
+                resultado=Resultado.CAIDO,
+                duracion_ms=int((time.perf_counter() - inicio) * 1000),
+                detalle=f"no se pudo emitir: {type(exc).__name__}: {exc}",
+            )
+
+        try:
+            llego_en = await self._esperar_en_el_almacen(marca)
+        except Exception as exc:  # noqa: BLE001
+            return Medicion(
+                **base,
+                resultado=Resultado.CAIDO,
+                duracion_ms=int((time.perf_counter() - inicio) * 1000),
+                detalle=f"no se pudo consultar el almacen: {type(exc).__name__}: {exc}",
+            )
+
+        transcurrido = int((time.perf_counter() - inicio) * 1000)
+        if llego_en is None:
+            return Medicion(
+                **base,
+                resultado=Resultado.CAIDO,
+                duracion_ms=transcurrido,
+                detalle=(
+                    f"el span {marca[:8]} no aparecio en {self.plazo_s}s. "
+                    f"La telemetria no esta llegando al almacen"
+                ),
+            )
+        return Medicion(**base, resultado=Resultado.OK, duracion_ms=transcurrido)
+
+    def _emitir(self, marca: str) -> None:
+        """Un span con la marca, y se fuerza el envio.
+
+        `force_flush` no es opcional: el procesador por lotes del SDK espera
+        cientos de milisegundos antes de exportar, y esta sonda mide el camino
+        y no la paciencia del lote.
+        """
+        import argus
+        from argus_semconv import attributes as A
+
+        with argus.step(EVENTO_INGESTA) as paso:
+            paso.set(**{ATRIBUTO_MARCA: marca, A.ARGUS_COMPONENT_ROLE: "scheduler"})
+        argus.handle().force_flush()
+
+    async def _esperar_en_el_almacen(self, marca: str) -> int | None:
+        consulta = (
+            "SELECT count() FROM otel.otel_traces "
+            f"WHERE Timestamp > now() - INTERVAL {self.plazo_s + 60} SECOND "
+            f"AND SpanAttributes['{ATRIBUTO_MARCA}'] = '{_escapar(marca)}'"
+        )
+        limite = time.monotonic() + self.plazo_s
+        intento = 0
+        while time.monotonic() < limite:
+            # La primera consulta no sirve de nada antes del `decision_wait`.
+            await asyncio.sleep(5 if intento else self.ESPERA_MINIMA_S)
+            intento += 1
+            async with httpx.AsyncClient(timeout=self.timeout_s) as cliente:
+                r = await cliente.post(
+                    self._url,
+                    content=consulta,
+                    headers={
+                        "X-ClickHouse-User": self._usuario,
+                        "X-ClickHouse-Key": self._password,
+                    },
+                )
+            r.raise_for_status()
+            if int((r.text or "0").strip() or 0) > 0:
+                return intento
+        return None
