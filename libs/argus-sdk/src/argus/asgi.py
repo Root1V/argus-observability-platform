@@ -61,7 +61,6 @@ class ASGIMiddleware:
         self._tracer = trace.get_tracer(
             "argus-sdk",
             _scope.version_paquete(),
-            attributes=_scope.atributos(),
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

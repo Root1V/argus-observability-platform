@@ -110,13 +110,23 @@ def test_no_levanta_si_el_paquete_no_esta_instalado(monkeypatch) -> None:
     assert _scope.version_paquete() == "0.0.0.dev0"
 
 
-def test_el_scope_se_distingue_del_de_semconv(spans) -> None:
-    """Un span puede venir del middleware del SDK o de un decorador de
-    semconv, y en el almacen eso se tiene que poder separar sin adivinar."""
-    from argus_semconv import _scope as scope_semconv
+def test_no_publicamos_atributos_de_scope_y_es_deliberado() -> None:
+    """No tienen donde caer, asi que publicarlos es emitir a la nada.
 
-    assert _scope.atributos() != scope_semconv.atributos()
-    assert _scope.atributos()["argus.sdk.package"] == "argus-obs-sdk"
+    La tabla de trazas tiene `ScopeName` y `ScopeVersion` y **ninguna columna
+    para los atributos del scope**. La primera version de `_scope.py` publicaba
+    `argus.sdk.package`; lo cazo la prueba de documentos como atributo no
+    declarado, y al ir a declararlo aparecio el motivo real para quitarlo —
+    nunca habria llegado al almacen, y lo que decia ya lo dice `ScopeName`.
+
+    `argus-semconv` publica `argus.semconv.version` desde `1.0.0a4` y no esta en
+    ninguno de sus 3.406 spans almacenados. Es `B-28`.
+    """
+    assert not hasattr(_scope, "atributos"), (
+        "el SDK volvio a publicar atributos de scope: no hay columna donde caigan"
+    )
+    fuente = (FUENTE / "asgi.py").read_text(encoding="utf-8")
+    assert "attributes=_scope" not in fuente
 
 
 @pytest.mark.parametrize("modulo", ["asgi", "propagate"])

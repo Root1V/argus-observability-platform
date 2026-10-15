@@ -6056,9 +6056,31 @@ y la solución en su docstring. Lo había leído.
 
 ### Qué se hace
 
-`libs/argus-sdk/src/argus/_scope.py`, espejo del de `semconv`: la versión del
-paquete en el scope, y `argus.sdk.package` como atributo para distinguir un
-span del middleware de uno de un decorador de `semconv`.
+`libs/argus-sdk/src/argus/_scope.py`: la versión del paquete en el scope, y
+**nada más**.
+
+La primera versión publicaba además `argus.sdk.package` como atributo de scope,
+espejo de lo que hace `semconv`. **Lo cazó la prueba de documentos** —un
+`argus.*` citado en `decisions.md` y no declarado en el modelo— y al ir a
+declararlo apareció el motivo real para no tenerlo:
+
+```
+columnas de Scope en otel.otel_traces:  ScopeName, ScopeVersion
+columnas para los atributos del scope:  ninguna
+```
+
+**Los atributos de scope no tienen dónde caer.** Y lo que ese atributo decía
+—qué paquete emitió— ya lo dice `ScopeName`.
+
+Con una consecuencia que no era mía y que conviene no perder:
+`argus-semconv` publica `argus.semconv.version` desde `1.0.0a4`, por este mismo
+D-082, y **no está en ninguno de sus 3.406 spans almacenados**. Veinte versiones
+emitiendo a la nada. Queda como `B-28`, y no se toca de paso porque es el otro
+paquete y la decisión tiene tres salidas distintas.
+
+Así que la prueba de documentos, que existe por D-081 para que no mandemos
+fuera un nombre que el paquete no conoce, acabó encontrando un atributo que
+**ningún** consumidor podía conocer. Es el mejor resultado que ha dado.
 
 **Una propiedad útil del arreglo: la ausencia pasa a ser informativa.** Un span
 de `argus-sdk` sin versión de scope es, desde ahora, un emisor anterior a

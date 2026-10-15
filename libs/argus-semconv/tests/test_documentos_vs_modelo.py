@@ -65,6 +65,17 @@ PERMITIDOS: dict[str, str] = {
     # traza. Sigue citado en decisions.md porque D-054 y D-081 lo nombran y la
     # historia no se reescribe.
     "argus.sampling.baseline_pct": "retirado; hoy es argus.sampling.retained_pct (D-114)",
+    # Los dos son atributos de SCOPE, no de span, y este test mira el modelo
+    # —que declara atributos de span, de recurso y de evento—. Se citan en
+    # decisions.md porque D-119 cuenta que no aterrizan: la tabla de trazas
+    # tiene `ScopeName` y `ScopeVersion` y ninguna columna para ellos.
+    #
+    # `argus.sdk.package` se propuso y se retiro el mismo dia, al ver eso.
+    # `argus.semconv.version` lleva emitiendose desde `1.0.0a4` y no esta en
+    # ninguno de los 3.406 spans almacenados; que hacer con el es `B-28`, y
+    # tiene tres salidas (columna, atributo de span, o retirarlo).
+    "argus.sdk.package": "atributo de SCOPE, propuesto y retirado el mismo dia (D-119)",
+    "argus.semconv.version": "atributo de SCOPE: se emite desde a4 y no aterriza (B-28, D-119)",
     # Nombres que un equipo PROPUSO y que decidimos NO adoptar porque el
     # estándar ya los tiene. Se citan en D-086 para poder contar por qué se
     # rechazaron; no pueden volver a aparecer en material que mandemos fuera.

@@ -70,7 +70,6 @@ def extract_headers(
     tracer = trace.get_tracer(
         "argus-sdk",
         _scope.version_paquete(),
-        attributes=_scope.atributos(),
     )
     try:
         with tracer.start_as_current_span(name, kind=kind) as span:
@@ -148,7 +147,6 @@ def run(name: str, *, run_id: str | None = None, app: str | None = None) -> Iter
     tracer = trace.get_tracer(
         "argus-sdk",
         _scope.version_paquete(),
-        attributes=_scope.atributos(),
     )
     try:
         with tracer.start_as_current_span(name, kind=SpanKind.INTERNAL) as span:

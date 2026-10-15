@@ -21,11 +21,20 @@ dicho, no lo que medimos (D-119).
 Una propiedad util del arreglo: **la ausencia pasa a ser informativa.** Un span
 de `argus-sdk` sin version de scope es, desde ahora, un emisor anterior a
 `1.0.0a23`.
+
+**Aqui NO hay atributos de scope, y es a proposito.** La primera version de este
+fichero publicaba `argus.sdk.package`, y la prueba de documentos lo cazó como un
+atributo no declarado. Al ir a declararlo salio el motivo de verdad para no
+tenerlo: la tabla de trazas tiene columnas `ScopeName` y `ScopeVersion` **y
+ninguna para los atributos del scope**, asi que no aterrizan en ningun sitio. Y
+lo que ese atributo decia —que paquete emitio— ya lo dice `ScopeName`.
+
+`argus-semconv` si publica uno, `argus.semconv.version`, desde `1.0.0a4`: son
+3.406 spans en el almacen y **ese atributo no esta en ninguno de ellos**. Queda
+anotado como `B-28`; no se toca de paso porque es el otro paquete.
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 
 def version_paquete() -> str:
@@ -41,14 +50,3 @@ def version_paquete() -> str:
         return version("argus-obs-sdk")
     except Exception:  # noqa: BLE001 - nunca por no saber una version
         return "0.0.0.dev0"
-
-
-def atributos() -> dict[str, Any]:
-    """Atributos del scope.
-
-    Hoy solo el nombre del paquete que de verdad emite. Se distingue de
-    `argus-semconv`, que publica su propio scope: un span puede venir del
-    middleware del SDK o de un decorador de semconv, y en el almacen eso se
-    tiene que poder separar sin adivinar.
-    """
-    return {"argus.sdk.package": "argus-obs-sdk"}
