@@ -21,6 +21,7 @@ from typing import Any
 
 from argus_schemas import Severity, Signal, SignalKind
 from argus_semconv import attributes as A
+from argus_semconv.errors import SIN_CLASIFICAR, clase_del_error
 
 log = logging.getLogger("alert_bus.normalize")
 
@@ -140,6 +141,23 @@ def _signal_from_span(
     )
 
 
+def _excepciones(span: Any) -> list[dict[str, Any]]:
+    """Atributos de los eventos `exception` del span, en forma de diccionario.
+
+    Esto es traduccion de OTLP, no jerarquia: aqui los eventos vienen en
+    protobuf y hay que desempaquetar cada `AnyValue`. Nunca levanta — una señal
+    con una forma rara debe seguir produciendo una firma, aunque sea peor.
+    """
+    try:
+        return [
+            _attrs(getattr(e, "attributes", ()) or ())
+            for e in getattr(span, "events", ()) or ()
+            if getattr(e, "name", "") == "exception"
+        ]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _firma_del_error(span: Any, attrs: dict[str, Any]) -> str:
     """La firma de un error, de cardinalidad ACOTADA. Nunca texto libre.
 
@@ -158,43 +176,30 @@ def _firma_del_error(span: Any, attrs: dict[str, Any]) -> str:
     para UN error**, 335 incidentes y 335 notificaciones. El componente cuyo
     trabajo es deduplicar, multiplicando (D-118).
 
-    La jerarquia es la misma que ya aplican el gateway (`argus.error.kind`) y el
-    evento ancho del SDK. Es la TERCERA vez que se escribe, y eso es una señal:
-    deberia vivir en `argus-obs-semconv`, que es lo unico que los tres pueden
-    importar. Queda anotado y no se hace de paso.
+    La jerarquia ya NO se escribe aqui. Vive en `argus_semconv.errors`, que es
+    lo que el SDK y este modulo pueden importar los dos; el gateway la lleva en
+    OTTL y una prueba compara los dos ordenes. Mientras estuvo escrita tres
+    veces, dos copias divergieron sin que nada lo dijera: esta terminaba en
+    `error` donde las otras dos terminan en `unclassified` (D-125).
+
+    Lo que SI es propio de aqui es el ultimo respaldo: una señal tiene que
+    llegar con firma siempre, asi que si la clase no se puede determinar se cae
+    a la OPERACION. Es una capa encima de la jerarquia, no otra version de
+    ella — y por eso se ve, en vez de estar mezclada.
     """
-    # 1. Lo que el emisor declaro, si lo declaro. Cerrado por contrato.
-    if tipo := attrs.get(A.ERROR_TYPE):
-        return str(tipo)
+    clase = clase_del_error(attrs, _excepciones(span))
+    if clase != SIN_CLASIFICAR:
+        return clase
 
-    # 2. Lo que el gateway ya derivo, si esta senal paso por el. En el camino
-    #    caliente no pasa —va del agente directo aqui— asi que no se puede
-    #    contar con el, pero si esta es bueno.
-    if kind := attrs.get("argus.error.kind"):
-        return str(kind)
-
-    # 3. El tipo de la EXCEPCION, que vive en el evento. Es un nombre de clase,
-    #    asi que esta acotado, y lo pone el emisor sin pedirlo: en el caso de
-    #    Veritium estaba en 460 de 460 mientras `error.type` estaba en 2.
-    try:
-        for evento in getattr(span, "events", ()) or ():
-            if getattr(evento, "name", "") != "exception":
-                continue
-            ea = _attrs(getattr(evento, "attributes", ()) or ())
-            if tipo := ea.get("exception.type"):
-                return str(tipo)
-    except Exception:  # noqa: BLE001
-        pass
-
-    # 4. La operacion. `argus.event` es de cardinalidad cerrada por contrato, y
-    #    el nombre del span lo es por convencion — con la plantilla de ruta y no
-    #    el path resuelto, que es lo que D-117 arreglo.
+    # `argus.event` es de cardinalidad cerrada por contrato, y el nombre del
+    # span lo es por convencion — con la plantilla de ruta y no el path
+    # resuelto, que es lo que D-117 arreglo.
     if evento := attrs.get(A.ARGUS_EVENT):
         return str(evento)
     if nombre := getattr(span, "name", ""):
         return str(nombre)
 
-    return "error"
+    return SIN_CLASIFICAR
 
 
 # El mensaje NO entra en la firma, pero si en el titulo: es lo que una persona

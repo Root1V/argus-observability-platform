@@ -32,6 +32,7 @@ import threading
 from typing import Any
 
 from argus_semconv import attributes as A
+from argus_semconv.errors import clase_y_mensaje
 from opentelemetry import context as otel_context
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
 from opentelemetry.trace import NonRecordingSpan, StatusCode, set_span_in_context
@@ -135,33 +136,22 @@ class EventoAnchoEnElFallo(SpanProcessor):
 
 
 def _clase_del_error(span: ReadableSpan) -> tuple[str, str | None]:
-    """La clase del error y su mensaje, con la misma jerarquia que el gateway.
+    """La clase del error y su mensaje, con la jerarquia COMPARTIDA.
 
-    `error.type` si el emisor lo puso; si no, el `exception.type` del evento de
-    excepcion. Esa segunda mitad es la que rescata los errores que estan
-    marcados `Error` y sin clasificar — 46 de los 747, inagrupables (D-115).
+    El orden no se decide aqui: vive en `argus_semconv.errors`, que es lo unico
+    que el SDK y el alert-bus pueden importar los dos. Antes estaba escrito
+    aqui, otra vez en `normalize.py` y otra en el OTTL del gateway, y los tres
+    comentarios afirmaban que coincidian. Dos de las tres copias habian
+    divergido ya (D-125).
 
-    Se calcula aqui ADEMAS de en el gateway a proposito: el gateway lo pone en
-    el span y este es el canal de registro, que es otro camino. Las dos mitades
-    tienen que coincidir, y hay una prueba que compara la jerarquia de las dos.
+    Lo que esta funcion si decide es como se sacan los eventos de excepcion de
+    un `ReadableSpan`, que es forma del SDK y no de las convenciones.
     """
-    atributos = span.attributes or {}
-    tipo = atributos.get(A.ERROR_TYPE)
-    mensaje: str | None = None
-
-    for evento in span.events or ():
-        if evento.name != "exception":
-            continue
-        ea = evento.attributes or {}
-        if not tipo:
-            tipo = ea.get("exception.type")
-        mensaje = ea.get("exception.message") or mensaje
-        break
-
-    if not mensaje and span.status is not None:
-        mensaje = span.status.description or None
-
-    return (str(tipo) if tipo else "unclassified", mensaje)
+    return clase_y_mensaje(
+        span.attributes,
+        (e.attributes or {} for e in span.events or () if e.name == "exception"),
+        span.status.description if span.status is not None else None,
+    )
 
 
 def _recortar(valor: Any) -> Any:

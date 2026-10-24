@@ -6366,8 +6366,9 @@ la que hice. Y van dos en las que concluí contra mí mismo por eso.
 
 > **Fallo de plataforma** · descubierto 2026-10-24 · D-123 cerró con «verificado:
 > el canario pasa de una sonda de silencio sobre `tei` a cero», y **el canario
-> siguió sondeando `tei` catorce horas más**: a las 17:00 el incidente seguía
-> abierto con `count` 166 y una señal de hace un minuto
+> siguió sondeando `tei` más de quince horas**: el incidente abierto a la 01:36
+> llegaba a `count` 166, y mientras lo miraba subió de 165 a 166 — una señal
+> nueva por cada ciclo de cinco minutos del canario
 
 **Fecha**: 2026-10-24
 
@@ -6421,11 +6422,157 @@ la que **el verificador era yo**:
 ### Qué se hace
 
 - `docker compose build canary` + `up -d --force-recreate canary`. Verificado
-  **en el proceso**: los dos `md5` coinciden, cero menciones de `tei` en el
-  canario nuevo, y la última señal de `tei` es la de 17:00:46 del canario viejo.
-  El barrido la resuelve a los 900 s.
+  **en el proceso**: los dos `md5` coinciden, el canario nuevo no menciona `tei`
+  ni una vez, y su `count` se quedó clavado en el 166 del canario viejo en vez
+  de subir al ciclo siguiente. El barrido lo resolvió a los 900 s, y el tablero
+  de incidentes abiertos ya no lo lleva — comprobado, no deducido.
 - El montaje de fichero suelto pasa a `B-31`: mientras siga así, cualquier
   edición del registro puede dejar de propagarse sin que nada lo diga.
 - Y la regla, que es la que vale: **una afirmación sobre el sistema en marcha se
   comprueba contra el sistema en marcha.** `md5` dentro del contenedor, no `git
   diff`.
+
+---
+
+## D-125 · La jerarquía del error pasa a un sitio, y dos de las tres copias ya habían divergido
+
+**Estado**: ✅ Vigente · `B-27` cerrado
+
+**Fecha**: 2026-10-24
+
+**Contexto**. Lo que agrupa los errores no es un campo: es un **orden de
+preferencia** entre campos. Ese orden estaba escrito tres veces —el OTTL del
+gateway, `_wide.py` del SDK, `normalize.py` del alert-bus— y las tres copias
+llevaban un comentario afirmando que coincidían.
+
+**Lo que se encontró al reunirlas**:
+
+| | pasos | valor terminal |
+|---|---|---|
+| gateway | `error.type` → `exception.type` | `unclassified` |
+| SDK | `error.type` → `exception.type` | `unclassified` |
+| alert-bus | + `argus.error.kind`, + la operación | **`error`** |
+
+Un valor terminal distinto en una de las tres **parte en dos el `GROUP BY` de
+todo lo inclasificable**. Y no lo cazaba nada: el docstring del evento ancho
+afirmaba que *«hay una prueba que compara la jerarquía de las dos»* y **esa
+prueba no existía**. Lo que había eran dos pruebas de comportamiento con la
+frase «misma precedencia que en el gateway» escrita en prosa, y ninguna que
+leyera `gateway.yaml`.
+
+**Decisión**. La parte canónica vive en `argus_semconv.errors`, que es lo único
+que el SDK y el alert-bus pueden importar los dos. El gateway no puede importar
+Python, así que su copia en OTTL se queda — y lo que la ata es
+`test_la_jerarquia_del_error_es_una`, que **lee `gateway.yaml`** y compara el
+orden contra `ORDEN`.
+
+**El matiz que importa**. El respaldo del alert-bus a la operación no se
+elimina: una señal tiene que llegar con firma siempre. Pero pasa a ser una capa
+**explícita encima** de la jerarquía, no otra versión de ella. Lo compartido es
+lo que debe coincidir; lo propio se ve.
+
+**Verificado con mutaciones**, porque una prueba que no puede fallar no prueba:
+invertir `ORDEN`, cambiar el terminal del gateway y volver a teclear
+`exception.type` en el SDK hacen fallar cada una su prueba, y solo la suya.
+
+---
+
+## D-126 · `argus.semconv.version` se retira: el sitio donde «pertenecía» no existe
+
+**Estado**: ✅ Vigente · `B-28` cerrado
+
+**Fecha**: 2026-10-24
+
+**Contexto**. D-082 movió la versión del modelo al atributo del scope, «que es
+donde pertenece». La frase era razonable. El sitio no existe: la tabla de
+trazas tiene `ScopeName` y `ScopeVersion` y **ninguna columna para los
+atributos del scope**. Medido: 3.406 spans lo llevaban desde la `a4` y **en
+ninguno estaba almacenado**. Mes y medio emitiendo a la nada.
+
+**Decisión**. Retirarlo, que era la tercera de las tres salidas que `B-28`
+planteaba (columna, atributo de span, o retirar). Y se elige por la **segunda**
+razón, no por la primera: `modelo.json` viaja DENTRO del paquete, así que una
+versión del paquete determina exactamente una versión del modelo.
+`ScopeVersion` ya responde las dos preguntas. Hacerle una columna habría sido
+darle sitio a un dato redundante.
+
+**Lo que sujeta el argumento**: una prueba comprueba que `modelo.json` sigue
+viajando en el paquete. Si algún día el modelo se pudiera instalar aparte, la
+versión del paquete dejaría de determinar la del modelo y habría que volver a
+mirarlo.
+
+Los dos paquetes dicen ahora lo mismo: el SDK llegó a esta conclusión por su
+cuenta en D-119 y lo documenta en `argus/_scope.py`.
+
+---
+
+## D-127 · La query string se borraba del campo donde no estaba
+
+**Estado**: ✅ Vigente · `B-26` cerrado
+
+> **Fuga de datos** · `url.query` tenía **0 supervivientes** en 30 días y el
+> comentario daba el trabajo por hecho. En la misma ventana y el mismo almacén:
+> **32.997 spans con la query dentro de `url.full`** y **68.246 dentro de
+> `http.url`**, en claro
+
+**Fecha**: 2026-10-24
+
+**Lo que estaba mal**. `transform/pseudonymize` borraba `url.query` —el campo
+dedicado— y dejaba intacto el campo **compuesto**, que es por donde la query
+viaja de verdad. Tres agujeros, no uno:
+
+1. `url.full` sin tocar, 32.997 spans.
+2. `http.url` sin tocar, 68.246 spans. Es la grafía **deprecada** de OTel y es
+   la que más tráfico trae, porque la instrumentación de cliente que no se ha
+   actualizado sigue poniendo esa.
+3. El ámbito de **registros** no borraba `url.query` en absoluto —el de spans sí
+   y ese no, con el mismo processor en los dos pipelines—. Y es por ahí por
+   donde sale el evento ancho del SDK, que copia **todos** los atributos del
+   span que falló a una línea de registro.
+
+**Y el aviso estaba al lado.** Veinte líneas más abajo, en el mismo fichero:
+*«una regla que solo cubre la grafía canónica protege de la telemetría que
+escribes tú y no de la que recibes»* — escrito para `user.id`/`user_id`. El
+mismo fallo, un campo más allá, con su propia lección en pantalla.
+
+**Qué se filtraba hoy**: `index`, `wait`, `include_hidden`, `repo_id`, `q`. Nada
+sensible, y eso es exactamente lo que hacía que no se mirara. El «hoy» es el
+problema: un `?token=` de un equipo nuevo entra sin tocar nada y sin que nada
+avise.
+
+**Decisión**. `replace_pattern` sobre `url.full` y `http.url` recortando desde
+el `?`, en los **tres** ámbitos, más el borrado de `url.query` en los dos que no
+lo tenían.
+
+**Verificado contra el stack en marcha** —no contra el árbol, que es la lección
+de D-124—: span enviado al gateway recreado con `?token=SECRETO_*` en los cuatro
+sitios, y en ClickHouse `url.full` y `http.url` llegan sin query, `url.query`
+vacío, el `url.full` del evento de excepción recortado, y **cero apariciones**
+de la cadena en atributos de span, de evento y en el mensaje de estado.
+
+---
+
+## D-128 · El validador de configs no validaba una de las dos configs
+
+**Estado**: ✅ Vigente
+
+**Fecha**: 2026-10-24
+
+`platform/scripts/validate-collector.sh` exporta ocho variables de relleno para
+que el binario del Collector pueda resolver las configs. **No exportaba
+`ARGUS_HOST`**, que `agent.yaml` exige para el `upsert` de `host.name` (D-104).
+
+Efecto: el validador salía con `FALLO agent.yaml` en **cada** pasada, decía la
+causa exacta en la línea siguiente, y `F0-07` —«validación de configs contra el
+binario real»— seguía marcado hecho. De las dos configs del plano central, la
+del agente **no se había validado nunca** por el script que existe para eso.
+
+Lo encontré porque lo ejecuté para comprobar mi propio cambio en el gateway, y
+tuve que mirar dos veces para convencerme de que el fallo no era mío.
+
+Es la forma de D-122 en una herramienta: **un aviso correcto, en un sitio que
+nadie lee, repetido sin cansarse.** Y añade una propia: un verificador que
+siempre falla un poco deja de ser un verificador, porque el rojo pasa a ser el
+color normal.
+
+Arreglado con una línea. Las tres configs validan y el script sale con 0.

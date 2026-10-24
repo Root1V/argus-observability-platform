@@ -44,7 +44,6 @@ Operation = Literal[
 _tracer = trace.get_tracer(
     "argus-semconv",
     _scope.version_paquete(),
-    attributes=_scope.atributos(),
 )
 
 # Mapeo a los tipos de observacion de Langfuse. Su tabla de mapeo es CERRADA y

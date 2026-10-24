@@ -29,7 +29,6 @@ F = TypeVar("F", bound=Callable[..., Any])
 _tracer = trace.get_tracer(
     "argus-semconv",
     _scope.version_paquete(),
-    attributes=_scope.atributos(),
 )
 
 # Umbral por defecto para marcar un span como candidato a incidente. Lo usa el

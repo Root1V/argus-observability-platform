@@ -223,3 +223,49 @@ def test_el_inquilino_ya_no_se_ofrece_para_baggage() -> None:
     cuerpo = fuente[i : i + 1800]
     assert "Lo que si va: `argus.app` y `argus.run.id`." in cuerpo
     assert "se retiro" in cuerpo, "falta el motivo de la retirada"
+
+
+# --- La query string: borrar el campo dedicado no basta ---------------------
+
+# Los campos COMPUESTOS donde una URL llega entera, y con ella la query.
+# `http.url` es la grafia deprecada de OTel y es la que mas trafico trae: la
+# instrumentacion de cliente que no se ha actualizado sigue poniendo esa.
+URLS_COMPUESTAS = ("url.full", "http.url")
+
+
+@pytest.mark.parametrize("ambito", sorted(AMBITOS_CON_ATRIBUTOS))
+def test_cada_ambito_borra_la_query_dedicada(seudonimizador: dict, ambito: str) -> None:
+    """`url.query` se borra en los TRES ambitos, no solo en el del span.
+
+    El camino de registros no lo borraba en absoluto —mismo processor, los dos
+    pipelines— y es por ahi por donde sale el evento ancho del SDK, que copia
+    todos los atributos del span que fallo a una linea de registro (D-127).
+    """
+    sentencias = _sentencias_por_ambito(seudonimizador).get(ambito, [])
+    assert any(
+        'delete_key' in s and '"url.query"' in s for s in sentencias
+    ), f"{ambito} no borra `url.query`"
+
+
+@pytest.mark.parametrize("ambito", sorted(AMBITOS_CON_ATRIBUTOS))
+@pytest.mark.parametrize("campo", URLS_COMPUESTAS)
+def test_cada_ambito_recorta_la_query_dentro_de_la_url(
+    seudonimizador: dict, ambito: str, campo: str
+) -> None:
+    """Y la query dentro del campo compuesto, que es por donde viajaba.
+
+    Medido en el almacen, misma ventana de 30 dias:
+
+        url.query superviviente ....................        0
+        query dentro de `url.full` .................   32.997
+        query dentro de `http.url` .................   68.246
+
+    O sea: la proteccion cubria el campo donde el dato no estaba. Es el mismo
+    fallo que el propio fichero documenta para `user.id`/`user_id` —«una regla
+    que solo cubre la grafia canonica protege de la telemetria que escribes tu
+    y no de la que recibes»— un campo mas alla, con el aviso al lado (D-127).
+    """
+    sentencias = _sentencias_por_ambito(seudonimizador).get(ambito, [])
+    assert any(
+        "replace_pattern" in s and f'["{campo}"]' in s and "?" in s for s in sentencias
+    ), f"{ambito} deja pasar la query dentro de `{campo}`"

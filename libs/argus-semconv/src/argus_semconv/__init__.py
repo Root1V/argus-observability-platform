@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from . import attributes, metrics
 from ._content import capture_enabled, mask
+from .errors import SIN_CLASIFICAR, clase_del_error, clase_y_mensaje
 from .genai import GenAISpan, agent, documents, genai, retrieval, tool
 from .guardrails import AgentRun, Budget, GuardrailBreach, current_run
 from .steps import Step, instrument, step
@@ -78,6 +79,10 @@ __all__ = [
     # Contenido
     "capture_enabled",
     "mask",
+    # Clase de error. La jerarquia vive en un sitio y no en tres (D-125).
+    "clase_del_error",
+    "clase_y_mensaje",
+    "SIN_CLASIFICAR",
     "SEMCONV_VERSION",
     "__version__",
 ]

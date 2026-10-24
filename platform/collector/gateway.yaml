@@ -172,6 +172,27 @@ processors:
         statements:
           - delete_key(span.attributes, "http.request.header.authorization")
           - delete_key(span.attributes, "url.query")
+          # Y la query DENTRO de la URL completa, que es donde de verdad viaja.
+          #
+          # `url.query` tenia 0 supervivientes en 30 dias y el comentario de
+          # arriba daba el trabajo por hecho. Medido en el mismo almacen, en la
+          # misma ventana: **32.997 spans con la query dentro de `url.full` y
+          # 68.246 con la query dentro de `http.url`**, en claro. Borrar el
+          # campo dedicado y dejar el compuesto es proteger el sitio donde el
+          # dato no estaba.
+          #
+          # `http.url` es la grafia DEPRECADA de OTel, y es la que mas trae: la
+          # instrumentacion de cliente que no se ha actualizado sigue poniendo
+          # esa. Es el mismo fallo que el bloque de abajo documenta para
+          # `user.id`/`user_id` —«una regla que solo cubre la grafia canonica
+          # protege de la telemetria que escribes tu y no de la que recibes»—
+          # repetido un campo mas alla, con el aviso al lado (D-127).
+          #
+          # Hoy lo que se filtra es `index`, `wait`, `include_hidden` y `q`:
+          # nada sensible. El «hoy» es el problema — un `?token=` de un equipo
+          # nuevo entra sin tocar nada y sin que nada avise.
+          - replace_pattern(span.attributes["url.full"], "\\?.*", "") where span.attributes["url.full"] != nil
+          - replace_pattern(span.attributes["http.url"], "\\?.*", "") where span.attributes["http.url"] != nil
           # El hash va a `enduser.pseudo.id`, que es el nombre que el estandar
           # tiene EXACTAMENTE para esto, y el original se borra.
           #
@@ -253,6 +274,11 @@ processors:
       # subirlos haria que el ultimo pisara a los demas.
       - context: spanevent
         statements:
+          # Mismo motivo que en el span, en el ambito que `context: span` no
+          # alcanza. Aqui ademas faltaba el borrado de `url.query` entero.
+          - delete_key(spanevent.attributes, "url.query")
+          - replace_pattern(spanevent.attributes["url.full"], "\\?.*", "") where spanevent.attributes["url.full"] != nil
+          - replace_pattern(spanevent.attributes["http.url"], "\\?.*", "") where spanevent.attributes["http.url"] != nil
           - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["user.id"] != nil
           - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["user_id"] != nil and spanevent.attributes["enduser.pseudo.id"] == nil
           - set(spanevent.attributes["enduser.pseudo.id"], SHA256(Concat([spanevent.attributes["enduser.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where spanevent.attributes["enduser.id"] != nil and spanevent.attributes["enduser.pseudo.id"] == nil
@@ -293,6 +319,13 @@ processors:
       - context: log
         statements:
           - delete_key(log.attributes, "http.request.header.authorization")
+          # El camino de registros no borraba `url.query` en absoluto: el de
+          # spans si y este no, con el mismo processor en los dos pipelines. Y
+          # es por aqui por donde sale el evento ancho del SDK, que copia
+          # TODOS los atributos del span que fallo a una linea de registro.
+          - delete_key(log.attributes, "url.query")
+          - replace_pattern(log.attributes["url.full"], "\\?.*", "") where log.attributes["url.full"] != nil
+          - replace_pattern(log.attributes["http.url"], "\\?.*", "") where log.attributes["http.url"] != nil
           - set(log.attributes["enduser.pseudo.id"], SHA256(Concat([log.attributes["user.id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["user.id"] != nil
           - set(log.attributes["enduser.pseudo.id"], SHA256(Concat([log.attributes["user_id"], "${env:ARGUS_PSEUDONYM_SALT}"], ""))) where log.attributes["user_id"] != nil and log.attributes["enduser.pseudo.id"] == nil
           - delete_key(log.attributes, "user.id")

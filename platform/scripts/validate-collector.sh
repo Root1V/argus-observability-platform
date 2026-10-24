@@ -18,11 +18,17 @@ export ARGUS_LANGFUSE_AUTH=validate
 export ARGUS_GATEWAY_ENDPOINT=gateway:4317
 export ARGUS_ALERTBUS_ENDPOINT=alert-bus:4317
 export ARGUS_INSECURE=true
+# `agent.yaml` exige ARGUS_HOST —upsert de `host.name`, D-104— y este script no
+# lo exportaba. Efecto: el validador salia con FALLO en agent.yaml en CADA
+# pasada, decia la causa exacta, y `F0-07` seguia marcado hecho. De las dos
+# configs del plano central, la del agente **no se habia validado nunca** por el
+# script que existe para eso (D-128).
+export ARGUS_HOST=validate
 
 envs=()
 for v in ARGUS_GATEWAY_TOKEN ARGUS_CLICKHOUSE_DSN ARGUS_VICTORIAMETRICS_ENDPOINT \
          ARGUS_LANGFUSE_ENDPOINT ARGUS_LANGFUSE_AUTH ARGUS_GATEWAY_ENDPOINT \
-         ARGUS_ALERTBUS_ENDPOINT ARGUS_INSECURE; do
+         ARGUS_ALERTBUS_ENDPOINT ARGUS_INSECURE ARGUS_HOST; do
   envs+=(-e "$v")
 done
 

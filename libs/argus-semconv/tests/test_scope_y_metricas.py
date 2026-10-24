@@ -29,8 +29,34 @@ def test_el_scope_declara_la_version_del_paquete_no_la_del_modelo():
     assert version != A.SEMCONV_VERSION or version == "0.0.0.dev0", (
         "la version del scope volvio a ser la del modelo"
     )
-    # La del modelo sigue estando, como atributo, que es donde pertenece.
-    assert _scope.atributos()["argus.semconv.version"] == A.SEMCONV_VERSION
+
+
+def test_el_scope_no_publica_atributos_porque_no_aterrizan():
+    """`argus.semconv.version` se retiro en la a25, y aqui se queda retirado.
+
+    D-082 lo dejo como atributo del scope «que es donde pertenece». La tabla de
+    trazas tiene `ScopeName` y `ScopeVersion` y ninguna columna para los
+    atributos del scope: 3.406 spans lo llevaban y en ninguno estaba
+    almacenado. Emitir a la nada no es ninguna de las tres salidas que B-28
+    planteaba (D-126).
+
+    Y no se pierde nada: `modelo.json` viaja DENTRO del paquete, asi que la
+    version del paquete —la que si esta en `ScopeVersion`— determina la del
+    modelo. Esto ultimo es lo que esta prueba sujeta; si algun dia el modelo se
+    pudiera instalar aparte, el argumento caeria y habria que volver a mirarlo.
+    """
+    from pathlib import Path
+
+    import argus_semconv as S
+    from argus_semconv import _scope
+
+    assert not hasattr(_scope, "atributos"), (
+        "volvieron los atributos de scope; no hay columna donde aterricen"
+    )
+    assert (Path(S.__file__).parent / "modelo.json").is_file(), (
+        "el modelo ya no viaja en el paquete: la version del paquete deja de "
+        "determinar la del modelo, y retirar el atributo deja de ser gratis"
+    )
 
 
 def test_los_atributos_de_scope_van_por_NOMBRE():

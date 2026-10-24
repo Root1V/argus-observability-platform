@@ -38,7 +38,6 @@ from . import attributes as A
 _meter = metrics.get_meter(
     "argus-semconv",
     _scope.version_paquete(),
-    attributes=_scope.atributos(),
 )
 
 # Creados una vez al importar. Sin SDK son no-ops.
