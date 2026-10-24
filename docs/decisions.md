@@ -6359,3 +6359,73 @@ la señal existía en el camino que no miré.
 
 Cuarta vez esta semana que mi primera consulta contesta una pregunta distinta de
 la que hice. Y van dos en las que concluí contra mí mismo por eso.
+
+---
+
+## D-124 · «Verificado» era verificado en el árbol, no en el proceso
+
+> **Fallo de plataforma** · descubierto 2026-10-24 · D-123 cerró con «verificado:
+> el canario pasa de una sonda de silencio sobre `tei` a cero», y **el canario
+> siguió sondeando `tei` catorce horas más**: a las 17:00 el incidente seguía
+> abierto con `count` 166 y una señal de hace un minuto
+
+**Fecha**: 2026-10-24
+
+### Lo medido
+
+| | |
+|---|---|
+| `apps.yaml` en el host | 19.463 B, `md5 7517bfc4…`, modificado hoy 16:46 UTC |
+| `apps.yaml` **dentro del canario** | 18.968 B, `md5 3b88c116…`, `st_mtime` del **15/10 11:42** |
+| Última recarga del canario | `canary.probes_reloaded` del **15/10 11:43** — nueve días |
+| Código del canario | imagen construida el 15/10 11:37, **sin el `estado` por componente de hoy** |
+
+El alert-bus, con un montaje idéntico del mismo fichero, **sí** recargó: a las
+16:46:18, cuatro segundos después de la edición, de 13 a 15 aplicaciones. El
+canario no.
+
+### La causa
+
+Dos capas, y hacían falta las dos:
+
+1. **El proceso corría código de hace nueve días.** El `estado` por componente
+   que `build.py` lee es un cambio de HOY. El contenedor llevaba `Up 9 days`:
+   la comprobación de que `build.py` soporta el campo la hice sobre el fichero,
+   y el intérprete tenía el módulo de octubre en memoria.
+2. **Un bind mount de un fichero suelto fija el inodo, no la ruta.** Editar
+   reemplazando el fichero deja al contenedor pegado al inodo viejo — que para
+   él sigue existiendo, con su tamaño y su `st_mtime` de entonces. Y `firma()`
+   es exactamente `stat().st_mtime`, así que la recarga automática que D-094
+   introdujo *para no tener que reiniciar* **queda congelada en silencio**.
+
+Lo segundo es lo que convierte un despliegue olvidado en un fallo permanente:
+sin recarga, el canario no se corrige nunca solo.
+
+### Lo que esto hace con D-123
+
+No lo contradice: el campo estaba bien puesto. Lo que estaba mal era la palabra
+**verificado**. Verifiqué el árbol y las pruebas, y escribí una frase sobre el
+sistema en marcha.
+
+Es la quinta forma de *editar no es desplegar* de esta semana, y la primera en
+la que **el verificador era yo**:
+
+| | |
+|---|---|
+| Veritium | el proceso antiguo seguía en pie |
+| yo, el 14/10 | `up -d` no recreó el Collector con la config montada |
+| Prometheus | fusionado y no desplegado |
+| aeon | `uv.lock` sin regenerar |
+| **yo, hoy** | **verificado en el árbol, con el proceso corriendo lo de hace nueve días** |
+
+### Qué se hace
+
+- `docker compose build canary` + `up -d --force-recreate canary`. Verificado
+  **en el proceso**: los dos `md5` coinciden, cero menciones de `tei` en el
+  canario nuevo, y la última señal de `tei` es la de 17:00:46 del canario viejo.
+  El barrido la resuelve a los 900 s.
+- El montaje de fichero suelto pasa a `B-31`: mientras siga así, cualquier
+  edición del registro puede dejar de propagarse sin que nada lo diga.
+- Y la regla, que es la que vale: **una afirmación sobre el sistema en marcha se
+  comprueba contra el sistema en marcha.** `md5` dentro del contenedor, no `git
+  diff`.
