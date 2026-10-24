@@ -213,7 +213,17 @@
     # SIGUE EN `planificado`: el 15/10 dicen que lo cablearon y en el almacen no
     # hay NI UN span de `tei`, mientras sus otros tres servicios emiten a la vez.
     # Pasa a `activo` cuando los veamos, que es el mismo orden de siempre.
-    - {id: tei, rol: model-server, slo: {p95_ms: 500}}
+    # `estado: planificado` EN EL CAMPO, no solo en el comentario de arriba.
+    #
+    # El comentario decia «declarado en planificado y no en activo a proposito:
+    # activo enciende la sonda de silencio», y la linea no lo declaraba. El
+    # estado por componente EXISTE —`build.py` lo lee y salta el componente que
+    # no esta `activo`— y yo no lo use: escribi la proteccion en prosa.
+    #
+    # Coste real: el canario abrio `tei dejo de emitir telemetria` con severidad
+    # `page` hoy a la 01:36 y NOTIFICO, por un componente que nunca se cableo.
+    # Exactamente el ruido que el comentario decia estar evitando (D-123).
+    - {id: tei, rol: model-server, estado: planificado, slo: {p95_ms: 500}}
     # `manager-core` NO esta aqui, a peticion suya (P-05): es una libreria que
     # importan `manager-api` y la TUI, sin punto de entrada propio. No puede
     # emitir como servicio ni ahora ni nunca; sus spans salen bajo la identidad

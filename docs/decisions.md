@@ -6304,3 +6304,58 @@ cosa que uno quiere ver **el día que integra**. Queda como `B-30`: que un aviso
 de arranque llegue al almacén como evento y pueda abrir un incidente de
 severidad baja. Hoy el único que lo habría visto es quien ya estaba mirando el
 sitio correcto.
+
+---
+
+## D-123 · La protección estaba en el comentario y no en el campo, y notificó a una persona
+
+> **Fallo de plataforma** · descubierto 2026-10-24 · el componente `tei` se declaró con `estado: planificado` **en un comentario** y sin el campo, así que la sonda de silencio lo vigiló y abrió `tei dejó de emitir telemetría` con severidad `page`, notificando a la 01:36 por un componente que nunca se cableó
+
+**Fecha**: 2026-10-24
+
+### Lo que escribí
+
+```yaml
+# Declarado en `planificado` y no en `activo` a proposito: `activo`
+# enciende la sonda de silencio, y un componente que todavia no esta
+# cableado gritaria cada cinco minutos por algo sabido (D-094).
+- {id: tei, rol: model-server, slo: {p95_ms: 500}}
+```
+
+El comentario afirma una protección. **La línea no la implementa.** Y el
+mecanismo existía: `build.py` lee un `estado` por componente y salta el que no
+esté `activo`. Lo tenía a mano y escribí la protección en prosa.
+
+Coste: un `page` real a una persona, a la 01:36, por un componente que
+Prometheus aún no ha cableado — exactamente el ruido que el comentario decía
+estar evitando. Es D-094 citado en el comentario que lo reintroduce.
+
+### Y la forma es la de toda la semana, en su versión más corta
+
+| | |
+|---|---|
+| D-117 | `scope.get("route_path")`: una clave que no existe, con el `or` de al lado tapándolo |
+| D-118 | «`error.type` es de cardinalidad cerrada, así que sirve de firma» — y el respaldo era el mensaje |
+| D-122 | un aviso que detectaba el defecto perfectamente, en stderr, 25 días |
+| **D-123** | la protección en el comentario y no en el campo |
+
+Las cuatro: **la prosa correcta al lado de la línea que hace lo contrario.** Y
+en esta la prosa citaba la decisión que la línea violaba.
+
+### Qué se hace
+
+`estado: planificado` en el campo. Verificado: el canario pasa de una sonda de
+silencio sobre `tei` a cero.
+
+### Y una corrección sobre la caída de hoy
+
+Al revisar esto afirmé que mi plataforma había visto la caída de
+`POST /oauth2/token` de Prometheus **y no había dicho nada**. Era falso.
+
+El incidente de quema de presupuesto sobre su gateway abrió a las **12:06:46**
+—los 500 estaban en la hora de las 12— y **notificó a las 12:07:51**, un minuto
+después. Lo que hice mal fue consultar los incidentes *por error* y no la tasa:
+la señal existía en el camino que no miré.
+
+Cuarta vez esta semana que mi primera consulta contesta una pregunta distinta de
+la que hice. Y van dos en las que concluí contra mí mismo por eso.
