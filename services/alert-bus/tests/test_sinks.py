@@ -69,7 +69,21 @@ def test_el_titular_dice_donde_que_y_en_que_estado(incidente: Incident) -> None:
 
 
 def test_el_titular_cambia_cuando_hay_causa(incidente_investigado: Incident) -> None:
-    assert "causa identificada" in titular(incidente_investigado)
+    """Decia «causa identificada» y ahora dice «causa probable».
+
+    El cambio no es de estilo. Al escribir L3 aparecio un tercer caso: un
+    expediente completo del que ninguna regla concluye. Con dos estados, la
+    unica forma de entregar ese contexto era escribir algo en `root_cause`, y el
+    titular anunciaba entonces una causa identificada que nadie habia
+    identificado. Identificada la deja una persona al confirmarla; L3 propone
+    (D-130).
+
+    Los tres estados y sus bordes viven en
+    `test_el_titular_no_afirma_mas_de_lo_que_sabe.py`.
+    """
+    linea = titular(incidente_investigado)
+    assert "causa probable" in linea
+    assert "identificada" not in linea
 
 
 def test_el_resumen_cuantifica(incidente: Incident) -> None:

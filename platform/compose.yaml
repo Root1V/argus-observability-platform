@@ -252,6 +252,35 @@ services:
   #
   # En macOS importa el doble: el nivel 0 del plan se apoyaba en eBPF, que es
   # del kernel Linux y aqui no existe.
+  # ---------------------------------------------------------------------------
+  # L3: el diagnostico. Coge un incidente abierto sin causa y le pone una.
+  #
+  # Va en los perfiles `agents` y `full` y NO en `lean`: es lo unico de la
+  # plataforma que no hace falta para detectar. Si esto no corre, los avisos
+  # siguen saliendo —solo que diciendo «investigando…», que es lo que han dicho
+  # 561 de 561 veces hasta hoy.
+  #
+  # No depende de Temporal, y eso es D-013 cumplido: el almacen de incidentes
+  # ya es la cola —un incidente abierto sin causa ES trabajo pendiente y
+  # sobrevive a un reinicio— asi que esto es reanudable sin durabilidad de
+  # workflow. Temporal hara falta para L4, el que espera aprobacion humana.
+  # ---------------------------------------------------------------------------
+  diagnose:
+    <<: *restart
+    profiles: [agents, full]
+    build:
+      context: ..
+      dockerfile: services/diagnose/Dockerfile
+    depends_on: [alert-bus, clickhouse]
+    environment:
+      DIAGNOSE_ALERTBUS_URL: http://alert-bus:8080
+      DIAGNOSE_CLICKHOUSE_URL: http://clickhouse:8123/
+      DIAGNOSE_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      DIAGNOSE_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      DIAGNOSE_INTERVALO_S: ${DIAGNOSE_INTERVALO_S:-10}
+      DIAGNOSE_MAX_POR_CICLO: ${DIAGNOSE_MAX_POR_CICLO:-3}
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
+
   canary:
     <<: *restart
     profiles: [lean, genai, agents, full]

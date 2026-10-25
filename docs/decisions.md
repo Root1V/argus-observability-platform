@@ -6647,3 +6647,203 @@ eso **no es un fallo del servicio de Prometheus**. Esta vez con severidad `page`
 y notificado a una persona. Un instancia más, y la segunda página falsa del día
 después de `tei` — las dos por algo que la plataforma sabe de sí misma y todavía
 no usa para callarse.
+
+---
+
+## D-130 · El titular propone una causa; no la identifica
+
+**Estado**: ✅ Vigente · verificado en el contenedor que corre
+
+**Decisión**. El titular de un aviso tiene **tres** estados, no dos, y los
+decide la pareja `(root_cause, confidence)`:
+
+| | titular |
+|---|---|
+| sin causa | `investigando…` |
+| causa, confianza `baja` | `causa posible` |
+| causa, confianza `media` o `alta` | `causa probable` |
+
+Y **nunca** «causa identificada».
+
+**Por qué**. Decía dos cosas, y el problema no apareció leyendo `render.py`
+sino escribiendo quién rellena ese campo. L3 tiene un caso frecuente:
+recolecta el expediente entero y **ninguna regla concluye**. Con dos estados,
+la única forma de entregar ese contexto era escribir una descripción del
+síntoma en `root_cause` — y entonces el titular anunciaba una causa
+identificada que nadie había identificado.
+
+La alternativa era dejar `root_cause` vacío y no mandar nada, que es la que se
+tomó para el campo: **`root_cause` se queda en `None` y la evidencia se manda
+igual**. Un aviso que dice «investigando…» y debajo trae «0 de 44 peticiones
+fallaron en 5 min» y «primera vez que esta firma abre incidente» ya es
+utilizable; no hacía falta mentir en la primera línea para conseguirlo.
+
+Lo de «identificada» va aparte y es lo que más importa de las tres filas:
+identificada la deja **una persona** al confirmarla. L3 propone. El titular es
+lo único que se lee en el móvil, y un aviso que afirma de más manda a alguien
+a mirar donde no es.
+
+**Consecuencias**. `test_el_titular_cambia_cuando_hay_causa` pasó a esperar
+`causa probable` y a comprobar que `identificada` **no** aparece; los tres
+estados y sus bordes viven en
+`test_el_titular_no_afirma_mas_de_lo_que_sabe.py`. Un `confidence` ausente
+—el endpoint `enrich` acepta cualquier subconjunto— cuenta como probable: quien
+escribió una causa sin calificarla no estaba diciendo que dudara de ella.
+
+---
+
+## D-131 · El ensayo contra el stack real encontró tres fallos que ninguna prueba podía encontrar
+
+**Estado**: ✅ Vigente · los tres corregidos y vueltos a medir
+
+**Decisión**. L3 no se da por hecho con la suite en verde. Hay un **ensayo en
+seco contra el stack real** —recolecta y juzga, no enriquece— y es lo que
+decide si las consultas y las reglas valen.
+
+**Por qué**. Porque la suite estaba en verde, 48 pruebas, y las tres cosas de
+abajo estaban rotas a la vez. Las tres son del mismo tipo: **no son errores de
+lógica que un dato inventado revele, son errores sobre cómo es el mundo.**
+
+### 1. Las seis consultas devolvían `400`, y la degradación lo tapó
+
+`Almacen.consulta` mandaba el SQL y los parámetros juntos como formulario
+—`data={"query": …, "param_x": …}`—. ClickHouse recibe entonces
+`query=SELECT…&param_x=…` **como la sentencia entera** y responde `400` a
+todo. Lo correcto es el SQL en el **cuerpo** y los parámetros en la **URL**.
+
+Lo que lo hace interesante no es el fallo, es cómo se vio. Las pruebas usan un
+almacén falso, que es lo correcto: no quiero una suite que necesite ClickHouse
+arrancado. Así que la primera señal fue el ensayo — y lo que el ensayo imprimió
+fue un expediente **educadamente vacío**, con las seis lagunas anotadas y su
+motivo. La degradación funcionó tan bien que, sin leer el ensayo, habría
+parecido que funcionaba todo.
+
+### 2. Un `404` saliente no significa «la petición nunca llegó»
+
+La regla del puente vacío concluía «el fallo ocurrió **antes** de llegar a la
+aplicación destino». Para un `404` eso es casi lo contrario de la verdad: **un
+código de estado es una RESPUESTA, y una respuesta prueba que alguien
+contestó.** Lo que falla con un `404` saliente es la petición — una ruta que el
+destino no tiene— y eso apunta a quien llama.
+
+Partido en dos reglas, con la clase del fallo como condición: `_el_destino_
+respondio_un_error` para los códigos HTTP, y `_la_llamada_no_obtuvo_respuesta`
+solo para las clases que significan que no hubo respuesta (`timeout`,
+`connect`, `protocol`, `ssl`, `closed`, `refused`, `reset`, `eof`).
+
+### 3. Y la peor: un destino lento diagnosticado como una petición mala
+
+Un `ReadTimeout` del gateway contra `/v1/backends` lo cogía la regla **más
+fuerte** —la discrepancia de marcas— y concluía *«la causa está en lo que el
+gateway está ENVIANDO»*. Los datos decían otra cosa, y a la vista:
+
+```
+manager-api  GET /v1/backends   codigo 200   81.471 ms
+gateway      GET (ReadTimeout)               75.236 ms   ← se rinde antes
+```
+
+La petición estaba perfecta. **El destino es lento.** La discrepancia estaba
+bien detectada; la conclusión estaba mal, porque «te lo dio por bueno» solo
+significa «pediste mal» cuando quien llama **recibió** una respuesta. Si no
+recibió ninguna, el visto bueno llegó tarde — y llegar tarde *es* el fallo.
+
+De ahí salió `_el_destino_tardo_mas_de_lo_que_se_espero`, que es la única regla
+que entrega una **cadena causal medida**: dos duraciones de dos spans
+distintos, y una mayor que la otra. No es correlación ni una heurística sobre
+nombres.
+
+Comprobado aparte, y es más grande que el incidente: `manager-api` sirvió
+`/v1/backends` **7.298 veces en siete días con p50 = 60,2 s, p95 = 71,6 s y un
+máximo de 1.093 s**. El plazo del gateway son 75 s, justo por encima del p95:
+los `ReadTimeout` no son un incidente, son una configuración garantizada a
+fallar. Va a Prometheus, no lo toco yo.
+
+**Consecuencias**. Las dos correcciones de reglas llevan prueba propia, y las
+dos pruebas dicen en el docstring que salieron de un diagnóstico equivocado
+sobre un incidente real — porque son exactamente las que no se escriben
+pensando, sino mirando.
+
+---
+
+## D-132 · El puente: la traza no cruza el servicio, así que el salto se da a mano
+
+**Estado**: ✅ Vigente · medido sobre 132.000 trazas
+
+**Decisión**. El expediente de L3 lleva un bloque `contraparte` que busca
+**quién atendió la llamada saliente que falló**, casando por **ruta** y
+**ventana de ±3 s** sobre spans de lado servidor. No por `trace_id`.
+
+**Por qué**. Porque por `trace_id` no se encuentra nada. Medido sobre dos días:
+
+| | |
+|---|---|
+| trazas totales | ~132.000 |
+| trazas con spans de **más de un servicio** | **3** |
+| spans `Server` de `auth-service` | 2.369 |
+| …de ellos **sin padre** (son raíz) | **2.369 (100%)** |
+
+El gateway llama a `auth-service` por HTTP y tiene su span `Client`; el
+`auth-service` recibe la petición y **arranca una traza nueva**. Nunca adopta el
+`traceparent` entrante.
+
+La causa es el valor por defecto del `ASGIMiddleware`: `propagate_mode="never"`,
+que es el correcto para lo expuesto a internet y el equivocado para dos
+servicios que se hablan por loopback. Con `trusted` funcionaría sin tocar nada
+más —el loopback siempre es de confianza en ese modo— pero **eso es
+instrumentación de Prometheus y no la toco yo**: va al canal como petición.
+
+**El matiz que lo hace útil.** Que el puente **no encuentre nada** es un
+hallazgo, no un bloque vacío: si nadie registró haber atendido la llamada que
+falló, el fallo ocurrió antes de llegar a la aplicación destino. Con tres
+lecturas posibles que el veredicto dice en voz alta en vez de esconder: que
+nadie la atendiera, que el destino no esté instrumentado, o que nombre esa ruta
+con otra plantilla.
+
+**Y se casa por ruta y no por nombre de span** porque los dos lados la nombran
+distinto: el cliente del gateway emite un span llamado `POST` a secas y guarda
+el destino en `url.full`, mientras el servidor de `auth-service` lo llama
+`POST /oauth2/token`. Casar por nombre no encontraría nunca nada — y como «no
+encontrar nada» aquí *significa* algo, un empalme mal hecho no se vería como un
+fallo sino como un diagnóstico.
+
+Su límite es el mismo borde que D-117: las rutas con parámetro, que el servidor
+nombra con la plantilla y el cliente con el valor resuelto.
+
+**Lo que se descartó**. Caminar el árbol buscando el error más profundo como
+mecanismo principal. Medido antes de construirlo: de **8.622 trazas con error**
+de los últimos siete días, **8.609 tienen una sola clase de error** y solo 13
+tienen dos o más. El árbol resuelve el 0,15% de los casos. Se queda en el
+expediente porque cuando dispara cambia el diagnóstico entero, pero el trabajo
+de cruzar servicios lo hace el puente.
+
+### Añadido el mismo día · el puente vacío es mucho más débil de lo que escribí
+
+Las tres lecturas de un puente vacío que dejé arriba —nadie la atendió, el
+destino no está instrumentado, o nombra la ruta con otra plantilla— se dejan
+una cuarta, y **es la que domina**.
+
+Las políticas de muestreo de cola del gateway son `errors` (por `status_code`),
+`slow` (por latencia), `genai-always` y `baseline` al **10%**. El span del
+destino **atendiendo bien** una llamada que al cliente le falló no es ninguna
+de las tres primeras: un 404 servido es `Unset` para OTel —correctamente, el
+servidor hizo su trabajo— y 7 ms no es lento. Así que se descarta con
+probabilidad **~0,9**.
+
+Se ve en los dos casos reales a la vez:
+
+| llamada | lo que vio el cliente | el otro lado |
+|---|---|---|
+| `GET /v1/backends` | `ReadTimeout` a los 75 s | **encontrado** — 200 en 81 s, retenido por la política `slow` |
+| `GET /admin/api/clients/names` | `404` en 7 ms | **no encontrado** — ni error, ni lento, ni GenAI |
+
+El primero apareció porque era lento. El segundo no apareció porque era rápido
+y correcto. Nada de eso dice si alguien atendió la llamada.
+
+**Consecuencia**: ninguna regla concluye a partir del puente vacío. Lo que
+sostiene `_la_llamada_no_obtuvo_respuesta` es la **clase** del fallo —un
+`ReadTimeout` *es* una ausencia de respuesta, por definición— y el puente solo
+aporta confirmación cuando aparece. El veredicto lo escribe en el texto: *«no
+se pudo ver el otro lado, y eso NO lo confirma»*, con el 0,9 dentro.
+
+Es el mismo error que acabo de corregir dos veces hoy en este mismo módulo:
+tener el dato y leerlo como si dijera más de lo que dice.
