@@ -15,9 +15,37 @@ from argus_schemas import Incident, Severity
 ICONO = {Severity.PAGE: "🔴", Severity.TICKET: "🟡", Severity.INFO: "⚪"}
 
 
+def _estado_del_diagnostico(incident: Incident) -> str:
+    """Las tres cosas distintas que puede decir el titular, y por que son tres.
+
+    Decia dos: `investigando…` sin `root_cause`, `causa identificada` con ella.
+    El problema aparecio al escribir quien rellena ese campo: L3 tiene casos en
+    los que recolecta un expediente entero y NINGUNA regla concluye. Con dos
+    estados, la unica forma de entregar ese contexto era escribir algo en
+    `root_cause`, y entonces el titular anunciaba una causa identificada que
+    nadie habia identificado.
+
+    Asi que el estado lo decide la pareja `(root_cause, confidence)`:
+
+    - sin causa              → `investigando…`, aunque ya haya evidencia
+    - causa con confianza baja → `causa posible`, para que se pueda dudar
+    - causa con media o alta   → `causa probable`
+
+    Y nunca «identificada». Identificada la deja una persona cuando lo
+    confirma; L3 propone. La diferencia importa porque el titular es lo unico
+    que se lee en el movil, y un aviso que afirma de mas manda a alguien a
+    mirar donde no es (D-130).
+    """
+    if not incident.root_cause:
+        return "investigando…"
+    if incident.confidence == "baja":
+        return "causa posible"
+    return "causa probable"
+
+
 def titular(incident: Incident) -> str:
     """Una linea. Es lo unico que se lee en una notificacion del movil."""
-    estado = "investigando…" if incident.root_cause is None else "causa identificada"
+    estado = _estado_del_diagnostico(incident)
     return (
         f"{ICONO.get(incident.severity, '•')} [{incident.app}/{incident.component}] "
         f"{incident.title} — {estado}"
