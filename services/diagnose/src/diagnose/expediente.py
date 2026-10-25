@@ -160,9 +160,26 @@ class Historia(BaseModel):
     # del mismo error como 468 precedentes.
     causas_anteriores: list[str] = Field(default_factory=list)
 
+    # Lo mismo contado desde las TRAZAS, que no se pisan. Es la fuente que
+    # manda para «¿es nuevo?»: el almacen de incidentes guardo hasta D-133 una
+    # sola fila por huella, asi que su `veces` esta por debajo de la realidad
+    # para todo lo anterior al 25/10. `dias_mirados == 0` significa que no se
+    # consulto, que es distinto de cero dias con errores.
+    dias_con_errores: int = 0
+    dias_mirados: int = 0
+    errores_en_trazas: int = 0
+    primer_dia: datetime | None = None
+
+    @property
+    def es_cronico(self) -> bool:
+        """Errores en al menos un tercio de los dias mirados, y mas de dos."""
+        return self.dias_mirados > 0 and self.dias_con_errores > 2 and (
+            self.dias_con_errores * 3 >= self.dias_mirados
+        )
+
     @property
     def es_nuevo(self) -> bool:
-        return self.veces <= 1
+        return self.veces <= 1 and self.dias_con_errores <= 1
 
 
 class Alcance(BaseModel):
@@ -314,6 +331,15 @@ class Expediente(BaseModel):
                 bloques.append("EL OTRO LADO DE LA LLAMADA QUE FALLO\n" + "\n".join(lineas))
 
         h = self.historia
+        if h.dias_con_errores:
+            bloques_h = [
+                f"  en las trazas: errores de esta clase en {h.dias_con_errores} de los ultimos "
+                f"{h.dias_mirados} dias ({h.errores_en_trazas} en total)"
+                + (f", desde el {h.primer_dia:%Y-%m-%d}" if h.primer_dia else "")
+            ]
+            if h.es_cronico:
+                bloques_h.append("  es CRONICO: no empezo con este incidente")
+            bloques.append("RECURRENCIA\n" + "\n".join(bloques_h))
         if h.veces:
             linea = f"  esta firma ha abierto {h.veces} incidente(s)"
             if h.primera_vez:

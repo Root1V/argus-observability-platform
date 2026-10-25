@@ -21,14 +21,14 @@ De ahí sale la división del módulo, que es la que importa entender:
 
 | | qué es | se equivoca cuando |
 |---|---|---|
-| `expediente.py` · `almacen.py` · `recoleccion.py` | los **hechos**: seis consultas fijas | falta un dato |
+| `expediente.py` · `almacen.py` · `recoleccion.py` | los **hechos**: siete consultas fijas | falta un dato |
 | `juicio.py` | la **opinión**: reglas hoy, un modelo detrás de la misma interfaz | estaba el dato y se leyó mal |
 | `bucle.py` | lo que los une | no llega a nadie |
 
 Son dos arreglos distintos y por eso son dos módulos. Si fuera una función que
 consulta y concluye, los dos fallos tendrían la misma pinta.
 
-## Las seis consultas
+## Las siete consultas
 
 1. **árbol** — el árbol de spans de una traza del incidente. Donde se ve que el
    `502` que avisa lleva dentro un `400` contra otro sitio.
@@ -37,6 +37,9 @@ consulta y concluye, los dos fallos tendrían la misma pinta.
 4. **alcance** — ¿fallaron 12 de 12, o 12 de 4.000?
 5. **concurrentes** — qué más se rompió en la misma ventana.
 6. **topología** — de qué depende y quién depende de él, según el registro.
+7. **recurrencia** — en cuántos de los 30 días anteriores hubo errores de esa
+   clase. Contado en las **trazas**, porque el almacén de incidentes guardaba
+   una fila por huella y no podía saber si algo era nuevo (D-133).
 
 ### El puente, y por qué hace falta
 
@@ -69,6 +72,21 @@ Lo que las reglas **no** hacen es inventar: cuando ninguna dispara,
 evidencia ya adjunta, que es lo que lo hace utilizable. Un diagnóstico
 equivocado con aire de certeza es peor que no tener ninguno, porque manda a
 alguien a mirar donde no es.
+
+## El banco (`F3-08`)
+
+`banco/` guarda incidentes **reales** con su expediente **congelado** —las
+trazas caducan a los 30 días— y la causa establecida **fuera de L3**.
+
+```bash
+uv run python -m diagnose.banco evaluar
+uv run python -m diagnose.banco capturar <huella> --caso <id>
+```
+
+El informe separa los casos que se usaron para escribir las reglas de los que
+no. **La cifra que vale es la de los no vistos**, y un caso que motiva un
+cambio de regla pasa a diseño: ya no mide nada que el juez no haya visto. La
+primera medida honesta fue cero aciertos en lo no visto (D-134).
 
 ## Arrancarlo
 

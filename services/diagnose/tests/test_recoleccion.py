@@ -25,8 +25,9 @@ LLAMADA_DESDE = datetime(2026, 10, 25, 8, 2, 47, 796142, tzinfo=UTC)
 class AlmacenFalso:
     """Devuelve lo que se le diga y anota lo que se le pregunto."""
 
-    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None) -> None:
+    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None) -> None:
         self._spans = spans if spans is not None else TRAZA_DEL_502
+        self._recurrencia = recurrencia or []
         self._alcance = alcance or []
         self._concurrentes = concurrentes or []
         self._contraparte = contraparte or []
@@ -47,6 +48,10 @@ class AlmacenFalso:
     def contraparte(self, **kw):
         self.preguntas.append(("contraparte", kw))
         return self._contraparte
+
+    def recurrencia(self, **kw):
+        self.preguntas.append(("recurrencia", kw))
+        return self._recurrencia
 
     def cerrar(self): ...
 
@@ -240,3 +245,80 @@ def test_un_concurrente_se_marca_aguas_arriba_traduciendo_componente_a_app() -> 
     assert exp.concurrentes[0].servicio == "gateway", "la dependencia va primero"
     assert exp.concurrentes[0].aguas_arriba
     assert not exp.concurrentes[1].aguas_arriba
+
+
+# --- Recurrencia: lo que el almacen de incidentes no podia contestar ----------
+
+
+def test_un_fallo_de_todos_los_dias_sale_como_cronico() -> None:
+    """El caso real que motivo la consulta.
+
+    El `ReadTimeout` del gateway tiene trazas 27 de los ultimos 30 dias. El
+    almacen de incidentes solo guardaba la ultima ocurrencia de cada huella, y
+    L3 dijo «primera vez» (D-133).
+    """
+    dias = [{"dia": f"2026-10-{d:02d}", "errores": 80} for d in range(1, 28)]
+    exp = recolectar(
+        _incidente(signature="ReadTimeout"),
+        almacen=AlmacenFalso(recurrencia=dias), registro=[], historico=[],
+    )
+
+    assert exp.historia.dias_con_errores == 27
+    assert exp.historia.es_cronico
+    assert not exp.historia.es_nuevo
+    assert "CRONICO" in exp.texto()
+
+
+def test_la_recurrencia_se_cuenta_hasta_el_incidente_y_no_hasta_hoy() -> None:
+    """Un incidente de hace dos semanas no puede ver errores de despues.
+
+    Es lo que hace honesto al banco: diagnostica incidentes pasados, y contar
+    hasta hoy le daria al juez informacion que en su momento no existia.
+    """
+    almacen = AlmacenFalso()
+    recolectar(_incidente(), almacen=almacen, registro=[], historico=[])
+
+    kw = dict(almacen.preguntas)["recurrencia"]
+    assert kw["hasta"] < datetime(2026, 10, 25, 8, 10, tzinfo=UTC)
+    assert kw["clase"] == "502"
+
+
+def test_una_senal_que_no_es_un_error_no_cuenta_recurrencia() -> None:
+    """Para `canary-silencio` la consulta daria cero, y ese cero seria «no aplica»."""
+    almacen = AlmacenFalso()
+    exp = recolectar(
+        _incidente(kind="silence", signature="canary-silencio"),
+        almacen=almacen, registro=[], historico=[],
+    )
+
+    assert "recurrencia" not in dict(almacen.preguntas)
+    assert exp.historia.dias_mirados == 0
+
+
+def test_cero_dias_de_recurrencia_no_se_lee_como_nunca() -> None:
+    """Un incidente de tipo `error` con cero dias de errores es una contradiccion.
+
+    Significa que la clase no aparece como `error.type`, no que no haya
+    pasado nunca. El primer banco escribio «ninguno de los 30 dias» para dos
+    incidentes cuya firma era el mensaje entero.
+    """
+    exp = recolectar(
+        _incidente(signature="NotNullViolationError: null value\nDETAIL: fila"),
+        almacen=AlmacenFalso(recurrencia=[]), registro=[], historico=[],
+    )
+
+    assert exp.historia.dias_mirados == 0
+    assert any("no se puede contar" in x for x in exp.lagunas)
+    assert "RECURRENCIA" not in exp.texto()
+
+
+def test_una_firma_que_es_un_mensaje_cuenta_por_la_clase_del_ejemplar() -> None:
+    """La firma de antes de D-118 era el mensaje; lo que esta en `error.type` es la clase."""
+    almacen = AlmacenFalso()
+    recolectar(
+        _incidente(signature="400: algo salio mal con espacios"),
+        almacen=almacen, registro=[], historico=[],
+    )
+
+    # En la traza real del 502 la clase que empieza la firma es `400`.
+    assert dict(almacen.preguntas)["recurrencia"]["clase"] == "400"

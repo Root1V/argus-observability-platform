@@ -313,3 +313,70 @@ def test_un_destino_que_contesta_rapido_y_bien_si_apunta_a_quien_llama() -> None
 
     assert v.confidence == "alta"
     assert "ENVIANDO" in (v.root_cause or "")
+
+
+def test_la_evidencia_no_dice_primera_vez_sin_poder_saberlo() -> None:
+    """Sin trazas que mirar, el almacen de incidentes solo permite decir «sin registro».
+
+    Hasta D-133 decia «primera vez que esta firma abre incidente» leyendo un
+    almacen que pisaba las reaperturas.
+    """
+    v = JuezDeReglas().juzgar(_exp())
+
+    assert not any("primera vez" in e for e in v.evidence)
+    assert any("sin incidentes anteriores registrados" in e for e in v.evidence)
+
+
+def test_un_fallo_cronico_se_dice_en_la_evidencia() -> None:
+    exp = _exp(historia=Historia(dias_con_errores=27, dias_mirados=30, errores_en_trazas=2556))
+    v = JuezDeReglas().juzgar(exp)
+
+    assert any(e.startswith("CRONICO") and "27 de los ultimos 30" in e for e in v.evidence)
+
+
+def test_una_firma_que_es_un_mensaje_no_dispara_la_regla_del_sintoma() -> None:
+    """La regla comparaba la clase del span con la firma ENTERA.
+
+    Antes de D-118 la firma era el mensaje, asi que nunca coincidian y la regla
+    disparaba siempre, repitiendo el mensaje en el veredicto (D-134).
+    """
+    exp = _exp(
+        firma="TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        arbol=Arbol(trace_id="t", spans=[
+            Span(span_id="a", nombre="chat", tipo="Client", error=True, clase="TypeError",
+                 excepcion="TypeError", mensaje="GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+                 profundidad=1),
+        ]),
+    )
+    v = JuezDeReglas().juzgar(exp)
+
+    assert v.root_cause is not None
+    assert "La causa es esa, no la firma" not in v.root_cause
+    assert "GenAISpan.set()" in v.root_cause
+
+
+def test_un_pending_rollback_se_diagnostica_como_sintoma_de_la_excepcion_original() -> None:
+    """El veredicto decia que la causa era `PendingRollbackError`: el sintoma."""
+    mensaje = (
+        "This Session's transaction has been rolled back due to a previous exception during flush. "
+        "To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: "
+        "(sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: "
+        'null value in column "tenant" of relation "validation_issues" violates not-null constraint\n'
+        "DETAIL:  Failing row contains (00000000-uuid-falso, CODIGO-FALSO-999, ...)"
+    )
+    exp = _exp(
+        firma="sqlalchemy.exc.PendingRollbackError",
+        arbol=Arbol(trace_id="t", spans=[
+            Span(span_id="a", nombre="veritium.case.evaluate", tipo="Internal", servicio="veritium-worker",
+                 error=True, clase="sqlalchemy.exc.PendingRollbackError",
+                 excepcion="sqlalchemy.exc.PendingRollbackError", mensaje=mensaje),
+        ]),
+    )
+    v = JuezDeReglas().juzgar(exp)
+
+    assert v.root_cause is not None
+    assert "SINTOMA" in v.root_cause
+    assert '"tenant"' in v.root_cause
+    # Los valores de la fila no salen al aviso.
+    assert "CODIGO-FALSO-999" not in v.root_cause
+    assert "uuid-falso" not in v.root_cause

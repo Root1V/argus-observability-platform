@@ -189,3 +189,94 @@ def test_una_fila_ilegible_no_impide_arrancar(registry, ruta_almacen) -> None:
 
     despues = _motor(registry, ruta_almacen)
     assert len(despues.open_incidents()) == 1, "la fila rota se llevo por delante a la buena"
+
+
+# --- Una fila por incidente, no por huella (D-133) ---------------------------
+
+
+def test_un_incidente_reabierto_no_pisa_al_anterior(registry, ruta_almacen) -> None:
+    """El fallo que convertia el «historico» en «la ultima vez de cada cosa».
+
+    Con la huella como clave primaria, reabrir el mismo problema reescribia la
+    fila del anterior. El `ReadTimeout` del gateway de las 02:50 del 25/10
+    desaparecio asi cuando el mismo fallo reabrio a las 08:26 — y L3, que lee
+    este historico, le dijo a una persona que era la primera vez.
+    """
+    motor = _motor(registry, ruta_almacen)
+
+    motor.ingest([_senal()])
+    primero = motor.open_incidents()[0]
+    primero.last_seen_at -= timedelta(hours=2)
+    motor.sweep()
+
+    motor.ingest([_senal()])
+    segundo = motor.open_incidents()[0]
+
+    assert segundo.fingerprint == primero.fingerprint
+    assert segundo.id != primero.id
+
+    historico = motor._store.historico(signature="canary-silencio")  # type: ignore[union-attr]
+    assert sorted(d["id"] for d in historico) == sorted([primero.id, segundo.id])
+    assert {d["state"] for d in historico} == {"resolved", "open"}
+
+
+def test_un_almacen_viejo_se_migra_sin_perder_filas(ruta_almacen) -> None:
+    """Lo que habia se conserva; lo perdido antes de esto no vuelve.
+
+    La migracion cambia la clave de la huella al id. No puede recuperar las
+    ocurrencias que la clave vieja ya piso, pero tiene que conservar entera
+    cada fila que quedaba, y a partir de ahi acumular.
+    """
+    import sqlite3
+
+    from argus_schemas import Incident, Severity
+
+    viejo = Incident(
+        id="viejo1", fingerprint="h1", kind=SignalKind.ERROR, severity=Severity.PAGE,
+        app="a", component="c", title="t", signature="s",
+    )
+    con = sqlite3.connect(str(ruta_almacen))
+    con.executescript(
+        "CREATE TABLE incidentes (huella TEXT PRIMARY KEY, id TEXT NOT NULL, estado TEXT NOT NULL,"
+        " abierto_en TEXT NOT NULL, visto_en TEXT NOT NULL, documento TEXT NOT NULL);"
+        "CREATE INDEX idx_estado ON incidentes(estado);"
+        "CREATE INDEX idx_abierto ON incidentes(abierto_en);"
+    )
+    con.execute(
+        "INSERT INTO incidentes VALUES (?, ?, ?, ?, ?, ?)",
+        ("h1", "viejo1", "resolved", viejo.opened_at.isoformat(), viejo.last_seen_at.isoformat(),
+         viejo.model_dump_json()),
+    )
+    con.commit()
+    con.close()
+
+    almacen = IncidentStore(ruta_almacen)
+    assert almacen.disponible
+
+    nuevo = viejo.model_copy(update={"id": "nuevo1", "state": IncidentState.OPEN})
+    almacen.guardar(nuevo)
+
+    ids = sorted(d["id"] for d in almacen.historico())
+    assert ids == ["nuevo1", "viejo1"], "la migracion perdio la fila vieja o la nueva la piso"
+
+    clave = [c[1] for c in almacen._con.execute("PRAGMA table_info(incidentes)") if c[5]]
+    assert clave == ["id"]
+
+
+def test_dos_abiertos_de_la_misma_huella_restauran_solo_el_ultimo(ruta_almacen) -> None:
+    """Puede pasar si un cierre no llego a escribirse: el almacen nunca levanta.
+
+    El motor solo admite un incidente abierto por huella, y el que el flujo
+    esta alimentando es el mas reciente.
+    """
+    from datetime import UTC, datetime
+
+    from argus_schemas import Incident, Severity
+
+    base = dict(fingerprint="h1", kind=SignalKind.ERROR, severity=Severity.PAGE,
+                app="a", component="c", title="t", signature="s")
+    almacen = IncidentStore(ruta_almacen)
+    almacen.guardar(Incident(id="antiguo", opened_at=datetime(2026, 10, 1, tzinfo=UTC), **base))
+    almacen.guardar(Incident(id="reciente", opened_at=datetime(2026, 10, 20, tzinfo=UTC), **base))
+
+    assert [i.id for i in almacen.abiertos()] == ["reciente"]

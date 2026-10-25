@@ -6847,3 +6847,168 @@ se pudo ver el otro lado, y eso NO lo confirma»*, con el 0,9 dentro.
 
 Es el mismo error que acabo de corregir dos veces hoy en este mismo módulo:
 tener el dato y leerlo como si dijera más de lo que dice.
+
+---
+
+## D-133 · El histórico de incidentes guardaba una fila por huella, y reabrir un problema borraba el anterior
+
+**Estado**: ✅ Vigente · migrado en el almacén real (copia previa guardada)
+
+**Decisión**. La clave primaria del almacén de incidentes pasa de la **huella** al
+**id**. Una fila por incidente, no por problema. Al arrancar, un almacén con la
+clave vieja se migra en una transacción, sin perder ninguna fila de las que
+quedaban.
+
+**Por qué**. Salió buscando casos para el banco de `F3-08`, que necesitaba el
+histórico, y es de los que no dan error:
+
+```sql
+huella TEXT PRIMARY KEY
+INSERT … ON CONFLICT(huella) DO UPDATE SET id=excluded.id, …
+```
+
+Un incidente que se reabre tiene la misma huella que el anterior, así que el
+`INSERT` **pisaba la fila**. El almacén se llamaba «histórico» y guardaba, de
+cada problema, **solo su última vez**. El `ReadTimeout` del gateway de las 02:50
+del 25/10 —el que analicé en D-129— desapareció cuando el mismo fallo reabrió a
+las 08:26.
+
+Y ese fallo tiene trazas **todos los días desde hace un mes** (27 de 30, 2.295
+errores). Las tres consecuencias, de menos a más:
+
+1. **El criterio 4 del piloto** («¿ha abierto alguna vez el silencio un
+   incidente?») seguía bien: «alguna vez» sobrevive aunque solo quede la última.
+2. **`B-32` estaba mal razonado.** Contaba *«571 incidentes, 571 huellas
+   distintas»* como prueba de que la huella identifica la ocurrencia y no la
+   clase. Con la huella como clave primaria, esas dos cifras son iguales **por
+   construcción**. Lo que sí era cierto de B-32 —468 firmas distintas para un
+   solo `NOT NULL`, de cuando la firma llevaba el mensaje— sigue en pie, y es
+   el único problema que tiene.
+3. **L3 le dijo una cosa falsa a una persona.** Su evidencia decía *«primera vez
+   que esta firma abre incidente»* sobre ese `ReadTimeout`, leyendo un histórico
+   que no podía saberlo.
+
+**Lo que cambió en L3 por esto**. «¿Es nuevo?» ya no lo contesta el almacén de
+incidentes sino las **trazas**, que no se pisan: una séptima consulta cuenta en
+cuántos de los 30 días anteriores al incidente hubo errores de esa clase, y un
+fallo con errores en al menos un tercio de los días sale como `CRONICO`. Y la
+evidencia nunca vuelve a decir «primera vez»: sin trazas que mirar, solo dice
+*«sin incidentes anteriores registrados»*, que es lo único que el almacén puede
+sostener.
+
+Dos bordes de esa consulta que salieron al capturar el banco, y que son la
+misma lección:
+
+- **Cero días es una contradicción, no un «nunca».** Un incidente de tipo
+  `error` es él mismo un error dentro de la ventana; si la consulta devuelve
+  cero es que la clase no aparece como `error.type`. La primera captura escribió
+  *«ninguno de los 30 días anteriores»* para dos incidentes de antes de D-118,
+  cuya firma es el mensaje entero. Ahora es una laguna con su motivo.
+- **Un salto de línea en el parámetro rompía la consulta.** ClickHouse lee los
+  parámetros HTTP en TSV escapado; las firmas con la línea `DETAIL:` de Postgres
+  daban `500`. Se escapa en un sitio.
+
+**Lo que no vuelve**. Lo pisado antes de hoy está perdido: la migración conserva
+lo que quedaba —una fila por huella— y desde ahí se acumula. Antes de migrar se
+guardó una copia del fichero.
+
+---
+
+## D-134 · El banco de F3-08, y su primera medida: cero aciertos en lo no visto
+
+**Estado**: ✅ Vigente · 7 casos, 2 no vistos
+
+**Decisión**. `services/diagnose/banco/` guarda incidentes reales con su
+expediente **congelado** y la causa establecida **fuera de L3**: por el equipo
+dueño del servicio (`confirmada`) o por una medición independiente de la regla
+que se evalúa (`medida`). `python -m diagnose.banco evaluar` pasa un juez por
+todos y separa **casos de diseño** de **casos no vistos**. La cifra que vale es
+la segunda.
+
+| caso | causa | de dónde | |
+|---|---|---|---|
+| `aeon-genaispan-kwargs` | `GenAISpan.set` no acepta argumentos por nombre | aeon, 30/09 | diseño* |
+| `veritium-tenant-proceso-viejo` | migración aplicada con la API de la versión anterior viva | Veritium, 14/10 | **no visto** |
+| `veritium-pendingrollback-sintoma` | síntoma del `NOT NULL` anterior en la misma sesión | Veritium + el mensaje | diseño* |
+| `tei-silencio-sin-cablear` | instancias paradas, nunca emitió | Prometheus, P-42 | **no visto** |
+| `prometheus-backends-lento` | `manager-api` tarda más que el plazo del gateway | medida (D-131) | diseño |
+| `prometheus-clients-names-puerto` | la ruta, en el puerto equivocado | medida (A-51) | diseño |
+| `prometheus-502-por-oauth-400` | la llamada a `/oauth2/token` recibe 400 | la traza | diseño |
+
+\* entraron como no vistos y pasaron a diseño — abajo, por qué.
+
+**Por qué congelado.** Las trazas caducan a los 30 días. Un banco que recolecta en
+vivo deja de existir en un mes y, peor, **cambia de contenido sin avisar**: el
+juez mejoraría o empeoraría sin haber cambiado. El caso de aeon caducaba el
+30/10; se capturó cinco días antes.
+
+**Por qué la causa fuera de L3.** Dos de los incidentes los había diagnosticado
+L3 antes de capturarlos. Si su `root_cause` siguiera en el incidente, el caso
+sería un examen con las soluciones grapadas. Se quitan al capturar, y el
+histórico se corta en el incidente: el juez solo ve lo que se sabía entonces.
+
+### La primera medida, y lo que costó llegar a ella
+
+La primera pasada dio **2 aciertos de 4** en lo no visto. Los dos eran **eco**:
+
+- La regla `_la_firma_nombra_el_sintoma` comparaba la clase del span con la
+  firma **entera**. Antes de D-118 la firma era el mensaje, así que nunca
+  coincidían: la regla disparaba en todos los incidentes de esa época y
+  **repetía la firma en el veredicto**.
+- El calificador buscaba «GenAISpan.set», «previous exception» y «tenant»… y los
+  encontraba dentro de la cita.
+
+Y uno de esos dos «aciertos» terminaba diciendo *«la causa es
+`PendingRollbackError`, no la firma»*: **el síntoma como causa**, puntuado
+como acierto.
+
+El orden en que se arregló es lo que hace que la cifra valga algo:
+
+1. **Primero el calificador** —solo puntúa lo que el juez *añade*, no lo que
+   cita del incidente—, y se volvió a medir **sin tocar ninguna regla**:
+
+   ```
+   no vistos  4 casos · acierta 0 · parcial 3 · se abstiene 1 · falla 0
+   ```
+
+   **Esa es la primera medida honesta de L3 sobre lo que no ha visto: cero
+   aciertos.** Y uno de los tres «parcial» esconde una afirmación invertida que
+   el calificador por palabras no puede ver — ese es su límite, y queda dicho.
+
+2. **Después las reglas**: la firma se compara por su clase, y un
+   `PendingRollbackError` se diagnostica como síntoma de la excepción original
+   que lleva dentro del mensaje — que empezaba pasado el carácter 280, justo
+   donde la regla recortaba.
+
+3. **Y los dos casos que destaparon esos arreglos pasan a diseño.** Ya no miden
+   nada que el juez no haya visto.
+
+```
+no vistos  2 casos · acierta 0 · parcial 1 · se abstiene 1 · falla 0 (con confianza alta: 0)
+diseño     5 casos · acierta 4 · parcial 1 · se abstiene 0 · falla 0 (con confianza alta: 0)
+```
+
+Dos casos no vistos es muy poco, y es el estado real. Lo que dicen los dos es lo
+más útil del banco, porque **ninguno es un fallo del juez**:
+
+- `tenant`: el mejor juez posible se queda en `parcial`, porque **ningún bloque
+  del expediente puede ver un despliegue o una migración**. Es un hueco del
+  expediente (`B-38`).
+- `tei`: abstenerse **es** la respuesta correcta con este expediente, y el juez
+  se abstiene en vez de culpar al gateway, que tenía 3.356 `PermissionError` en
+  la misma ventana. Lo que lo resolvería es una consulta que nadie hace: *«¿ha
+  emitido alguna vez este componente?»* (`B-39`).
+
+### De paso, una fuga a los avisos
+
+Arreglando la regla de la excepción, el veredicto del `PendingRollbackError`
+llevaba dentro el `DETAIL:` de Postgres y el `[parameters: …]` de SQLAlchemy:
+UUID y **un código de empleado** de Veritium. Eso es `root_cause`, o sea un
+mensaje de Telegram. El mensaje se corta antes del volcado de la fila; lo que
+explica el fallo está antes.
+
+**Lo que no se fija en las pruebas**: la puntuación. Un banco que crece con casos
+nuevos y no vistos **tiene** que poder bajar la cifra, y una prueba que lo
+impidiera sería un incentivo para no añadir casos difíciles. Se fija la
+invariante —**ningún `falla` con confianza `alta`**— y que el banco sea lo que
+dice ser.

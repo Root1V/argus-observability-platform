@@ -306,15 +306,36 @@ def _la_firma_nombra_el_sintoma(exp: Expediente) -> tuple[str, Confianza] | None
     queda porque cuando dispara, cambia el diagnostico entero.
     """
     eslabon = exp.arbol.eslabon_mas_profundo
-    if eslabon is None or not eslabon.clase or eslabon.clase == exp.firma:
+    if eslabon is None or not eslabon.clase:
+        return None
+    clase_firma = _clase_de(exp.firma)
+    if _ultimo_segmento(eslabon.clase) == _ultimo_segmento(clase_firma):
         return None
     return (
-        f"El aviso dice `{exp.firma}`, que es lo que ve quien llama. Dentro de la "
+        f"El aviso dice `{clase_firma}`, que es lo que ve quien llama. Dentro de la "
         f"traza el fallo mas profundo es `{eslabon.clase}` en «{eslabon.nombre}»"
         + (f" ({eslabon.ruta})" if eslabon.ruta else "")
         + ". La causa es esa, no la firma.",
         "media",
     )
+
+
+def _clase_de(firma: str) -> str:
+    """La clase de una firma, aunque la firma sea un mensaje.
+
+    Antes de D-118 la firma era el mensaje entero —`TypeError: GenAISpan.set()
+    got an unexpected keyword…`— y esta regla la comparaba tal cual con la
+    clase del span. Nunca coincidian, asi que la regla disparaba en TODOS los
+    incidentes de esa epoca, repetia la firma entera en el veredicto y
+    concluia que la causa era la clase del span. En el `PendingRollbackError`
+    eso es decir que la causa es el sintoma (D-134).
+    """
+    return firma.split(":", 1)[0].strip() if ":" in firma else firma
+
+
+def _ultimo_segmento(clase: str) -> str:
+    """`sqlalchemy.exc.PendingRollbackError` y `PendingRollbackError` son la misma clase (B-33)."""
+    return clase.rsplit(".", 1)[-1]
 
 
 def _hay_una_excepcion_con_nombre(exp: Expediente) -> tuple[str, Confianza] | None:
@@ -326,12 +347,41 @@ def _hay_una_excepcion_con_nombre(exp: Expediente) -> tuple[str, Confianza] | No
     Aqui no se agrupa nada, asi que entra.
     """
     for span in exp.arbol.cadena_del_fallo:
-        if span.excepcion and span.mensaje:
+        if not (span.excepcion and span.mensaje):
+            continue
+        mensaje = _sin_volcado(span.mensaje)
+        # SQLAlchemy envuelve: un `PendingRollbackError` lleva dentro la
+        # excepcion que deshizo la sesion, y ESA es la causa. El banco lo
+        # destapo con un mensaje en el que la original empezaba pasado el
+        # caracter 280 — justo donde esta regla lo recortaba.
+        if "Original exception was:" in mensaje:
+            exterior, original = mensaje.split("Original exception was:", 1)
             return (
-                f"`{span.excepcion}` en «{span.nombre}» ({span.servicio}): {span.mensaje[:300]}",
+                f"`{_ultimo_segmento(span.excepcion)}` en «{span.nombre}» ({span.servicio}) es un "
+                f"SINTOMA: la sesion se deshizo por una excepcion anterior. La causa es esa "
+                f"excepcion anterior: {original.strip()[:300]}",
                 "media",
             )
+        return (
+            f"`{span.excepcion}` en «{span.nombre}» ({span.servicio}): {mensaje[:300]}",
+            "media",
+        )
     return None
+
+
+def _sin_volcado(mensaje: str) -> str:
+    """El mensaje sin el volcado de la fila ni de la sentencia.
+
+    Postgres añade `DETAIL: Failing row contains (…)` y SQLAlchemy `[SQL: …]
+    [parameters: (…)]`, con los VALORES de la fila: UUID, y en el caso de
+    Veritium un codigo de empleado. Esto acaba en `root_cause`, o sea en un
+    mensaje de Telegram; lo que explica el fallo esta antes, y lo de despues no
+    tiene por que salir del almacen.
+    """
+    for corte in ("\nDETAIL:", "DETAIL:  ", "[SQL:", "[parameters:", "(Background on this error"):
+        if corte in mensaje:
+            mensaje = mensaje.split(corte, 1)[0]
+    return mensaje.strip()
 
 
 def _una_dependencia_falla_a_la_vez(exp: Expediente) -> tuple[str, Confianza] | None:
@@ -393,11 +443,28 @@ def _evidencia(exp: Expediente) -> list[str]:
         for ruta, n in sorted(a.rutas.items(), key=lambda kv: -kv[1])[:2]:
             hechos.append(f"{n} fallo(s) en {ruta}")
 
+    # «¿Es nuevo?» lo contestan primero las TRAZAS. Esta linea decia «primera
+    # vez que esta firma abre incidente» leyendo solo el almacen de
+    # incidentes, que hasta D-133 guardaba una fila por huella y pisaba las
+    # reaperturas. Se lo dijo a una persona sobre un `ReadTimeout` que tiene
+    # trazas todos los dias desde hace un mes.
     h = exp.historia
-    if h.veces > 1 and h.primera_vez:
+    if h.es_cronico:
+        hechos.append(
+            f"CRONICO: errores de esta clase en {h.dias_con_errores} de los ultimos "
+            f"{h.dias_mirados} dias ({h.errores_en_trazas} en total) — no empezo con este incidente"
+        )
+    elif h.dias_con_errores > 1:
+        hechos.append(f"no es nuevo: errores de esta clase en {h.dias_con_errores} de los ultimos {h.dias_mirados} dias")
+    elif h.veces > 1 and h.primera_vez:
         hechos.append(f"no es nuevo: {h.veces} incidentes con esta firma desde {h.primera_vez:%Y-%m-%d}")
-    elif h.veces <= 1:
-        hechos.append("primera vez que esta firma abre incidente")
+    elif h.dias_mirados:
+        cuantos = "ninguno" if not h.dias_con_errores else "solo 1"
+        hechos.append(f"errores de esta clase en {cuantos} de los {h.dias_mirados} dias anteriores")
+    else:
+        # Sin trazas que mirar, solo queda el almacen de incidentes, y de el
+        # no se puede deducir «primera vez»: solo que no hay registro.
+        hechos.append("sin incidentes anteriores registrados con esta firma")
 
     for c in exp.concurrentes[:2]:
         marca = " (dependencia declarada)" if c.aguas_arriba else ""

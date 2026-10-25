@@ -1,0 +1,285 @@
+{
+  "id": "prometheus-clients-names-puerto",
+  "titulo": "404 del gateway: la misma ruta en el puerto equivocado",
+  "causa_real": "El gateway llama a /admin/api/clients/names en :8020, donde no existe; el API de administracion vive en :8031, donde la misma ruta responde bien (5 de 5). Dos URL base para lo mismo, una equivocada.",
+  "fuente": "medicion independiente en ClickHouse: 7 llamadas a :8020 con 404 frente a 5 a :8031 sin error, y que :8020 y :8031 son los dos el gateway (A-51)",
+  "nivel": "medida",
+  "usado_para_disenar": true,
+  "sintoma": [
+    {
+      "hecho": "la llamada recibe un 404",
+      "alguna_de": [
+        "404"
+      ]
+    },
+    {
+      "hecho": "es la ruta clients/names",
+      "alguna_de": [
+        "clients/names"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "el puerto o la URL base es el equivocado",
+      "alguna_de": [
+        "8031",
+        "puerto equivocado",
+        "puerto incorrecto",
+        "url base",
+        "otro puerto"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que la peticion no llego al destino",
+      "alguna_de": [
+        "antes de llegar",
+        "nunca llego",
+        "no obtuvo respuesta"
+      ]
+    }
+  ],
+  "notas": "Es el caso que corrigio la regla del 404. No cuenta.",
+  "capturado_en": "2026-10-25T04:00:31.661589-05:00",
+  "incidente": {
+    "id": "2780535a46cb",
+    "fingerprint": "d9de0556fdcae196",
+    "kind": "error",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "gateway",
+    "environment": "development",
+    "title": "404 en gateway",
+    "signature": "404",
+    "state": "resolved",
+    "opened_at": "2026-10-25T08:20:43.669018Z",
+    "updated_at": "2026-10-25T08:30:19.067730Z",
+    "last_seen_at": "2026-10-25T08:22:18.076386Z",
+    "resolved_at": "2026-10-25T08:37:19.485532Z",
+    "count": 7,
+    "trace_ids": [
+      "e54d9f4157685789bf815862f4487ca6",
+      "755ce61f7f8f1212e0f09d6c2be638e0",
+      "40aafa2f6226d8bf56b5e232b66a4048",
+      "826a8d68ab86d46d2f15384598edc7ad",
+      "cec1f53295c1cc0f621b7df5211ad073"
+    ],
+    "components_affected": [
+      "gateway"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-d9de0556fdcae196",
+    "notified_at": "2026-10-25T08:20:48.128177Z",
+    "attributes": {
+      "http.response.status_code": 404,
+      "error.type": "404"
+    }
+  },
+  "expediente": {
+    "incidente_id": "2780535a46cb",
+    "huella": "d9de0556fdcae196",
+    "app": "prometheus-inference-platform",
+    "componente": "gateway",
+    "firma": "404",
+    "tipo_senal": "error",
+    "severidad": "page",
+    "titulo": "404 en gateway",
+    "senales": 7,
+    "edad_s": 94.407368,
+    "entorno": "development",
+    "arbol": {
+      "trace_id": "e54d9f4157685789bf815862f4487ca6",
+      "spans": [
+        {
+          "span_id": "1893a9520e36c3a5",
+          "parent_span_id": "",
+          "nombre": "POST /admin/api/assistant/chat",
+          "tipo": "Server",
+          "servicio": "gateway",
+          "ms": 13329.584,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:8031/admin/api/assistant/chat",
+          "momento": "2026-10-25T08:20:39.315589Z",
+          "profundidad": 0
+        },
+        {
+          "span_id": "bc1c56abd9bd7b74",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "auth.validate",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 8.688,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:20:39.315844Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "9aec38b40f9d7c20",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST /admin/api/assistant/chat http receive",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.017,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:20:39.328932Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "2cd023b733ec6860",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 529.946,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:9000/oauth2/token",
+          "momento": "2026-10-25T08:20:39.329808Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "29d0e22671a05ab0",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 3800.025,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:8020/v1/chat/completions",
+          "momento": "2026-10-25T08:20:39.860950Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "4b37a60bfb89d81e",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "GET",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 6.859,
+          "error": true,
+          "clase": "404",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:8020/admin/api/clients/names",
+          "momento": "2026-10-25T08:20:43.662159Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "f74b46432e5bdee5",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 8971.471,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:8020/v1/chat/completions",
+          "momento": "2026-10-25T08:20:43.669895Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "598dd984a72fb465",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.016,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:20:52.644898Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "07b354faabda3ca5",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.007,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:20:52.645031Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "02235bceace29329",
+          "parent_span_id": "1893a9520e36c3a5",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.004,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:20:52.645153Z",
+          "profundidad": 1
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": {
+      "llamada": "GET (404)",
+      "destino": "http://127.0.0.1:8020/admin/api/clients/names",
+      "encontrada": false,
+      "servicio": null,
+      "codigo": null,
+      "estado": null,
+      "ms": null,
+      "discrepa": false
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 4,
+      "dias_mirados": 30,
+      "errores_en_trazas": 11,
+      "primer_dia": "2026-10-01T00:00:00Z"
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 44,
+      "ventana_min": 5,
+      "rutas": {}
+    },
+    "concurrentes": [],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": []
+  }
+}

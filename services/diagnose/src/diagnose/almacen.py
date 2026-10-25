@@ -266,6 +266,52 @@ class Almacen:
         )
 
 
+    def recurrencia(
+        self,
+        *,
+        app: str,
+        componente: str,
+        clase: str,
+        hasta: datetime,
+        dias: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Cuantos errores de esta clase hubo cada dia, en los N anteriores a `hasta`.
+
+        `hasta` y no «ahora»: para un incidente de hace dos semanas —que es lo
+        que diagnostica el banco de F3-08— contar hasta hoy meteria en su
+        expediente errores que todavia no habian pasado. Es la misma fuga que
+        evaluar un pronostico con datos del dia siguiente.
+
+        Existe porque el almacen de incidentes NO podia contestar «¿es
+        nuevo?»: guardaba una fila por huella, y reabrir un problema pisaba la
+        ocurrencia anterior (D-133). L3 llego a decir «primera vez que esta
+        firma abre incidente» sobre el `ReadTimeout` del gateway, que tiene
+        trazas TODOS los dias desde hace un mes.
+
+        Las trazas no se pisan. Y contar dias, no errores, es a proposito: 2.556
+        errores en un dia y 2.556 repartidos en 27 son dos problemas distintos,
+        y el segundo es el cronico.
+        """
+        return self.consulta(
+            f"""
+            SELECT toDate(Timestamp) AS dia, count() AS errores
+            FROM {self.base}.otel_traces
+            WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
+              AND ResourceAttributes['service.namespace'] = {{app:String}}
+              AND ServiceName = {{componente:String}}
+              AND StatusCode = 'Error'
+              AND SpanAttributes['error.type'] = {{clase:String}}
+            GROUP BY dia
+            ORDER BY dia
+            """,
+            desde=hasta - timedelta(days=dias),
+            hasta=hasta,
+            app=app,
+            componente=componente,
+            clase=clase,
+        )
+
+
 def _una_linea(texto: str) -> str:
     """El motivo de una laguna acaba en una notificacion, asi que cabe en una linea.
 
@@ -290,4 +336,17 @@ def _como_parametro(valor: Any) -> str:
         if valor.tzinfo is not None:
             valor = valor.astimezone(UTC).replace(tzinfo=None)
         return valor.strftime("%Y-%m-%d %H:%M:%S.%f")
-    return str(valor)
+    # ClickHouse lee los parametros HTTP en formato TSV ESCAPADO: un salto de
+    # linea crudo corta el valor y la consulta falla con `BAD_QUERY_PARAMETER`.
+    # Lo destapo el banco de F3-08 con las firmas de Veritium de antes de
+    # D-118, que llevan dentro la linea `DETAIL:` de Postgres. No es inyeccion
+    # —el valor no llega a entrar en el SQL, la consulta muere antes— pero si
+    # es una firma que no se puede consultar, y las firmas vienen de codigo
+    # ajeno: cualquier aplicacion puede mandar un tabulador en un `error.type`.
+    texto = str(valor)
+    return (
+        texto.replace("\\", "\\\\")
+        .replace("\t", "\\t")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )

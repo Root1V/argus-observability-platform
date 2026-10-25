@@ -1,0 +1,234 @@
+{
+  "id": "prometheus-502-por-oauth-400",
+  "titulo": "502 del gateway: su llamada a /oauth2/token recibe un 400",
+  "causa_real": "El gateway devuelve 502 porque su llamada a /oauth2/token de auth-service recibe 400. Causa proxima, medida en la traza; por que auth-service rechaza esa peticion no se sabe.",
+  "fuente": "la traza 78ddf2c0… del almacen: el span Client a /oauth2/token con 400 dentro del Server con 502",
+  "nivel": "medida",
+  "usado_para_disenar": true,
+  "sintoma": [
+    {
+      "hecho": "el gateway devuelve 502",
+      "alguna_de": [
+        "502"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "nombra la llamada a /oauth2/token",
+      "alguna_de": [
+        "oauth2/token"
+      ]
+    },
+    {
+      "hecho": "esa llamada recibe un 400",
+      "alguna_de": [
+        "400"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que la llamada no llego o fallo el transporte",
+      "alguna_de": [
+        "antes de llegar",
+        "no obtuvo respuesta",
+        "transporte"
+      ]
+    }
+  ],
+  "notas": "Es la traza del fixture de las pruebas. No cuenta.",
+  "capturado_en": "2026-10-25T04:00:38.794432-05:00",
+  "incidente": {
+    "id": "ff0e58c7ad4e",
+    "fingerprint": "64382b04fc72596c",
+    "kind": "error",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "gateway",
+    "environment": "development",
+    "title": "502 en gateway",
+    "signature": "502",
+    "state": "resolved",
+    "opened_at": "2026-10-25T08:02:47.987362Z",
+    "updated_at": "2026-10-25T08:02:50.883300Z",
+    "last_seen_at": "2026-10-25T08:02:50.877356Z",
+    "resolved_at": "2026-10-25T08:17:54.777323Z",
+    "count": 2,
+    "trace_ids": [
+      "78ddf2c0b68609390c8ecf0abda29f7c"
+    ],
+    "components_affected": [
+      "gateway"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-64382b04fc72596c",
+    "notified_at": "2026-10-25T08:02:50.886724Z",
+    "attributes": {
+      "http.response.status_code": 502,
+      "error.type": "502"
+    }
+  },
+  "expediente": {
+    "incidente_id": "ff0e58c7ad4e",
+    "huella": "64382b04fc72596c",
+    "app": "prometheus-inference-platform",
+    "componente": "gateway",
+    "firma": "502",
+    "tipo_senal": "error",
+    "severidad": "page",
+    "titulo": "502 en gateway",
+    "senales": 2,
+    "edad_s": 2.889994,
+    "entorno": "development",
+    "arbol": {
+      "trace_id": "78ddf2c0b68609390c8ecf0abda29f7c",
+      "spans": [
+        {
+          "span_id": "17041c73a22079b0",
+          "parent_span_id": "",
+          "nombre": "POST /admin/api/assistant/chat",
+          "tipo": "Server",
+          "servicio": "gateway",
+          "ms": 202.82,
+          "error": true,
+          "clase": "502",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:8031/admin/api/assistant/chat",
+          "momento": "2026-10-25T08:02:47.784727Z",
+          "profundidad": 0
+        },
+        {
+          "span_id": "1857921a59e9f481",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "auth.validate",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 7.483,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:02:47.784992Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "4bff3c34f52326d2",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "POST /admin/api/assistant/chat http receive",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.012,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:02:47.795447Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "fedfb573982b9de5",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 189.165,
+          "error": true,
+          "clase": "400",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://127.0.0.1:9000/oauth2/token",
+          "momento": "2026-10-25T08:02:47.796142Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "4ec15b61e51401fd",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.012,
+          "error": true,
+          "clase": "502",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:02:47.987350Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "1797e7b708f30ea7",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.004,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:02:47.987432Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "c371cfba9a19329f",
+          "parent_span_id": "17041c73a22079b0",
+          "nombre": "POST /admin/api/assistant/chat http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.004,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-25T08:02:47.987534Z",
+          "profundidad": 1
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": {
+      "llamada": "POST (400)",
+      "destino": "http://127.0.0.1:9000/oauth2/token",
+      "encontrada": false,
+      "servicio": null,
+      "codigo": null,
+      "estado": null,
+      "ms": null,
+      "discrepa": false
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 8,
+      "dias_mirados": 30,
+      "errores_en_trazas": 32,
+      "primer_dia": "2026-10-03T00:00:00Z"
+    },
+    "alcance": {
+      "fallidas": 2,
+      "totales": 12,
+      "ventana_min": 5,
+      "rutas": {
+        "/admin/api/assistant/chat": 2
+      }
+    },
+    "concurrentes": [],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": []
+  }
+}
