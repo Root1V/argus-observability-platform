@@ -6576,3 +6576,74 @@ siempre falla un poco deja de ser un verificador, porque el rojo pasa a ser el
 color normal.
 
 Arreglado con una línea. Las tres configs validan y el script sale con 0.
+
+---
+
+## D-129 · Dos relojes en la misma línea de tiempo, y una alarma mía que no era
+
+**Estado**: 🚧 Medido, arreglo en `B-34`
+
+**Fecha**: 2026-10-24
+
+### Primero, la corrección
+
+Al volver una orden que se había ido a segundo plano, leí que host y contenedor
+daban horas distintas —22:19:58 frente a 02:59:37— y escribí que **«el reloj del
+Mac saltó 4 h 38 min»**. No hubo salto. `pmset -g log` lo dice entero:
+
+```
+21:52:59  Sleep      Entering Sleep state due to 'Maintenance Sleep'
+21:55:17  Sleep      …
+21:57:38  Sleep      …
+21:59:25  Wake       Wake from Deep Idle … lid … HID Activity
+```
+
+La máquina estuvo durmiendo por ciclos y despertó a las 21:59. **El tiempo pasó
+de verdad**, que es exactamente lo que había concluido media hora antes y lo que
+me desdije a mí mismo sin necesidad. Y la primera comprobación que hice para
+descartarlo —si `.env` afectaba a `date`— **contestaba otra pregunta**: quinta
+vez esta semana.
+
+También supuse que el desfase había resuelto en masa los cinco incidentes de
+Veritium. **Falso, y se mide**: los cinco se resolvieron con un hueco de
+**15,1 min** sobre un umbral de 15,0. Barrido normal; los errores dejaron de
+llegar.
+
+### Y lo que sí había debajo
+
+La lectura rara era síntoma de algo real. El incidente que quedó abierto al
+despertar —`ReadTimeout` en el gateway de Prometheus, severidad `page`,
+notificado— tiene esto:
+
+```
+notificado : 2026-10-25T02:42:55Z
+abierto    : 2026-10-25T02:50:15Z     ← 7,3 min DESPUES de notificarse
+```
+
+**Porque son dos relojes.** `opened_at` es `signal.occurred_at`, la marca que
+pone el **emisor**; `notified_at` la pone el **motor** con la suya. Y aquí el
+emisor es el centinela del long-poll, que corre **nativo** en el Mac, mientras
+el alert-bus vive dentro de la VM de Docker — los dos relojes que vi diferir
+4 h 39 min en una sola orden durante el despertar.
+
+Medido sobre el almacén: **4 de 562** incidentes notificados tienen
+`notified_at` anterior a `opened_at`, hasta 13,6 min, y **los cuatro del mismo
+camino**. Poco, y no es cosmético:
+
+- `age_seconds` es `_now() - opened_at`, así que puede ser **negativo**.
+- La ventana de agrupación compara `ahora - opened_at >= group_window`. Con una
+  marca futura eso es falso siempre, así que un incidente de severidad menor
+  **se queda dentro de la ventana** hasta que el tiempo real lo alcanza. Los
+  `page` se salvan solo porque D-015 los notifica de inmediato.
+
+No se arregla de paso: toca **cuándo se notifica**, y eso se decide aparte
+—igual que `B-33` toca cómo se agrupa—. Queda en `B-34`.
+
+### Y el `ReadTimeout` sigue siendo `B-25`
+
+El incidente que abrió al despertar es el falso positivo que `B-25` describe
+desde el 14/10: el long-poll del centinela caduca cuando la máquina duerme, y
+eso **no es un fallo del servicio de Prometheus**. Esta vez con severidad `page`
+y notificado a una persona. Un instancia más, y la segunda página falsa del día
+después de `tei` — las dos por algo que la plataforma sabe de sí misma y todavía
+no usa para callarse.
