@@ -1,0 +1,167 @@
+{
+  "id": "veritium-tenant-proceso-viejo",
+  "titulo": "NOT NULL en `tenant`: un proceso con el codigo de antes de la migracion",
+  "causa_real": "A las 11:03 UTC Veritium aplico la migracion de VRT-57, que exige `tenant` en `webhook_deliveries`. La API levantada la noche anterior seguia con el codigo anterior, y su despachador de webhooks intentaba cada 2 s insertar entregas sin `tenant`. Se arreglo reiniciando con el codigo nuevo.",
+  "fuente": "canal veritium, respuesta de Veritium a ARG-VRT-003 (14/10), y su actualizacion del 15/10 midiendo en nuestro almacen",
+  "nivel": "confirmada",
+  "sintoma": [
+    {
+      "hecho": "falta el tenant",
+      "alguna_de": [
+        "tenant"
+      ]
+    },
+    {
+      "hecho": "es una violacion de NOT NULL",
+      "alguna_de": [
+        "NotNullViolation",
+        "not-null",
+        "null value"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "un proceso con el codigo anterior seguia vivo",
+      "alguna_de": [
+        "proceso viejo",
+        "proceso antiguo",
+        "version anterior",
+        "codigo anterior",
+        "codigo viejo",
+        "sin reiniciar",
+        "no se reinicio"
+      ]
+    },
+    {
+      "hecho": "el esquema cambio por una migracion",
+      "alguna_de": [
+        "migracion",
+        "esquema"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "culpa a una dependencia aguas arriba",
+      "alguna_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "aguas arriba"
+      ]
+    }
+  ],
+  "notas": "Ningun bloque del expediente puede ver un despliegue o una migracion: no hay eventos de cambio en el almacen. Este caso mide un HUECO DEL EXPEDIENTE, no del juez — el mejor juez posible con este expediente se queda en `parcial`.",
+  "capturado_en": "2026-10-25T04:00:14.758242-05:00",
+  "incidente": {
+    "id": "cf96e066807d",
+    "fingerprint": "e5139b63069c51ae",
+    "kind": "error",
+    "severity": "page",
+    "app": "veritium",
+    "component": "veritium-api",
+    "environment": "development",
+    "title": "NotNullViolationError: null value in column \"tenant\" of relation \"webhook_deliveries\" violates not-null constraint",
+    "signature": "NotNullViolationError: null value in column \"tenant\" of relation \"webhook_deliveries\" violates not-null constraint",
+    "state": "resolved",
+    "opened_at": "2026-10-14T11:10:37.103951Z",
+    "updated_at": "2026-10-14T11:10:37.342445Z",
+    "last_seen_at": "2026-10-14T11:10:37.342447Z",
+    "resolved_at": "2026-10-14T11:25:38.685088Z",
+    "count": 1,
+    "trace_ids": [
+      "18f5a4f5e5ebd4a2565ec6a9e86d67a4"
+    ],
+    "components_affected": [
+      "veritium-api"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-e5139b63069c51ae",
+    "notified_at": "2026-10-14T11:10:37.344613Z",
+    "attributes": {}
+  },
+  "expediente": {
+    "incidente_id": "cf96e066807d",
+    "huella": "e5139b63069c51ae",
+    "app": "veritium",
+    "componente": "veritium-api",
+    "firma": "NotNullViolationError: null value in column \"tenant\" of relation \"webhook_deliveries\" violates not-null constraint",
+    "tipo_senal": "error",
+    "severidad": "page",
+    "titulo": "NotNullViolationError: null value in column \"tenant\" of relation \"webhook_deliveries\" violates not-null constraint",
+    "senales": 1,
+    "edad_s": 0.238496,
+    "entorno": "development",
+    "arbol": {
+      "trace_id": "18f5a4f5e5ebd4a2565ec6a9e86d67a4",
+      "spans": [
+        {
+          "span_id": "d2496f7957525fce",
+          "parent_span_id": "",
+          "nombre": "INSERT",
+          "tipo": "Client",
+          "servicio": "veritium-api",
+          "ms": 0.64,
+          "error": true,
+          "clase": null,
+          "mensaje": "null value in column \"tenant\" of relation \"webhook_deliveries\" violates not-null constraint",
+          "excepcion": "asyncpg.exceptions.NotNullViolationError",
+          "ruta": null,
+          "momento": "2026-10-14T11:10:37.103311Z",
+          "profundidad": 0
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": null,
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 0,
+      "dias_mirados": 0,
+      "errores_en_trazas": 0,
+      "primer_dia": null
+    },
+    "alcance": {
+      "fallidas": 10,
+      "totales": 10,
+      "ventana_min": 5,
+      "rutas": {
+        "/mcp": 10
+      }
+    },
+    "concurrentes": [
+      {
+        "servicio": "veritium-worker",
+        "clase": "",
+        "errores": 4,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-worker",
+        "clase": "ValueError",
+        "errores": 2,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-worker",
+        "clase": "PendingRollbackError",
+        "errores": 1,
+        "aguas_arriba": false
+      }
+    ],
+    "aguas_arriba": [
+      "aeon-ai",
+      "prometheus-inference-platform",
+      "postgres-main",
+      "minio-main"
+    ],
+    "aguas_abajo": [],
+    "lagunas": [
+      "recurrencia: la clase `NotNullViolationError: null value in column \"tenant\" of rela` no aparece como `error.type`; no se puede contar"
+    ]
+  }
+}

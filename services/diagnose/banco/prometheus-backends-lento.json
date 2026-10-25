@@ -1,0 +1,147 @@
+{
+  "id": "prometheus-backends-lento",
+  "titulo": "ReadTimeout del gateway: manager-api tarda mas de lo que el gateway espera",
+  "causa_real": "manager-api sirve /v1/backends con p50 60,2 s y p95 71,6 s (7.298 peticiones en 7 dias), y el cliente del gateway espera 75 s. El ReadTimeout es la latencia del destino contra un plazo metido en su cola, no una peticion mala.",
+  "fuente": "medicion independiente en ClickHouse de la distribucion de latencia de /v1/backends (D-131); pendiente de Prometheus en A-51",
+  "nivel": "medida",
+  "usado_para_disenar": true,
+  "sintoma": [
+    {
+      "hecho": "el gateway agota el plazo",
+      "alguna_de": [
+        "ReadTimeout",
+        "se rindio",
+        "sin respuesta",
+        "plazo"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "nombra a manager-api",
+      "alguna_de": [
+        "manager-api"
+      ]
+    },
+    {
+      "hecho": "la causa es su latencia",
+      "alguna_de": [
+        "tardo",
+        "latencia",
+        "lento",
+        "tarda"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "culpa a lo que envia el gateway",
+      "alguna_de": [
+        "ENVIANDO",
+        "esta enviando"
+      ]
+    }
+  ],
+  "notas": "Es el caso que destapo la regla de la latencia medida y el que la corrigio. No cuenta.",
+  "capturado_en": "2026-10-25T04:00:28.161555-05:00",
+  "incidente": {
+    "id": "ca8222c4c22c",
+    "fingerprint": "1141813446152778",
+    "kind": "error",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "gateway",
+    "environment": "development",
+    "title": "ReadTimeout en gateway: ReadTimeout:",
+    "signature": "ReadTimeout",
+    "state": "resolved",
+    "opened_at": "2026-10-25T08:26:22.897954Z",
+    "updated_at": "2026-10-25T08:30:19.091961Z",
+    "last_seen_at": "2026-10-25T08:26:29.239354Z",
+    "resolved_at": "2026-10-25T08:41:29.580419Z",
+    "count": 2,
+    "trace_ids": [
+      "8769c6dee3e46cc04d85e83fba8ed87e",
+      "0d0cc4614a858eab90f7c3e62eaf5262"
+    ],
+    "components_affected": [
+      "gateway"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-1141813446152778",
+    "notified_at": "2026-10-25T08:26:29.390470Z",
+    "attributes": {
+      "error.type": "ReadTimeout"
+    }
+  },
+  "expediente": {
+    "incidente_id": "ca8222c4c22c",
+    "huella": "1141813446152778",
+    "app": "prometheus-inference-platform",
+    "componente": "gateway",
+    "firma": "ReadTimeout",
+    "tipo_senal": "error",
+    "severidad": "page",
+    "titulo": "ReadTimeout en gateway: ReadTimeout:",
+    "senales": 2,
+    "edad_s": 6.3414,
+    "entorno": "development",
+    "arbol": {
+      "trace_id": "8769c6dee3e46cc04d85e83fba8ed87e",
+      "spans": [
+        {
+          "span_id": "5414f899a7393680",
+          "parent_span_id": "",
+          "nombre": "GET",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 75236.084,
+          "error": true,
+          "clase": "ReadTimeout",
+          "mensaje": "ReadTimeout: ",
+          "excepcion": "httpx.ReadTimeout",
+          "ruta": "http://127.0.0.1:8091/v1/backends",
+          "momento": "2026-10-25T08:25:07.661870Z",
+          "profundidad": 0
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": {
+      "llamada": "GET (ReadTimeout)",
+      "destino": "http://127.0.0.1:8091/v1/backends",
+      "encontrada": true,
+      "servicio": "manager-api",
+      "codigo": "200",
+      "estado": "Unset",
+      "ms": 81470.75,
+      "discrepa": true
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 27,
+      "dias_mirados": 30,
+      "errores_en_trazas": 2295,
+      "primer_dia": "2026-09-25T00:00:00Z"
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 25,
+      "ventana_min": 5,
+      "rutas": {}
+    },
+    "concurrentes": [],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": []
+  }
+}

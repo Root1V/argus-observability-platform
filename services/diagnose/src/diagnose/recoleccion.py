@@ -151,6 +151,34 @@ def recolectar(
     except ErrorDeAlmacen as exc:
         exp.lagunas.append(f"alcance: {exc}")
 
+    # --- 5b. Recurrencia en trazas -------------------------------------------
+    # Solo tiene sentido si la firma es una clase de error (`ReadTimeout`,
+    # `404`); para `canary-silencio` la consulta devolveria cero y ese cero no
+    # significaria «nunca» sino «no aplica». Asi que cero no se escribe: no se
+    # afirma nada que la consulta no pueda sostener.
+    if exp.tipo_senal == "error":
+        clase = _clase_para_contar(exp)
+        try:
+            filas = almacen.recurrencia(app=exp.app, componente=exp.componente, clase=clase, hasta=hasta)
+        except ErrorDeAlmacen as exc:
+            exp.lagunas.append(f"recurrencia: {exc}")
+            filas = None
+        if filas:
+            exp.historia.dias_mirados = 30
+            exp.historia.dias_con_errores = len(filas)
+            exp.historia.errores_en_trazas = sum(int(f.get("errores") or 0) for f in filas)
+            exp.historia.primer_dia = _fecha(f"{filas[0]['dia']}T00:00:00+00:00")
+        elif filas is not None:
+            # Cero dias para un incidente de tipo `error` es una contradiccion:
+            # el propio incidente es un error dentro de la ventana. Asi que cero
+            # no significa «nunca» sino «esta clase no aparece como
+            # `error.type`», y de ahi no se puede afirmar nada. El primer banco
+            # lo escribio como «ninguno de los 30 dias anteriores» para dos
+            # incidentes de antes de D-118, cuya firma es el mensaje entero.
+            exp.lagunas.append(
+                f"recurrencia: la clase `{clase[:60]}` no aparece como `error.type`; no se puede contar"
+            )
+
     # --- 6. Concurrentes ----------------------------------------------------
     try:
         exp.concurrentes = _concurrentes(
@@ -165,6 +193,25 @@ def recolectar(
 
 
 # --- Los seis bloques, uno por funcion ---------------------------------------
+
+
+def _clase_para_contar(exp: Expediente) -> str:
+    """La clase de error por la que se cuenta la recurrencia.
+
+    La firma, si parece una clase. Si parece un MENSAJE —las firmas de antes
+    de D-118 llevaban el texto entero, con su `DETAIL:` y sus UUID— la clase
+    del span del ejemplar que la tenga: es lo que el SDK escribio en
+    `error.type` y por lo tanto lo que se puede buscar.
+    """
+    if " " not in exp.firma and "\n" not in exp.firma:
+        return exp.firma
+    for span in exp.arbol.cadena_del_fallo:
+        if span.clase and exp.firma.startswith(span.clase.rsplit(".", 1)[-1]):
+            return span.clase
+    for span in exp.arbol.cadena_del_fallo:
+        if span.clase:
+            return span.clase
+    return exp.firma
 
 
 def _topologia(app: str, registro: list[dict[str, Any]]) -> tuple[list[str], list[str]]:

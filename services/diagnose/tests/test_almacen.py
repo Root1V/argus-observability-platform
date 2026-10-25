@@ -58,9 +58,23 @@ def test_una_firma_con_comillas_no_puede_escapar_del_parametro() -> None:
     Interpolarla en el SQL seria dejar que cualquier aplicacion instrumentada
     ejecute consultas en mi ClickHouse mandando un `error.type` con comillas.
     Esto comprueba que el valor viaja como parametro y no como texto cosido al
-    SQL: lo que se serializa es el valor tal cual, sin escapar nada, porque
-    nunca entra en la sentencia.
+    SQL: las comillas viajan tal cual, sin escapar, porque el valor nunca
+    entra en la sentencia. Lo unico que se escapa es lo que el formato TSV de
+    los parametros necesita —saltos de linea, tabuladores, barras—, y eso no
+    tiene nada que ver con el SQL.
     """
     hostil = "502' UNION ALL SELECT * FROM system.users --"
 
     assert _como_parametro(hostil) == hostil
+
+
+def test_un_salto_de_linea_en_la_firma_se_escapa() -> None:
+    """ClickHouse lee los parametros HTTP como TSV escapado.
+
+    Un salto de linea crudo corta el valor: «only 24 of 34 bytes was parsed».
+    Las firmas de Veritium de antes de D-118 llevan la linea `DETAIL:` de
+    Postgres dentro, y la consulta de recurrencia fallaba con 500 en todas.
+    """
+    firma = 'NotNullViolationError: x\nDETAIL:\tfila\\1'
+
+    assert _como_parametro(firma) == 'NotNullViolationError: x\\nDETAIL:\\tfila\\\\1'

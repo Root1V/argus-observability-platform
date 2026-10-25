@@ -1,0 +1,157 @@
+{
+  "id": "aeon-genaispan-kwargs",
+  "titulo": "TypeError al registrar un atributo: GenAISpan.set() no acepta argumentos por nombre",
+  "causa_real": "El SDK de Argus tiene dos firmas para lo mismo: `GenAISpan.set(key, value)` es posicional y `Step.set(**fields)` va por nombre. aeon llamo a `GenAISpan.set` con `argus.run.id=...`, salto un TypeError dentro de la Activity del modelo y Temporal reintento hasta tumbar el run — en una linea cuyo unico trabajo era registrar para quien era la llamada.",
+  "fuente": "aeon_argus/cordinacion.md, «Y un defecto de vuestro SDK, que nos costo dos rondas de depuracion hoy» (equipo aeon, 30/09)",
+  "nivel": "confirmada",
+  "sintoma": [
+    {
+      "hecho": "es un TypeError en GenAISpan.set",
+      "alguna_de": [
+        "GenAISpan.set",
+        "TypeError"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "nombra GenAISpan.set",
+      "alguna_de": [
+        "GenAISpan.set"
+      ]
+    },
+    {
+      "hecho": "el fallo es pasarle el atributo por nombre",
+      "alguna_de": [
+        "keyword",
+        "palabra clave",
+        "kwargs",
+        "por nombre",
+        "posicional"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "culpa a la red, a un destino o a una dependencia",
+      "alguna_de": [
+        "transporte",
+        "no obtuvo respuesta",
+        "latencia de",
+        "aguas arriba"
+      ]
+    }
+  ],
+  "notas": "La causa mas honda es nuestra —la asimetria del SDK— y el banco no la exige: un juez que diga «se le pasa un argumento por nombre a GenAISpan.set, que solo acepta posicionales» le da a quien lo lee la accion correcta. Nombrar la asimetria seria mejor y no se puntua. PASO A DISEÑO el 25/10: entro como no visto, la primera medida lo dio como `parcial` con un veredicto malo, y corregi `_la_firma_nombra_el_sintoma` (comparaba la clase con la firma entera) mirandolo. Desde entonces no mide nada que el juez no haya visto (D-134).",
+  "capturado_en": "2026-10-25T04:00:09.313409-05:00",
+  "incidente": {
+    "id": "89d56f530c95",
+    "fingerprint": "fa8afaa887005d23",
+    "kind": "error",
+    "severity": "ticket",
+    "app": "aeon-worker",
+    "component": "aeon-worker",
+    "environment": "local",
+    "title": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id' en aeon-worker",
+    "signature": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+    "state": "resolved",
+    "opened_at": "2026-09-30T02:54:51.483963Z",
+    "updated_at": "2026-09-30T03:01:45.337715Z",
+    "last_seen_at": "2026-09-30T03:01:45.337446Z",
+    "resolved_at": "2026-09-30T03:16:49.607650Z",
+    "count": 16,
+    "trace_ids": [
+      "6edfb4539a01cdfbd3b9de5faae907bb",
+      "54b5289b14bf3a6902660874ad0b5b80",
+      "214ad89ea032a28819c1cdb220f3bf98",
+      "988ae0a43d25a18eeaae2b52cd591471",
+      "a7e68db9760b9b0c2749907aa5c9374a",
+      "fccf0f8142c68ffcd7bf72793cce2733",
+      "0b8990df5ba1144169bd2cd91eccaf7a",
+      "b6aa80bb738caec07f85fe7468d4a0dc",
+      "5a2d8f4e641f384387ca4efd51f3f017",
+      "40ec62de9952bcab307e3a9a1fce095b"
+    ],
+    "components_affected": [
+      "aeon-worker"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-fa8afaa887005d23",
+    "notified_at": "2026-09-30T02:55:54.231598Z",
+    "attributes": {}
+  },
+  "expediente": {
+    "incidente_id": "89d56f530c95",
+    "huella": "fa8afaa887005d23",
+    "app": "aeon-worker",
+    "componente": "aeon-worker",
+    "firma": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+    "tipo_senal": "error",
+    "severidad": "ticket",
+    "titulo": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id' en aeon-worker",
+    "senales": 16,
+    "edad_s": 413.853483,
+    "entorno": "local",
+    "arbol": {
+      "trace_id": "6edfb4539a01cdfbd3b9de5faae907bb",
+      "spans": [
+        {
+          "span_id": "794980818e94f5c8",
+          "parent_span_id": "",
+          "nombre": "RunActivity:plan_research_activity",
+          "tipo": "Server",
+          "servicio": "aeon-worker",
+          "ms": 4.416,
+          "error": true,
+          "clase": null,
+          "mensaje": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+          "excepcion": "TypeError",
+          "ruta": null,
+          "momento": "2026-09-30T02:54:51.479547Z",
+          "profundidad": 0
+        },
+        {
+          "span_id": "4e4600d788267360",
+          "parent_span_id": "794980818e94f5c8",
+          "nombre": "chat fake-model",
+          "tipo": "Client",
+          "servicio": "aeon-worker",
+          "ms": 2.576,
+          "error": true,
+          "clase": "TypeError",
+          "mensaje": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+          "excepcion": "TypeError",
+          "ruta": null,
+          "momento": "2026-09-30T02:54:51.479640Z",
+          "profundidad": 1
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": null,
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 1,
+      "dias_mirados": 30,
+      "errores_en_trazas": 16,
+      "primer_dia": "2026-09-30T00:00:00Z"
+    },
+    "alcance": {
+      "fallidas": 16,
+      "totales": 60,
+      "ventana_min": 7,
+      "rutas": {
+        "(sin ruta)": 16
+      }
+    },
+    "concurrentes": [],
+    "aguas_arriba": [],
+    "aguas_abajo": [],
+    "lagunas": []
+  },
+  "usado_para_disenar": true
+}

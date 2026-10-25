@@ -1,0 +1,205 @@
+{
+  "id": "tei-silencio-sin-cablear",
+  "titulo": "Silencio de `tei`: las instancias estan paradas y nunca han emitido",
+  "causa_real": "Las cuatro instancias de TEI estan paradas en `lab` y el componente no ha emitido un solo span en todo el historico. El registro lo declaraba `activo` en el campo —`planificado` solo en un comentario— y el canario vigilaba el silencio de algo que nunca habia hablado.",
+  "fuente": "Prometheus, P-42 §2 («Las cuatro instancias TEI estan paradas ahora mismo en lab»); Argus, D-123 y D-124",
+  "nivel": "confirmada",
+  "abstenerse_es_correcto": true,
+  "sintoma": [
+    {
+      "hecho": "tei no emite telemetria",
+      "alguna_de": [
+        "tei",
+        "silencio",
+        "no emite",
+        "dejo de emitir"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "nunca ha emitido, o sus instancias estan paradas",
+      "alguna_de": [
+        "nunca",
+        "paradas",
+        "parado",
+        "detenid",
+        "no esta corriendo",
+        "0 spans",
+        "ningun span",
+        "planificado"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "atribuye el silencio a los errores de otro servicio",
+      "alguna_de": [
+        "gateway",
+        "PermissionError",
+        "503",
+        "aguas arriba"
+      ]
+    }
+  ],
+  "notas": "Sin arbol, sin alcance y con 8 servicios con errores a la vez — el gateway con 3.356 PermissionError —, lo tentador es culpar a lo que hace ruido. Con este expediente lo correcto es ABSTENERSE: ningun bloque pregunta «¿ha emitido alguna vez este componente?», que es la consulta que lo resolveria.",
+  "capturado_en": "2026-10-25T04:00:22.506794-05:00",
+  "incidente": {
+    "id": "eda6dd756ee1",
+    "fingerprint": "98e1e15ce779e4c8",
+    "kind": "burn_rate",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "tei",
+    "environment": null,
+    "title": "tei dejó de emitir telemetría",
+    "signature": "canary-silencio",
+    "state": "resolved",
+    "opened_at": "2026-10-24T01:36:47.981858Z",
+    "updated_at": "2026-10-24T17:00:46.489807Z",
+    "last_seen_at": "2026-10-24T17:00:46.487847Z",
+    "resolved_at": "2026-10-24T17:15:47.838087Z",
+    "count": 166,
+    "trace_ids": [],
+    "components_affected": [
+      "tei"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-98e1e15ce779e4c8",
+    "notified_at": "2026-10-24T01:36:47.987035Z",
+    "attributes": {
+      "labels": {
+        "alertname": "canary-silencio",
+        "service_namespace": "prometheus-inference-platform",
+        "service_name": "tei",
+        "source": "canary"
+      },
+      "annotations": {
+        "summary": "tei dejó de emitir telemetría",
+        "canary.detalle": "sin telemetría en 15 min",
+        "canary.resultado": "silencio"
+      }
+    }
+  },
+  "expediente": {
+    "incidente_id": "eda6dd756ee1",
+    "huella": "98e1e15ce779e4c8",
+    "app": "prometheus-inference-platform",
+    "componente": "tei",
+    "firma": "canary-silencio",
+    "tipo_senal": "burn_rate",
+    "severidad": "page",
+    "titulo": "tei dejó de emitir telemetría",
+    "senales": 166,
+    "edad_s": 55438.505989,
+    "entorno": null,
+    "arbol": {
+      "trace_id": "",
+      "spans": [],
+      "truncado": false
+    },
+    "contraparte": null,
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 0,
+      "dias_mirados": 0,
+      "errores_en_trazas": 0,
+      "primer_dia": null
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 0,
+      "ventana_min": 924,
+      "rutas": {}
+    },
+    "concurrentes": [
+      {
+        "servicio": "gateway",
+        "clase": "PermissionError",
+        "errores": 3356,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "503",
+        "errores": 1592,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "500",
+        "errores": 346,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-api",
+        "clase": "",
+        "errores": 22,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-api",
+        "clase": "ValidationError",
+        "errores": 10,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "ConnectError",
+        "errores": 7,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-worker",
+        "clase": "",
+        "errores": 3,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "RemoteProtocolError",
+        "errores": 2,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "ReadTimeout",
+        "errores": 2,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "veritium-worker",
+        "clase": "ValueError",
+        "errores": 1,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "auth-service",
+        "clase": "",
+        "errores": 1,
+        "aguas_arriba": false
+      },
+      {
+        "servicio": "gateway",
+        "clase": "401",
+        "errores": 1,
+        "aguas_arriba": false
+      }
+    ],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": [
+      "arbol: el incidente no trae ninguna traza de ejemplo",
+      "alcance: ningun span `Server` de prometheus-inference-platform/tei en la ventana; el incidente puede venir de un span interno o de una llamada saliente"
+    ]
+  }
+}
