@@ -349,6 +349,38 @@
   componentes:
     - {id: bench-runner, rol: cli}
 
+- id: centinela
+  # Videovigilancia del hogar con IA (repo video_vigilancia, F6-01). Integrada
+  # el 03/10: siete procesos con `service.namespace=centinela`, spans GenAI por
+  # cada llamada a Prometheus (modelo y tokens, sin contenido) y metricas del
+  # pipeline de video por camara.
+  nombre_visible: Centinela AI (videovigilancia)
+  # `planificado` mientras el sistema este apagado (sus contenedores se
+  # detuvieron a mediados de octubre): volver a `activo` al levantarlo, o el
+  # canario no vigila su silencio.
+  estado: planificado
+  # `media`: sus alertas de seguridad salen por su propio notificador; lo que
+  # avisa Argus es que el sistema se degrado, y eso es un ticket, no un page.
+  criticidad: media
+  dueño: emeric
+  canales:
+    ticket: [telegram, console]
+  componentes:
+    # SLO de 8 s: la API incluye las respuestas de IA a demanda (asistente,
+    # descripciones, analisis de area), que tardan varios segundos.
+    - {id: centinela-api, rol: api, slo: {p95_ms: 8000}}
+    - {id: centinela-camera-manager, rol: worker}
+    - {id: centinela-vision-worker, rol: worker}
+    # `latido: false`: no traza Redis ni la base (bucle de video) y no emite
+    # metricas propias, asi que su silencio no significa que este caido.
+    - {id: centinela-identity-worker, rol: worker, latido: false}
+    - {id: centinela-enrich-worker, rol: worker}
+    - {id: centinela-notifier, rol: worker}
+    - {id: centinela-celery, rol: worker}
+  # Usa su propio Postgres y Valkey (no los compartidos de abajo).
+  depende_de: [prometheus-inference-platform]
+  tipo_ia: [vision-local, llm-api, reconocimiento-facial]
+
 # Infraestructura compartida. Esta aqui por DOS motivos:
 #   - para que `depende_de` pueda apuntar a algo y la correlacion tenga grafo;
 #   - para poder vigilarla con sondas HTTP (ver probes.yaml).
