@@ -79,6 +79,10 @@ class Resultado:
     tokens: int = 0
     segundos: float = 0.0
     origen: str = ""
+    # Evidencia que citaba una herramienta que el agente NO llamo. Se quita del
+    # informe y se cuenta: el 26/10 citaba `[traza]` y `[alcance]` habiendo
+    # llamado solo a `expediente` (D-146).
+    citas_inventadas: list[str] = field(default_factory=list)
 
     @property
     def parcial(self) -> bool:
@@ -227,8 +231,25 @@ def _volcar(informe: Any, r: Resultado) -> None:
     causa = (informe.causa or "").strip() or None
     r.causa = _sin_volcado(causa)[:600] if causa else None
     r.confianza = informe.confianza if informe.confianza in CONFIANZAS and r.causa else "baja"
-    r.evidencia = [_sin_volcado(str(e))[:400] for e in (informe.evidencia or [])[:6] if str(e).strip()]
+    evidencia = [_sin_volcado(str(e))[:400] for e in (informe.evidencia or [])[:6] if str(e).strip()]
+    r.evidencia = [e for e in evidencia if _cita_valida(e, r.herramientas_usadas)]
+    r.citas_inventadas = [e for e in evidencia if not _cita_valida(e, r.herramientas_usadas)]
     r.descartadas = [_sin_volcado(str(e))[:400] for e in (informe.descartadas or [])[:6] if str(e).strip()]
+    if r.causa and not r.evidencia:
+        # Una causa cuya evidencia entera era inventada no tiene evidencia.
+        r.confianza = "baja"
+
+
+def _cita_valida(evidencia: str, usadas: list[str]) -> bool:
+    """`[herramienta] hecho`: la herramienta tiene que estar entre las que se llamaron.
+
+    Sin corchete al principio no se puede comprobar de donde sale, y se acepta:
+    las instrucciones lo piden, pero castigar el formato no es lo que se busca.
+    """
+    import re
+
+    m = re.match(r"\s*\[([a-z_]+)\]", evidencia)
+    return m is None or m.group(1) in usadas
 
 
 def gateway_con_herramientas(herramientas: Sequence[Any]) -> Any:

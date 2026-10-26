@@ -13,7 +13,7 @@ from synaptum import Risk, tool
 from synaptum.testing import FakeGateway, calls
 
 INFORME = {"causa": "manager-api tarda normalmente mas que el plazo del gateway", "confianza": "alta",
-           "evidencia": ["[linea_base] el 4% pasa de 75 s"], "descartadas": ["la red: hubo respuesta 200"]}
+           "evidencia": ["[expediente] el 4% pasa de 75 s"], "descartadas": ["la red: hubo respuesta 200"]}
 
 
 def entrega(**informe):
@@ -44,7 +44,7 @@ def test_mira_el_expediente_y_entrega_un_informe_que_cita_y_descarta() -> None:
     assert r.final == "informe" and not r.parcial
     assert r.herramientas_usadas == ["expediente"]
     assert r.confianza == "alta"
-    assert r.evidencia[0].startswith("[linea_base]")
+    assert r.evidencia[0].startswith("[expediente]")
     assert r.descartadas == ["la red: hubo respuesta 200"]
 
 
@@ -75,3 +75,19 @@ def test_el_volcado_de_una_fila_no_sale_en_el_informe() -> None:
                      confianza="media", evidencia=[], descartadas=[])).investigar("h1")
 
     assert "0012345" not in r.causa
+
+
+def test_la_evidencia_que_cita_una_herramienta_no_llamada_se_quita() -> None:
+    """El 26/10 citaba `[traza]` habiendo llamado solo a `expediente` (D-146)."""
+    r = _inv(calls("expediente", huella="h1"),
+             entrega(causa="x", confianza="alta", descartadas=[],
+                     evidencia=["[expediente] tres ConnectError", "[traza] fallo tras 19 s"])).investigar("h1")
+
+    assert r.evidencia == ["[expediente] tres ConnectError"]
+    assert r.citas_inventadas == ["[traza] fallo tras 19 s"]
+
+
+def test_si_toda_la_evidencia_era_inventada_la_confianza_baja() -> None:
+    r = _inv(entrega(causa="x", confianza="alta", descartadas=[], evidencia=["[linea_base] el 4%"])).investigar("h1")
+
+    assert r.evidencia == [] and r.confianza == "baja"
