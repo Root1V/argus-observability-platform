@@ -1,0 +1,129 @@
+{
+  "fuente": "gpt-oss-20b-mxfp4 sin razonamiento fijado, primera medida (D-138), 26/10/2026",
+  "etiquetado_por": "Claude (lectura manual, 26/10/2026), sobre el texto SIN el eco del incidente; pendiente de revision por el dueño",
+  "origen": "real",
+  "veredictos": [
+    {
+      "caso": "aeon-genaispan-kwargs",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "Uso incorrecto de GenAISpan.set() con argumento 'argus.run.id' no soportado en aeon-worker",
+      "afirma": {
+        "nombra GenAISpan.set": true,
+        "el fallo es pasarle el atributo por nombre": false,
+        "es un TypeError en GenAISpan.set": true,
+        "culpa a la red, a un destino o a una dependencia": false
+      },
+      "nota": "«argumento no soportado» no dice que el fallo sea pasarlo por nombre; el error en la llamada a GenAISpan.set si"
+    },
+    {
+      "caso": "canario-silencio-host-dormido",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "host o ingesta",
+      "afirma": {
+        "todos los servicios callaron a la vez": false,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "el canario no emite telemetria": false,
+        "dice que nunca emitio": false,
+        "culpa a una dependencia": false
+      },
+      "nota": "«host o ingesta»: media causa, sin sintoma"
+    },
+    {
+      "caso": "gateway-silencio-host-dormido",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": null,
+      "afirma": {
+        "todos los servicios callaron a la vez": false,
+        "el problema es del host o de la ingesta, no del servicio": false,
+        "el gateway no emite telemetria": false,
+        "dice que nunca emitio": false,
+        "culpa al propio servicio o a una dependencia": false
+      },
+      "nota": "se abstuvo"
+    },
+    {
+      "caso": "prometheus-502-por-oauth-400",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "Error en la llamada al endpoint /oauth2/token que devolvió 400, provocando que el gateway devolviera 502",
+      "afirma": {
+        "nombra la llamada a /oauth2/token": true,
+        "esa llamada recibe un 400": true,
+        "el gateway devuelve 502": true,
+        "dice que la llamada no llego o fallo el transporte": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "prometheus-backends-lento",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "El backend manager-api tardó más tiempo del límite de timeout configurado en el gateway",
+      "afirma": {
+        "nombra a manager-api": true,
+        "la causa es su latencia": true,
+        "el gateway agota el plazo": true,
+        "culpa a lo que envia el gateway": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "prometheus-clients-names-puerto",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "El servicio en 127.0.0.1:8020 no tiene la ruta /admin/api/clients/names, provocando 404",
+      "afirma": {
+        "el puerto o la URL base es el equivocado": false,
+        "la llamada recibe un 404": true,
+        "es la ruta clients/names": true,
+        "dice que la peticion no llego al destino": false
+      },
+      "nota": "Dice que en :8020 no esta la ruta, no que el puerto sea el equivocado"
+    },
+    {
+      "caso": "tei-silencio-sin-cablear",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": null,
+      "afirma": {
+        "nunca ha emitido, o sus instancias estan paradas": false,
+        "tei no emite telemetria": false,
+        "atribuye el silencio a los errores de otro servicio": false
+      },
+      "nota": "se abstuvo"
+    },
+    {
+      "caso": "veritium-pendingrollback-sintoma",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+      "afirma": {
+        "es consecuencia de una excepcion anterior": false,
+        "esa excepcion es la violacion de NOT NULL en tenant": true,
+        "la transaccion se deshizo": false
+      },
+      "nota": "Da la excepcion original como causa, pero no dice que el PendingRollback sea su consecuencia ni que la transaccion se deshiciera"
+    },
+    {
+      "caso": "veritium-silencio-host-dormido",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "host de veritium-api no disponible",
+      "afirma": {
+        "todos los servicios callaron a la vez": false,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "veritium-api no emite telemetria": false,
+        "dice que nunca emitio": false,
+        "culpa al propio servicio": false
+      },
+      "nota": "Culpa al host, no al servicio; no dice que veritium-api calle"
+    },
+    {
+      "caso": "veritium-tenant-proceso-viejo",
+      "juez": "modelo:gpt-oss-20b-mxfp4",
+      "root_cause": "Inserción en la tabla webhook_deliveries sin valor para la columna tenant",
+      "afirma": {
+        "un proceso con el codigo anterior seguia vivo": false,
+        "el esquema cambio por una migracion": false,
+        "falta el tenant": true,
+        "es una violacion de NOT NULL": true,
+        "culpa a una dependencia aguas arriba": false
+      },
+      "nota": "«sin valor para la columna tenant» es la violacion de NOT NULL dicha con otras palabras"
+    }
+  ]
+}

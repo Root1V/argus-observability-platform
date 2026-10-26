@@ -1,0 +1,129 @@
+{
+  "fuente": "juez de reglas sobre el banco, 26/10/2026",
+  "etiquetado_por": "Claude (lectura manual, 26/10/2026), sobre el texto SIN el eco del incidente; pendiente de revision por el dueño",
+  "origen": "real",
+  "veredictos": [
+    {
+      "caso": "aeon-genaispan-kwargs",
+      "juez": "reglas",
+      "root_cause": "`TypeError` en «RunActivity:plan_research_activity» (aeon-worker): GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+      "afirma": {
+        "nombra GenAISpan.set": false,
+        "el fallo es pasarle el atributo por nombre": false,
+        "es un TypeError en GenAISpan.set": true,
+        "culpa a la red, a un destino o a una dependencia": false
+      },
+      "nota": "Sin el eco solo queda «TypeError en RunActivity…(aeon-worker)»: nombra el TypeError, no GenAISpan.set ni el por nombre"
+    },
+    {
+      "caso": "canario-silencio-host-dormido",
+      "juez": "reglas",
+      "root_cause": "No es argus/canary: en los 60 minutos anteriores la plataforma ENTERA recibio datos solo en 13, a rafagas. El silencio es del host del plano central o de la ingesta —un portatil que duerme y despierta unos minutos cada cuarto de hora hace exactamente esto—, no de este servicio. Si el host despierta, el incidente se cierra solo.",
+      "afirma": {
+        "todos los servicios callaron a la vez": true,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "el canario no emite telemetria": true,
+        "dice que nunca emitio": false,
+        "culpa a una dependencia": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "gateway-silencio-host-dormido",
+      "juez": "reglas",
+      "root_cause": "No es prometheus-inference-platform/gateway: en los 60 minutos anteriores la plataforma ENTERA recibio datos solo en 11, a rafagas. El silencio es del host del plano central o de la ingesta —un portatil que duerme y despierta unos minutos cada cuarto de hora hace exactamente esto—, no de este servicio. Si el host despierta, el incidente se cierra solo.",
+      "afirma": {
+        "todos los servicios callaron a la vez": true,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "el gateway no emite telemetria": true,
+        "dice que nunca emitio": false,
+        "culpa al propio servicio o a una dependencia": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "prometheus-502-por-oauth-400",
+      "juez": "reglas",
+      "root_cause": "La llamada saliente a http://127.0.0.1:9000/oauth2/token recibio un `400`. Un codigo de estado es una RESPUESTA, asi que el destino contesto: lo que falla es la peticion que prometheus-inference-platform/gateway esta haciendo —ruta inexistente, cuerpo invalido o credencial rechazada—, no la disponibilidad del destino. No se pudo confirmar desde el otro lado, y eso no dice nada: el muestreo de cola descarta ~9 de cada 10 trazas sin error, lentitud ni GenAI.",
+      "afirma": {
+        "nombra la llamada a /oauth2/token": true,
+        "esa llamada recibe un 400": true,
+        "el gateway devuelve 502": false,
+        "dice que la llamada no llego o fallo el transporte": false
+      },
+      "nota": "No menciona el 502"
+    },
+    {
+      "caso": "prometheus-backends-lento",
+      "juez": "reglas",
+      "root_cause": "manager-api atendio la llamada a http://127.0.0.1:8091/v1/backends y la contesto bien (codigo 200), pero tardo 81 s, y prometheus-inference-platform/gateway se rindio a los 75 s. La peticion no tiene nada de malo: la causa es la latencia de manager-api, o un plazo de espera mas corto que su tiempo de respuesta normal.",
+      "afirma": {
+        "nombra a manager-api": true,
+        "la causa es su latencia": true,
+        "el gateway agota el plazo": true,
+        "culpa a lo que envia el gateway": false
+      },
+      "nota": "«la peticion no tiene nada de malo» NIEGA culpar a lo que envia el gateway"
+    },
+    {
+      "caso": "prometheus-clients-names-puerto",
+      "juez": "reglas",
+      "root_cause": "La llamada saliente a http://127.0.0.1:8020/admin/api/clients/names recibio un `404`. Un codigo de estado es una RESPUESTA, asi que el destino contesto: lo que falla es la peticion que prometheus-inference-platform/gateway esta haciendo —ruta inexistente, cuerpo invalido o credencial rechazada—, no la disponibilidad del destino. No se pudo confirmar desde el otro lado, y eso no dice nada: el muestreo de cola descarta ~9 de cada 10 trazas sin error, lentitud ni GenAI.",
+      "afirma": {
+        "el puerto o la URL base es el equivocado": false,
+        "la llamada recibe un 404": true,
+        "es la ruta clients/names": true,
+        "dice que la peticion no llego al destino": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "tei-silencio-sin-cablear",
+      "juez": "reglas",
+      "root_cause": "prometheus-inference-platform/tei no dejo de emitir: no ha emitido NADA —ni trazas, ni logs, ni metricas— en los 30 dias anteriores. La sonda vigila un componente que nunca ha hablado. O esta parado, o no esta cableado, o se dio de alta en el registro antes de tiempo; las tres cosas se arreglan fuera del servicio.",
+      "afirma": {
+        "nunca ha emitido, o sus instancias estan paradas": true,
+        "tei no emite telemetria": true,
+        "atribuye el silencio a los errores de otro servicio": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "veritium-pendingrollback-sintoma",
+      "juez": "reglas",
+      "root_cause": "`PendingRollbackError` en «RunActivity:veritium.case.evaluate» (veritium-worker) es un SINTOMA: la sesion se deshizo por una excepcion anterior. La causa es esa excepcion anterior: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+      "afirma": {
+        "es consecuencia de una excepcion anterior": true,
+        "esa excepcion es la violacion de NOT NULL en tenant": true,
+        "la transaccion se deshizo": true
+      },
+      "nota": ""
+    },
+    {
+      "caso": "veritium-silencio-host-dormido",
+      "juez": "reglas",
+      "root_cause": "No es veritium/veritium-api: en los 60 minutos anteriores la plataforma ENTERA recibio datos solo en 14, a rafagas. El silencio es del host del plano central o de la ingesta —un portatil que duerme y despierta unos minutos cada cuarto de hora hace exactamente esto—, no de este servicio. Si el host despierta, el incidente se cierra solo.",
+      "afirma": {
+        "todos los servicios callaron a la vez": true,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "veritium-api no emite telemetria": true,
+        "dice que nunca emitio": false,
+        "culpa al propio servicio": false
+      },
+      "nota": ""
+    },
+    {
+      "caso": "veritium-tenant-proceso-viejo",
+      "juez": "reglas",
+      "root_cause": "El fallo (`NotNullViolationError`) empieza con el proceso de veritium-api ya en marcha desde hace al menos 9 h y sin cambio de version (0.3.0): no fue un despliegue de este codigo. Lo que cambio esta FUERA del proceso, y el proceso sigue con lo que cargo al arrancar. Siendo un error de esquema de la base, lo mas probable es una migracion aplicada con este proceso todavia corriendo el codigo anterior: reiniciarlo con el codigo nuevo deberia cortarlo.",
+      "afirma": {
+        "un proceso con el codigo anterior seguia vivo": true,
+        "el esquema cambio por una migracion": true,
+        "falta el tenant": false,
+        "es una violacion de NOT NULL": true,
+        "culpa a una dependencia aguas arriba": false
+      },
+      "nota": "No nombra tenant"
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "fuente": "escritos para probar al calificador: negaciones, parafrasis, reservas, ingles",
+  "etiquetado_por": "Claude (lectura manual, 26/10/2026), sobre el texto SIN el eco del incidente; pendiente de revision por el dueño",
+  "origen": "a-mano",
+  "veredictos": [
+    {
+      "caso": "prometheus-backends-lento",
+      "juez": "a-mano",
+      "root_cause": "No es un problema de latencia de manager-api: el gateway esta enviando una peticion mal formada.",
+      "afirma": {
+        "nombra a manager-api": true,
+        "la causa es su latencia": false,
+        "el gateway agota el plazo": false,
+        "culpa a lo que envia el gateway": true
+      },
+      "nota": "negacion"
+    },
+    {
+      "caso": "canario-silencio-host-dormido",
+      "juez": "a-mano",
+      "root_cause": "El host no tiene nada que ver: el canario se cayo por un fallo en ClickHouse.",
+      "afirma": {
+        "todos los servicios callaron a la vez": false,
+        "el problema es del host o de la ingesta, no del servicio": false,
+        "el canario no emite telemetria": true,
+        "dice que nunca emitio": false,
+        "culpa a una dependencia": true
+      },
+      "nota": "negacion de la causa + dependencia"
+    },
+    {
+      "caso": "prometheus-502-por-oauth-400",
+      "juez": "a-mano",
+      "root_cause": "La peticion a /oauth2/token nunca llego a auth-service; por eso el gateway respondio 502.",
+      "afirma": {
+        "nombra la llamada a /oauth2/token": true,
+        "esa llamada recibe un 400": false,
+        "el gateway devuelve 502": true,
+        "dice que la llamada no llego o fallo el transporte": true
+      },
+      "nota": "afirma lo prohibido"
+    },
+    {
+      "caso": "tei-silencio-sin-cablear",
+      "juez": "a-mano",
+      "root_cause": "tei dejo de emitir porque el gateway le devolvia 503.",
+      "afirma": {
+        "nunca ha emitido, o sus instancias estan paradas": false,
+        "tei no emite telemetria": true,
+        "atribuye el silencio a los errores de otro servicio": true
+      },
+      "nota": "atribuye a otro servicio"
+    },
+    {
+      "caso": "veritium-tenant-proceso-viejo",
+      "juez": "a-mano",
+      "root_cause": "Se cambio la estructura de la tabla mientras la API seguia levantada con el build de ayer.",
+      "afirma": {
+        "un proceso con el codigo anterior seguia vivo": true,
+        "el esquema cambio por una migracion": true,
+        "falta el tenant": false,
+        "es una violacion de NOT NULL": false,
+        "culpa a una dependencia aguas arriba": false
+      },
+      "nota": "parafrasis sin ninguna palabra clave"
+    },
+    {
+      "caso": "prometheus-clients-names-puerto",
+      "juez": "a-mano",
+      "root_cause": "La URL configurada apunta al 8020, pero el API de administracion escucha en otro sitio.",
+      "afirma": {
+        "el puerto o la URL base es el equivocado": true,
+        "la llamada recibe un 404": false,
+        "es la ruta clients/names": false,
+        "dice que la peticion no llego al destino": false
+      },
+      "nota": "parafrasis sin ninguna palabra clave"
+    },
+    {
+      "caso": "aeon-genaispan-kwargs",
+      "juez": "a-mano",
+      "root_cause": "GenAISpan.set espera (clave, valor) y aeon le paso el atributo como argumento nombrado.",
+      "afirma": {
+        "nombra GenAISpan.set": true,
+        "el fallo es pasarle el atributo por nombre": true,
+        "es un TypeError en GenAISpan.set": false,
+        "culpa a la red, a un destino o a una dependencia": false
+      },
+      "nota": "parafrasis sin ninguna palabra clave"
+    },
+    {
+      "caso": "gateway-silencio-host-dormido",
+      "juez": "a-mano",
+      "root_cause": "El gateway no se cayo ni depende de redis: el host del plano central estaba dormido y no llegaba nada de la plataforma entera.",
+      "afirma": {
+        "todos los servicios callaron a la vez": true,
+        "el problema es del host o de la ingesta, no del servicio": true,
+        "el gateway no emite telemetria": false,
+        "dice que nunca emitio": false,
+        "culpa al propio servicio o a una dependencia": false
+      },
+      "nota": "negacion que contiene palabras prohibidas"
+    },
+    {
+      "caso": "prometheus-backends-lento",
+      "juez": "a-mano",
+      "root_cause": "Probablemente manager-api tarda mas de lo que el gateway esta dispuesto a esperar.",
+      "afirma": {
+        "nombra a manager-api": true,
+        "la causa es su latencia": true,
+        "el gateway agota el plazo": true,
+        "culpa a lo que envia el gateway": false
+      },
+      "nota": "con reserva"
+    },
+    {
+      "caso": "prometheus-502-por-oauth-400",
+      "juez": "a-mano",
+      "root_cause": "The gateway returns 502 because its call to /oauth2/token gets an HTTP 400 back.",
+      "afirma": {
+        "nombra la llamada a /oauth2/token": true,
+        "esa llamada recibe un 400": true,
+        "el gateway devuelve 502": true,
+        "dice que la llamada no llego o fallo el transporte": false
+      },
+      "nota": "en ingles"
+    },
+    {
+      "caso": "veritium-pendingrollback-sintoma",
+      "juez": "a-mano",
+      "root_cause": "El PendingRollbackError solo es el aviso; lo que rompio la sesion fue un insert previo que dejaba la columna tenant en null.",
+      "afirma": {
+        "es consecuencia de una excepcion anterior": true,
+        "esa excepcion es la violacion de NOT NULL en tenant": true,
+        "la transaccion se deshizo": false
+      },
+      "nota": "parafrasis"
+    }
+  ]
+}

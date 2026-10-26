@@ -7316,3 +7316,90 @@ Y lo que el diseño tenía que garantizar, se cumple: esos avisos siguen diciend
   parte del expediente. Ya no competiría con ellas: las completaría donde se
   abstienen. Cambia la pregunta de «¿quién acierta más?» a «¿añade algo?»
   (`B-42`).
+
+---
+
+## D-139 · B-41: el calificador se mide antes de creerle, y D-138 exageraba
+
+**Estado**: 🚧 Calificador por palabras medido · el calificador con modelo, escrito y sin medir
+
+**Contexto**. D-138 dijo que tres «fallos» del modelo eran «respuestas correctas
+dichas con otras palabras» y pidió un calificador que entendiera paráfrasis
+(`B-41`). Al etiquetar esos veredictos criterio a criterio, la afirmación no se
+sostiene, y lo que sale es más útil que lo que se buscaba.
+
+### Lo que de verdad fallaba: la composición, no la paráfrasis
+
+| caso | lo que dijo el modelo | por qué salía `falla` |
+|---|---|---|
+| `canario-silencio` | «host o ingesta» | Media causa sin síntoma. `parcial` exigía el síntoma ENTERO |
+| `pendingrollback` | la excepción original | Da la excepción como causa, pero no dice que el `PendingRollbackError` sea su consecuencia. Media causa otra vez |
+| `tenant` | «sin valor para la columna tenant» | **Esta sí** es paráfrasis: la etiqueta esperaba «null value» |
+
+Dos de los tres eran **respuestas parciales** que la regla de composición
+hundía por debajo de no decir nada. Ninguno de los tres era un acierto, y el
+«falla con confianza alta» de D-138 es un **parcial** con confianza alta. La
+corrección de D-138 tenía razón en la dirección y se pasó en la cifra.
+
+### Qué cambia
+
+1. **Calificar son dos pasos, separados** (`banco.componer`): decidir criterio a
+   criterio si el texto afirma algo, y componer esas decisiones. Solo el primero
+   depende de cómo se dice algo.
+2. **Media causa es `parcial`**, no `falla`.
+3. **El eco casi literal también es eco.** Al etiquetar salió que las reglas
+   «acertaban» `aeon` diciendo *«GenAISpan.set() got an unexpected keyword
+   argument 'argus.run.id'»*: la firma del incidente sin su `TypeError: `. La
+   detección de D-134 solo quitaba la cita exacta. Ahora quita también el tramo
+   que repite el 80 % de la firma seguido. Citar una PARTE sigue contando, y a
+   propósito: sacar la excepción original de dentro del `PendingRollbackError`
+   es justo el diagnóstico que ese caso pide.
+   **Las reglas bajan en diseño de 7 a 6 aciertos** (`aeon` pasa a `parcial`).
+   Los no vistos siguen en 2 de 2.
+4. **Un corpus etiquetado** (`services/diagnose/banco/calificador/`): 21
+   veredictos reales (10 de las reglas, 10 del modelo y 1 con razonamiento alto)
+   y 11 escritos a mano. Las etiquetas se pusieron criterio a criterio **antes**
+   de pasar ningún calificador, sobre el texto ya sin eco. Las puso Claude y
+   están **pendientes de revisión por el dueño**: es el punto débil de la
+   medida y se dice.
+5. **Un calificador con modelo** (`calificador.ConModelo`, synaptum). Responde
+   «sí» o «no» con una cita, y **un «sí» cuya cita no está en el texto cuenta
+   como «no»**, con la misma desconfianza que `a_veredicto` aplica al juez. Si
+   no pudo decidir, tampoco aprueba.
+
+### La medida del calificador por palabras
+
+```
+real    pares 85/88 · falsos sí 1 · falsos no 2 · resultado igual 20/21 (inflado 0, desinflado 1)
+a-mano  pares 32/45 · falsos sí 6 · falsos no 7 · resultado igual 5/11  (inflado 1, desinflado 5)
+```
+
+**Con la composición corregida, las palabras clave aciertan el resultado en 20
+de los 21 veredictos reales y no inflan ninguno.** La que falla es `tenant`, la
+única paráfrasis de verdad. Los escritos a mano —negaciones, paráfrasis sin
+ninguna palabra clave, una frase en inglés— muestran que **puede** fallar: en 6
+de 11. Pero los escribió quien conocía las palabras clave, así que dicen que
+falla, no con qué frecuencia. La cifra que cuenta es la real.
+
+### Lo que falta
+
+**Medir el calificador con modelo contra el mismo corpus.** El 26/10 a las
+19:00 UTC, a mitad de la medida con razonamiento alto, Prometheus dejó de servir
+`gpt-oss-20b-mxfp4`: `UnknownModelError` y después «circuit half-open». El
+modelo sigue en `/v1/models`. El dueño está gestionando el cambio de modelo con
+ellos. La orden queda lista:
+
+```
+python -m diagnose.calificador medir --calificador modelo
+```
+
+**Criterio para adoptarlo**: cero inflados en el corpus real, y menos
+desinflados que las palabras clave. Mientras no lo cumpla, el banco sigue
+calificando por palabras, que hoy no inflan.
+
+**El razonamiento alto, a medio medir.** Contestó 3 casos antes del corte. En
+`aeon` tardó **74 s** (15 s sin fijarlo) y respondió reescribiendo el mensaje
+del propio incidente: lo afirma, pero es un eco que la detección por texto no
+puede ver. No hay medida todavía. El juez lo acepta como
+`JuezConModelo(razonamiento=...)`: va dentro de `chat_template_kwargs`, porque en
+el nivel superior de la petición Axonium midió que no hace nada.

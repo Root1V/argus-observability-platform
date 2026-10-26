@@ -1,0 +1,19 @@
+{
+  "fuente": "gpt-oss-20b-mxfp4 con razonamiento alto, 26/10/2026 — solo el veredicto que no repite texto de modelo-1; el resto fallaron por el proveedor",
+  "etiquetado_por": "Claude (lectura manual, 26/10/2026), sobre el texto SIN el eco del incidente; pendiente de revision por el dueño",
+  "origen": "real",
+  "veredictos": [
+    {
+      "caso": "aeon-genaispan-kwargs",
+      "juez": "modelo:gpt-oss-20b-mxfp4@high",
+      "root_cause": "GenAISpan.set() called with unexpected keyword argument 'argus.run.id'",
+      "afirma": {
+        "nombra GenAISpan.set": true,
+        "el fallo es pasarle el atributo por nombre": true,
+        "es un TypeError en GenAISpan.set": true,
+        "culpa a la red, a un destino o a una dependencia": false
+      },
+      "nota": "Reescribe el mensaje del propio incidente con otras palabras: lo afirma, pero es eco que la deteccion por texto no ve"
+    }
+  ]
+}

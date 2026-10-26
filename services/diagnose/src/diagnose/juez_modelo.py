@@ -100,13 +100,16 @@ def pedir(expediente: Expediente) -> str:
     )
 
 
-def id_del_run(modelo: str, peticion: str) -> str:
+def id_del_run(modelo: str, peticion: str, razonamiento: str | None = None) -> str:
     """Determinista: el mismo expediente con el mismo modelo y prompt es el mismo run.
 
     Con un checkpointer persistente, volver a juzgar un expediente identico no
     vuelve a pagar la inferencia — que es lo que synaptum promete al reanudar.
+    El nivel de razonamiento entra en la cuenta: synaptum rechaza reanudar un
+    run con otro muestreo, y con razon — el diario describiria un run que
+    ninguna configuracion produjo.
     """
-    material = f"{modelo}|{VERSION_INSTRUCCIONES}|{peticion}".encode()
+    material = f"{modelo}|{VERSION_INSTRUCCIONES}|{razonamiento or ''}|{peticion}".encode()
     return "l3-" + hashlib.sha256(material).hexdigest()[:20]
 
 
@@ -126,12 +129,18 @@ class JuezConModelo:
         modelo: str,
         checkpointer: Any | None = None,
         max_turnos: int = 3,
+        razonamiento: str | None = None,
     ) -> None:
         self._gateway = gateway
         self.modelo = modelo
         self._checkpointer = checkpointer
         self._max_turnos = max_turnos
-        self.nombre = f"modelo:{modelo}"
+        # `low`, `medium` o `high` para gpt-oss; `None` deja el del modelo. Va
+        # DENTRO de `chat_template_kwargs`: en el nivel superior de la peticion
+        # no hace nada —Axonium lo midio: salida identica byte a byte— y por eso
+        # la plataforma lo deja fuera de lo aceptado en vez de tragarselo.
+        self.razonamiento = razonamiento
+        self.nombre = f"modelo:{modelo}" + (f"@{razonamiento}" if razonamiento else "")
 
     def juzgar(self, expediente: Expediente) -> Veredicto:
         # El bucle de `diagnose` es sincrono a proposito —es lo unico que hace
@@ -143,7 +152,7 @@ class JuezConModelo:
         from synaptum import Sampling, Session, SynaptumError, generate
 
         peticion = pedir(expediente)
-        run_id = id_del_run(self.modelo, peticion)
+        run_id = id_del_run(self.modelo, peticion, self.razonamiento)
         sesion = (
             Session(run_id, self._gateway(), self._checkpointer)
             if self._checkpointer is not None
@@ -159,7 +168,14 @@ class JuezConModelo:
                 # Temperatura cero: el banco tiene que poder repetir una medida
                 # y obtener la misma cifra. Un juez que dice otra cosa cada vez
                 # que se le pregunta no se puede medir.
-                sampling=Sampling(temperature=0.0),
+                sampling=Sampling(
+                    temperature=0.0,
+                    provider_options=(
+                        {"chat_template_kwargs": {"reasoning_effort": self.razonamiento}}
+                        if self.razonamiento
+                        else {}
+                    ),
+                ),
                 max_steps=self._max_turnos,
             )
         except SynaptumError as exc:
