@@ -109,6 +109,7 @@ class JuezDeReglas:
             _la_contraparte_lo_dio_por_bueno,
             _el_destino_respondio_un_error,
             _la_llamada_no_obtuvo_respuesta,
+            _varios_componentes_el_mismo_fallo,
             _empezo_a_mitad_de_un_proceso,
             _la_firma_nombra_el_sintoma,
             _hay_una_excepcion_con_nombre,
@@ -360,6 +361,48 @@ DE_ESQUEMA = ("notnullviolation", "undefinedcolumn", "undefinedtable", "integrit
 MINUTOS_SIN_FALLAR = 60
 
 
+# Lo que suelen compartir varios procesos de una app, por la clase del error.
+# Solo orienta la mirada: el registro casi nunca declara estos recursos
+# —Centinela «usa su propio Postgres y Valkey»— y por eso no se pueden nombrar.
+COMPARTIDO_POR_CLASE = (
+    (("redis", "valkey"), "su Redis/Valkey"),
+    (("psycopg", "asyncpg", "sqlalchemy", "operationalerror", "postgres"), "su base de datos"),
+    (("kafka", "amqp", "pika", "celery"), "su cola de mensajes"),
+)
+
+
+def _varios_componentes_el_mismo_fallo(exp: Expediente) -> tuple[str, Confianza] | None:
+    """Tres o mas componentes de la misma app abren la misma clase a la vez (B-40).
+
+    Procesos distintos no se equivocan igual y en el mismo minuto por su
+    cuenta: lo que falla es algo que comparten. Va antes que las reglas que
+    leen la excepcion porque esas dicen lo mismo cinco veces —«Timeout reading
+    from socket»— y ninguna de las cinco dice lo unico que importa, que es UNA
+    causa.
+
+    Con un hermano solo no: dos coincidencias son demasiado poco para dejar de
+    mirar el componente. Confianza media: no se ve el recurso compartido, se
+    deduce de que todos fallen igual.
+    """
+    if len(exp.hermanos) < 2:
+        return None
+    clase = _clase_de(exp.firma)
+    componentes = [exp.componente, *(h.componente for h in exp.hermanos)]
+    lejos = max(abs(h.segundos) for h in exp.hermanos)
+    minuscula = clase.lower()
+    compartido = next(
+        (que for marcas, que in COMPARTIDO_POR_CLASE if any(m in minuscula for m in marcas)),
+        "una dependencia, la configuracion o el host que comparten",
+    )
+    return (
+        f"No es de {exp.componente}: {len(componentes)} componentes de {exp.app} "
+        f"({', '.join(componentes)}) abrieron `{clase}` en {lejos:.0f} s. Procesos distintos "
+        f"fallando igual y a la vez apuntan a algo que COMPARTEN —lo mas probable, {compartido}— "
+        f"y no a ninguno de ellos: es un fallo visto {len(componentes)} veces.",
+        "media",
+    )
+
+
 def _empezo_a_mitad_de_un_proceso(exp: Expediente) -> tuple[str, Confianza] | None:
     """El fallo empieza con el proceso ya en marcha, sin cambio de version (B-38).
 
@@ -590,6 +633,10 @@ def _evidencia(exp: Expediente) -> list[str]:
     for c in exp.concurrentes[:2]:
         marca = " (dependencia declarada)" if c.aguas_arriba else ""
         hechos.append(f"a la vez: {c.servicio} con {c.errores} error(es) `{c.clase or '?'}`{marca}")
+
+    if exp.hermanos:
+        otros = ", ".join(h.componente for h in exp.hermanos[:5])
+        hechos.append(f"a la vez en {exp.app}: {len(exp.hermanos)} componente(s) mas con la misma clase ({otros})")
 
     if exp.arbol.trace_id:
         hechos.append(f"traza de ejemplo: {exp.arbol.trace_id}")

@@ -20,6 +20,7 @@ from diagnose.expediente import (
     Contraparte,
     Emision,
     Expediente,
+    Hermano,
     Historia,
     Instancia,
     Plataforma,
@@ -499,3 +500,29 @@ def test_una_plataforma_despierta_no_dispara_la_regla_de_las_rafagas() -> None:
     exp = _exp(firma="canary-silencio", tipo_senal="burn_rate",
                plataforma=Plataforma(consultada=True, minutos_con_datos=58))
     assert "No es" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+# --- B-40 ---------------------------------------------------------------------
+
+
+def _hermanos(*componentes: str) -> list[Hermano]:
+    return [Hermano(componente=c, firma="redis.exceptions.TimeoutError", segundos=i) for i, c in enumerate(componentes)]
+
+
+def test_tres_componentes_con_el_mismo_fallo_a_la_vez_son_una_causa_compartida() -> None:
+    exp = _exp(app="centinela", componente="centinela-notifier", firma="redis.exceptions.TimeoutError",
+               hermanos=_hermanos("centinela-celery", "centinela-camera-manager"))
+
+    v = JuezDeReglas().juzgar(exp)
+    assert v.confidence == "media"
+    assert "3 componentes de centinela" in v.root_cause
+    assert "Redis/Valkey" in v.root_cause
+    assert any("a la vez en centinela" in e for e in v.evidence)
+
+
+def test_un_solo_hermano_no_basta_para_dejar_de_mirar_el_componente() -> None:
+    exp = _exp(app="centinela", componente="centinela-notifier", firma="redis.exceptions.TimeoutError",
+               hermanos=_hermanos("centinela-celery"))
+
+    v = JuezDeReglas().juzgar(exp)
+    assert v.root_cause is None or "componentes de centinela" not in v.root_cause

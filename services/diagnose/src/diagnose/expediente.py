@@ -45,6 +45,11 @@ MAX_SPANS = 40
 MAX_HISTORIA = 5
 MAX_CONCURRENTES = 8
 MAX_MENSAJE = 400
+MAX_HERMANOS = 8
+# Cuanto pueden separarse dos aperturas para contar como «a la vez». Cinco
+# minutos y no uno: los procesos de una app no arrancan ni reintentan en el
+# mismo segundo, y el emisor sella la hora con su reloj (B-34).
+VENTANA_HERMANOS_S = 300
 
 
 class Span(BaseModel):
@@ -339,6 +344,21 @@ class Concurrente(BaseModel):
     aguas_arriba: bool = False
 
 
+class Hermano(BaseModel):
+    """Otro componente de la MISMA app que abrio incidente con la misma clase, a la vez (B-40).
+
+    `concurrentes` mira otros servicios en las trazas; esto mira INCIDENTES de
+    la propia app. Son preguntas distintas: cinco componentes de Centinela con
+    `redis.exceptions.TimeoutError` en el mismo segundo no son cinco fallos,
+    son uno visto cinco veces.
+    """
+
+    componente: str
+    firma: str
+    # Respecto a la apertura de este incidente; negativo si abrio antes.
+    segundos: float = 0.0
+
+
 class Expediente(BaseModel):
     """El contexto completo de un incidente, acotado y sin opinion."""
 
@@ -364,6 +384,7 @@ class Expediente(BaseModel):
     historia: Historia = Field(default_factory=Historia)
     alcance: Alcance = Field(default_factory=Alcance)
     concurrentes: list[Concurrente] = Field(default_factory=list)
+    hermanos: list[Hermano] = Field(default_factory=list)
     aguas_arriba: list[str] = Field(default_factory=list)
     aguas_abajo: list[str] = Field(default_factory=list)
 
@@ -494,6 +515,19 @@ class Expediente(BaseModel):
                 for c in self.concurrentes[:MAX_CONCURRENTES]
             ]
             bloques.append("OTROS SERVICIOS CON ERRORES EN LA MISMA VENTANA\n" + "\n".join(lineas))
+
+        if self.hermanos:
+            lineas = [
+                f"  {h.componente}: {h.firma[:120]}  ({round(h.segundos) or 0:+d} s)"
+                for h in self.hermanos[:MAX_HERMANOS]
+            ]
+            lejos = max(abs(h.segundos) for h in self.hermanos)
+            lineas.append(
+                f"  {len(self.hermanos) + 1} componentes de {self.app} con la misma clase en {lejos:.0f} s"
+            )
+            bloques.append(
+                f"OTROS COMPONENTES DE {self.app.upper()} CON LA MISMA CLASE A LA VEZ\n" + "\n".join(lineas)
+            )
 
         if self.aguas_arriba or self.aguas_abajo:
             bloques.append(

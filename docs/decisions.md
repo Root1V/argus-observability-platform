@@ -7403,3 +7403,53 @@ del propio incidente: lo afirma, pero es un eco que la detección por texto no
 puede ver. No hay medida todavía. El juez lo acepta como
 `JuezConModelo(razonamiento=...)`: va dentro de `chat_template_kwargs`, porque en
 el nivel superior de la petición Axonium midió que no hace nada.
+
+---
+
+## D-140 · B-40: los hermanos de un incidente, y por qué agrupar con el reloj del emisor
+
+**Estado**: ✅ En producción · sin caso en el banco
+
+**Contexto**. El 25/10 varios componentes de Centinela abrieron
+`redis.exceptions.TimeoutError` a la vez y L3 los diagnosticó uno por uno:
+«Timeout reading from socket». El bloque `concurrentes` mira OTROS servicios en
+las trazas y la correlación del motor depende de dependencias declaradas, y el
+registro no modela el Valkey de Centinela.
+
+### Qué se hizo
+
+- **Bloque nuevo, `hermanos`**: otros componentes de la MISMA app que abrieron
+  incidente con la misma clase (último segmento, B-33) a 5 min o menos. Sale
+  del histórico de incidentes, que ya se consultaba: no añade ninguna consulta.
+  Las clases sin nombre (`error`, `Exception`) no cuentan, porque tres `error` a
+  la vez comparten un SDK, no una causa.
+- **Regla `_varios_componentes_el_mismo_fallo`**: con tres o más componentes
+  dice «es un fallo visto N veces» y apunta a lo que comparten (Redis/Valkey,
+  base de datos, cola o «una dependencia, la configuración o el host»), con
+  confianza **media**: el recurso compartido no se ve, se deduce. Con un solo
+  hermano no salta. Va antes de las reglas que leen la excepción, que dirían lo
+  mismo cinco veces.
+- **Captura del banco**: los hermanos pueden abrir en el mismo segundo o poco
+  después. Se incluyen los de la ventana, sin lo que L3 les escribió después.
+
+### El reloj
+
+Lo anotado en `B-40` («entre las 08:48:54 y las 08:49:00») no es lo que hay en el
+histórico. Los cuatro hermanos tienen `opened_at` **09:07:57**, el mismo segundo
+los cuatro, y su fila en el almacén se creó a las **08:49:00** (`abierto_en`).
+Son 19 minutos entre el reloj del emisor y el del bus en el mismo incidente:
+es `B-34`. Se agrupa con `opened_at` porque es lo que el histórico expone y es
+coherente entre los hermanos. El precio es que `centinela-api`, que abrió a las
+08:48:54 según su emisor, queda fuera del grupo.
+
+### Verificado en vivo
+
+Con el histórico y ClickHouse reales, el incidente de `centinela-notifier` de
+las 09:07:57 pasa de «Timeout reading from socket» a *«No es de
+centinela-notifier: 4 componentes de centinela (…) abrieron
+`redis.exceptions.TimeoutError` en 0 s. Procesos distintos fallando igual y a
+la vez apuntan a algo que COMPARTEN —lo más probable, su Redis/Valkey— …»*.
+
+**No hay caso en el banco** porque la causa no está establecida fuera de L3:
+que fuera el Valkey es una deducción, y Centinela no lo ha confirmado. La regla
+dice «lo más probable» con confianza media y no afirma más.

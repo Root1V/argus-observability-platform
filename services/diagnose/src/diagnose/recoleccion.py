@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 
 from .almacen import Almacen, ErrorDeAlmacen
 from .expediente import (
+    VENTANA_HERMANOS_S,
     Alcance,
     Arbol,
     Cambios,
@@ -34,6 +35,7 @@ from .expediente import (
     Contraparte,
     Emision,
     Expediente,
+    Hermano,
     Historia,
     Instancia,
     Plataforma,
@@ -118,6 +120,7 @@ def recolectar(
         exp.lagunas.append("historia: no pude leer el historico de incidentes")
     else:
         exp.historia = _historia(exp, historico)
+        exp.hermanos = _hermanos(exp, historico, abierto)
 
     if almacen is None:
         exp.lagunas.append("trazas: sin almacen de telemetria configurado")
@@ -338,6 +341,41 @@ def _historia(exp: Expediente, historico: list[dict[str, Any]]) -> Historia:
             vistas.add(str(causa))
             h.causas_anteriores.append(str(causa))
     return h
+
+
+# Clases que no dicen nada por si solas: tres componentes con `error` a la vez
+# no comparten una causa, comparten un SDK que no supo nombrar la excepcion.
+CLASES_SIN_NOMBRE = {"", "error", "exception"}
+
+
+def _hermanos(exp: Expediente, historico: list[dict[str, Any]], abierto: datetime) -> list[Hermano]:
+    """Otros componentes de esta app que abrieron la misma clase a la vez (B-40).
+
+    Misma clase por el ultimo segmento: `redis.exceptions.TimeoutError` y
+    `TimeoutError` son la misma (B-33). Uno por componente, el mas cercano.
+    """
+    from .juicio import _clase_de, _ultimo_segmento
+
+    clase = _ultimo_segmento(_clase_de(exp.firma))
+    if clase.lower() in CLASES_SIN_NOMBRE:
+        return []
+    cercanos: dict[str, Hermano] = {}
+    for d in historico:
+        componente = str(d.get("component") or "")
+        if d.get("app") != exp.app or not componente or componente == exp.componente:
+            continue
+        if _ultimo_segmento(_clase_de(str(d.get("signature") or ""))) != clase:
+            continue
+        cuando = _fecha(d.get("opened_at"))
+        if cuando is None:
+            continue
+        segundos = (cuando - abierto).total_seconds()
+        if abs(segundos) > VENTANA_HERMANOS_S:
+            continue
+        previo = cercanos.get(componente)
+        if previo is None or abs(segundos) < abs(previo.segundos):
+            cercanos[componente] = Hermano(componente=componente, firma=str(d.get("signature") or ""), segundos=segundos)
+    return sorted(cercanos.values(), key=lambda h: (abs(h.segundos), h.componente))
 
 
 def _alcance(filas: list[dict[str, Any]], *, ventana_min: int) -> Alcance:

@@ -305,11 +305,23 @@ def capturar(incidente: dict, *, almacen, registro: list[dict], historico: list[
     La recurrencia en trazas ya se cuenta hasta el incidente y no hasta hoy:
     lo hace `recolectar` con su `hasta`.
     """
+    from .expediente import VENTANA_HERMANOS_S
     from .recoleccion import _fecha, recolectar
 
     limpio = {k: v for k, v in incidente.items() if k not in CAMPOS_DE_L3}
     abierto = str(incidente.get("opened_at") or "")
     anterior = [d for d in historico if str(d.get("opened_at") or "") < abierto]
+    # Los hermanos de B-40 pueden abrir en el mismo segundo o poco DESPUES, y
+    # en el momento del diagnostico ya estaban: se incluyen los de la ventana,
+    # sin lo que L3 les escribio despues.
+    inicio = _fecha(incidente.get("opened_at"))
+    if inicio is not None:
+        for d in historico:
+            cuando = _fecha(d.get("opened_at"))
+            if (cuando is not None and str(d.get("opened_at") or "") >= abierto
+                    and (cuando - inicio).total_seconds() <= VENTANA_HERMANOS_S
+                    and d.get("component") != incidente.get("component")):
+                anterior.append({k: v for k, v in d.items() if k not in CAMPOS_DE_L3})
     # «Ahora», para un incidente capturado, es su ultima señal. Con el reloj de
     # hoy, el primer borrador del caso de aeon decia «16 señales en 2.181.680 s»
     # —25 dias— para un fallo que duro minutos.

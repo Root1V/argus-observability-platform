@@ -443,3 +443,40 @@ def test_la_plataforma_se_mide_hasta_la_apertura_y_no_despues() -> None:
 
     assert dict(almacen.preguntas)["minutos_con_datos"]["hasta"] == datetime(2026, 10, 25, 8, 2, 47, 784727, tzinfo=UTC)
     assert exp.plataforma.a_rafagas
+
+
+# --- B-40: los hermanos ---------------------------------------------------------
+
+
+def _centinela(componente: str, segundos: float, firma: str = "redis.exceptions.TimeoutError") -> dict[str, Any]:
+    cuando = datetime.fromisoformat(ABIERTO) + timedelta(seconds=segundos)
+    return {"id": componente, "app": "centinela", "component": componente, "signature": firma,
+            "opened_at": cuando.isoformat(), "root_cause": "lo que escribio L3"}
+
+
+def test_los_componentes_de_la_misma_app_con_la_misma_clase_a_la_vez_son_hermanos() -> None:
+    """Centinela el 25/10: cuatro componentes, `redis.exceptions.TimeoutError`, el mismo segundo."""
+    historico = [
+        _centinela("centinela-camera-manager", 0),
+        _centinela("centinela-celery", 0),
+        _centinela("centinela-enrich-worker", 2),
+        _centinela("centinela-api", -1143),                                   # 19 min antes: no
+        _centinela("centinela-camera-manager", 1, firma="GET"),              # otra clase: no
+        {**_centinela("veritium-worker", 0), "app": "veritium"},             # otra app: no
+        _centinela("centinela-notifier", 30),                                # el propio componente: no
+    ]
+    exp = recolectar(_incidente(app="centinela", component="centinela-notifier",
+                                signature="TimeoutError", trace_ids=[]), historico=historico)
+
+    assert [h.componente for h in exp.hermanos] == [
+        "centinela-camera-manager", "centinela-celery", "centinela-enrich-worker",
+    ]
+    assert "4 componentes de centinela con la misma clase" in exp.texto()
+
+
+def test_una_clase_sin_nombre_no_hace_hermanos() -> None:
+    """Tres `error` a la vez comparten un SDK que no supo nombrar la excepcion, no una causa."""
+    historico = [_centinela("a", 0, firma="error"), _centinela("b", 0, firma="error")]
+    exp = recolectar(_incidente(app="centinela", component="c", signature="error", trace_ids=[]), historico=historico)
+
+    assert exp.hermanos == []
