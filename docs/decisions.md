@@ -7404,6 +7404,33 @@ puede ver. No hay medida todavía. El juez lo acepta como
 `JuezConModelo(razonamiento=...)`: va dentro de `chat_template_kwargs`, porque en
 el nivel superior de la petición Axonium midió que no hace nada.
 
+
+### Addendum (26/10, noche): el calificador con modelo, medido, no se adopta
+
+Con `qwen3-30b-a3b-q4-k-m-local` (`gpt-oss` dejó de estar disponible), en tres
+pasadas:
+
+| pasada | resultados reales iguales | inflados | desinflados | citas rechazadas |
+|---|---|---|---|---|
+| sin razonamiento, campo `cita` | 9/21 | 1 | 11 | 14 |
+| sin razonamiento, cita antes que el veredicto | 9/21 | 1 | 11 | 15 |
+| con razonamiento, el HECHO antes del TEXTO y `fragmento_del_texto` | **14/21** | **0** | 7 | 1 |
+| *(palabras clave)* | *20/21* | *0* | *1* | — |
+
+**La comprobación de citas hizo su trabajo.** En las dos primeras pasadas Qwen
+decidía bien y copiaba **el hecho** como cita. Las 14 y 15 citas rechazadas eran
+decisiones correctas con la cita inventada, y por eso salían como «no». Cambiar
+el nombre del campo y el orden de la pregunta lo arregló: una cita rechazada en
+toda la pasada.
+
+**No cumple el criterio.** No infla nada, que era lo importante, pero desinfla
+siete veces más que las palabras clave. El banco sigue calificando por palabras.
+
+**La discrepancia que más se repite es de etiqueta, no del calificador.** En 3
+de los 8 falsos «no», Qwen no acepta que *«la plataforma ENTERA recibió datos
+solo en 13 de 60 minutos»* afirme *«todos los servicios callaron a la vez»*. Yo
+lo etiqueté como sí, y es discutible: lo implica, pero no lo dice. Queda para la
+revisión del dueño.
 ---
 
 ## D-140 · B-40: los hermanos de un incidente, y por qué agrupar con el reloj del emisor
