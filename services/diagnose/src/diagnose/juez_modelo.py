@@ -100,6 +100,46 @@ def pedir(expediente: Expediente) -> str:
     )
 
 
+RAZONAMIENTOS = ("off", "low", "medium", "high")
+
+
+def opciones_de_plantilla(modelo: str, razonamiento: str | None) -> dict[str, Any]:
+    """El nivel de razonamiento, dicho como lo entiende la plantilla de cada familia.
+
+    Va en `chat_template_kwargs` y las claves son de la PLANTILLA del modelo,
+    no de la plataforma: una que la plantilla no lee se ignora sin aviso.
+
+    - **gpt-oss** tiene tres niveles (`reasoning_effort`) y no se puede apagar:
+      `off` se queda en `low`.
+    - **Qwen3** solo piensa o no piensa (`enable_thinking`). Apagarlo es lo
+      que Axonium midio: 215 tokens y 6,9 s contra 16 tokens y 0,7 s.
+    """
+    if not razonamiento:
+        return {}
+    familia = modelo.lower()
+    if familia.startswith("qwen3"):
+        return {"enable_thinking": razonamiento != "off"}
+    if familia.startswith("gpt-oss"):
+        return {"reasoning_effort": "low" if razonamiento == "off" else razonamiento}
+    return {}
+
+
+def muestreo(modelo: str, razonamiento: str | None) -> Any:
+    """Temperatura cero y, si se pidio, el razonamiento en la forma de esa familia.
+
+    Temperatura cero porque el banco tiene que poder repetir una medida y
+    obtener la misma cifra: un juez que dice otra cosa cada vez que se le
+    pregunta no se puede medir.
+    """
+    from synaptum import Sampling
+
+    plantilla = opciones_de_plantilla(modelo, razonamiento)
+    return Sampling(
+        temperature=0.0,
+        provider_options={"chat_template_kwargs": plantilla} if plantilla else {},
+    )
+
+
 def id_del_run(modelo: str, peticion: str, razonamiento: str | None = None) -> str:
     """Determinista: el mismo expediente con el mismo modelo y prompt es el mismo run.
 
@@ -135,10 +175,10 @@ class JuezConModelo:
         self.modelo = modelo
         self._checkpointer = checkpointer
         self._max_turnos = max_turnos
-        # `low`, `medium` o `high` para gpt-oss; `None` deja el del modelo. Va
-        # DENTRO de `chat_template_kwargs`: en el nivel superior de la peticion
-        # no hace nada —Axonium lo midio: salida identica byte a byte— y por eso
-        # la plataforma lo deja fuera de lo aceptado en vez de tragarselo.
+        # Uno de RAZONAMIENTOS, o `None` para dejar el del modelo. Va DENTRO de
+        # `chat_template_kwargs` (`opciones_de_plantilla`): en el nivel
+        # superior no hace nada —Axonium lo midio: salida identica byte a
+        # byte— y por eso la plataforma lo deja fuera de lo aceptado.
         self.razonamiento = razonamiento
         self.nombre = f"modelo:{modelo}" + (f"@{razonamiento}" if razonamiento else "")
 
@@ -149,7 +189,7 @@ class JuezConModelo:
         return asyncio.run(self._juzgar(expediente))
 
     async def _juzgar(self, expediente: Expediente) -> Veredicto:
-        from synaptum import Sampling, Session, SynaptumError, generate
+        from synaptum import Session, SynaptumError, generate
 
         peticion = pedir(expediente)
         run_id = id_del_run(self.modelo, peticion, self.razonamiento)
@@ -165,17 +205,7 @@ class JuezConModelo:
                 session=sesion,
                 instructions=INSTRUCCIONES,
                 output=Dictamen,
-                # Temperatura cero: el banco tiene que poder repetir una medida
-                # y obtener la misma cifra. Un juez que dice otra cosa cada vez
-                # que se le pregunta no se puede medir.
-                sampling=Sampling(
-                    temperature=0.0,
-                    provider_options=(
-                        {"chat_template_kwargs": {"reasoning_effort": self.razonamiento}}
-                        if self.razonamiento
-                        else {}
-                    ),
-                ),
+                sampling=muestreo(self.modelo, self.razonamiento),
                 max_steps=self._max_turnos,
             )
         except SynaptumError as exc:

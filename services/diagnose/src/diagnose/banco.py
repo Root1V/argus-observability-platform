@@ -335,7 +335,7 @@ def _main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("evaluar", help="pasa un juez sobre el banco")
     ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo"))
     ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
-    ev.add_argument("--razonamiento", default=None, choices=("low", "medium", "high"))
+    ev.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     ev.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"),
                     help="quien decide si el veredicto afirma cada criterio (B-41)")
     rec = sub.add_parser("recapturar", help="rehace el expediente de un caso sin tocar su etiqueta")
@@ -359,7 +359,7 @@ def _main(argv: list[str] | None = None) -> int:
             from .calificador import ConModelo
             from .juez_modelo import gateway_axonium
 
-            calificador = ConModelo(gateway_axonium, modelo=args.modelo)
+            calificador = ConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento)
         print(informe(evaluar(juez, casos, calificador), casos))
         return 0
 

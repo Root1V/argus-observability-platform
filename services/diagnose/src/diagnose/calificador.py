@@ -161,7 +161,9 @@ class ConModelo:
         return d.afirma
 
     async def _decidir(self, texto: str, hecho: str) -> Decision | None:
-        from synaptum import Sampling, Session, SynaptumError, generate
+        from synaptum import Session, SynaptumError, generate
+
+        from .juez_modelo import muestreo
 
         pregunta = _pregunta(texto, hecho)
         material = f"{self.modelo}|{VERSION_INSTRUCCIONES}|{self.razonamiento or ''}|{pregunta}".encode()
@@ -173,14 +175,7 @@ class ConModelo:
                 session=Session(run_id, self._gateway()),
                 instructions=INSTRUCCIONES,
                 output=Decision,
-                sampling=Sampling(
-                    temperature=0.0,
-                    provider_options=(
-                        {"chat_template_kwargs": {"reasoning_effort": self.razonamiento}}
-                        if self.razonamiento
-                        else {}
-                    ),
-                ),
+                sampling=muestreo(self.modelo, self.razonamiento),
                 max_steps=self._max_turnos,
             )
         except SynaptumError as exc:
@@ -312,7 +307,7 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("orden", choices=("medir",))
     parser.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"))
     parser.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
-    parser.add_argument("--razonamiento", default=None, choices=("low", "medium", "high"))
+    parser.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     args = parser.parse_args(argv)
 
     calificador: Calificador = POR_PALABRAS

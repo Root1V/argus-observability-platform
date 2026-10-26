@@ -105,3 +105,20 @@ def test_el_mismo_expediente_es_el_mismo_run_y_otro_modelo_otro() -> None:
     assert id_del_run("m1", p) == id_del_run("m1", p)
     assert id_del_run("m1", p) != id_del_run("m2", p)
     assert id_del_run("m1", p) != id_del_run("m1", pedir(_exp(firma="503")))
+
+
+def test_el_razonamiento_se_dice_como_lo_entiende_cada_familia() -> None:
+    """Las claves son de la plantilla del modelo: una que no lee se ignora sin aviso."""
+    from diagnose.juez_modelo import opciones_de_plantilla
+
+    assert opciones_de_plantilla("gpt-oss-20b-mxfp4", "high") == {"reasoning_effort": "high"}
+    assert opciones_de_plantilla("gpt-oss-20b-mxfp4", "off") == {"reasoning_effort": "low"}
+    assert opciones_de_plantilla("qwen3-30b-a3b-q4-k-m-local", "off") == {"enable_thinking": False}
+    assert opciones_de_plantilla("qwen3-30b-a3b-q4-k-m-local", "high") == {"enable_thinking": True}
+    assert opciones_de_plantilla("qwen3-30b-a3b-q4-k-m-local", None) == {}
+    assert opciones_de_plantilla("otro", "high") == {}
+
+
+def test_el_razonamiento_cambia_el_run() -> None:
+    """synaptum rechaza reanudar con otro muestreo: tiene que ser otro run."""
+    assert id_del_run("m", "p", "high") != id_del_run("m", "p", None)
