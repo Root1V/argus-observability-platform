@@ -33,7 +33,9 @@ def main() -> int:
         return 2
 
     sombra = _juez_en_sombra(settings, log)
-    diagnosticador = Diagnosticador(settings, almacen=almacen, juez=JuezDeReglas(), sombra=sombra)
+    investigacion = _investigador_en_sombra(settings, log)
+    diagnosticador = Diagnosticador(settings, almacen=almacen, juez=JuezDeReglas(), sombra=sombra,
+                                    investigacion=investigacion)
     log.info(
         "diagnose.ready",
         extra={
@@ -41,6 +43,7 @@ def main() -> int:
             "clickhouse": settings.clickhouse_url,
             "juez": settings.juez,
             "sombra": sombra.nombre if sombra else "",
+            "l4": bool(investigacion),
             "intervalo_s": settings.intervalo_s,
         },
     )
@@ -76,6 +79,26 @@ def _juez_en_sombra(settings: Settings, log: logging.Logger):
         razonamiento=settings.razonamiento or None,
         completa_a=JuezDeReglas() if settings.juez_sombra == "reglas+modelo" else None,
     )
+
+
+def _investigador_en_sombra(settings: Settings, log: logging.Logger):
+    """L4 en sombra, si se pidio y hay credencial. Como el juez: sin ella, se dice y se sigue."""
+    if settings.investigador != "modelo":
+        return None
+    import asyncio
+    import os
+
+    if not os.environ.get("AXONIUM_CLIENT_ID"):
+        log.warning("l4.sin_credencial", extra={"falta": "AXONIUM_CLIENT_ID / AXONIUM_CLIENT_SECRET"})
+        return None
+    from .investigador import investigar_con_mcp
+    from .sombra_l4 import SombraL4
+
+    def investigar(huella: str):
+        return asyncio.run(investigar_con_mcp(huella, modelo=settings.modelo,
+                                              razonamiento=settings.razonamiento or None))
+
+    return SombraL4(investigar, ruta=settings.sombra_l4_path)
 
 
 if __name__ == "__main__":

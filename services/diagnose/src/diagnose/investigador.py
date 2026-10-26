@@ -226,15 +226,31 @@ def gateway_con_herramientas(herramientas: Sequence[Any]) -> Any:
     return LocalGateway(model=puente.complete, stream=puente.stream, tools=list(herramientas), warn=False)
 
 
+async def investigar_con_mcp(huella: str, *, modelo: str, razonamiento: str | None = None,
+                             presupuesto: Presupuesto | None = None) -> Resultado:
+    """Una investigacion completa: arranca `mcp-obs` como proceso hijo, investiga y lo cierra.
+
+    Un proceso por investigacion y no uno compartido: son pocas (las que deja
+    pasar el triage), y un servidor que se queda colgado no arrastra a la
+    siguiente.
+    """
+    import os
+    import sys
+
+    from synaptum.mcp import MCPTools
+
+    async with MCPTools.stdio(sys.executable, "-m", "diagnose.mcp_obs", env=dict(os.environ)) as obs:
+        inv = Investigador(gateway_con_herramientas, obs.tools, modelo=modelo, razonamiento=razonamiento,
+                           presupuesto=presupuesto)
+        return await inv.investigar_async(huella)
+
+
 def _main(argv: list[str] | None = None) -> int:
     """`python -m diagnose.investigador <huella>`: una investigacion contra el stack, a mano."""
     import argparse
     import json
     import os
-    import sys
     from dataclasses import asdict
-
-    from synaptum.mcp import MCPTools
 
     parser = argparse.ArgumentParser(prog="python -m diagnose.investigador")
     parser.add_argument("huella")
@@ -242,12 +258,7 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     args = parser.parse_args(argv)
 
-    async def correr() -> Resultado:
-        async with MCPTools.stdio(sys.executable, "-m", "diagnose.mcp_obs", env=dict(os.environ)) as obs:
-            inv = Investigador(gateway_con_herramientas, obs.tools, modelo=args.modelo, razonamiento=args.razonamiento)
-            return await inv.investigar_async(args.huella)
-
-    r = asyncio.run(correr())
+    r = asyncio.run(investigar_con_mcp(args.huella, modelo=args.modelo, razonamiento=args.razonamiento))
     print(json.dumps({**asdict(r), "parcial": r.parcial}, indent=2, ensure_ascii=False))
     return 0
 

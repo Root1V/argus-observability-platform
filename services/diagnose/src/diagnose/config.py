@@ -57,5 +57,11 @@ class Settings(BaseSettings):
     # sobre el banco. Vacio = solo al log.
     sombra_path: str = ""
 
+    # --- L4 en sombra (F4-01, F4-03) ------------------------------------------
+    # `modelo` para encenderlo: lo que el triage (F3-03) deja pasar se
+    # investiga en segundo plano con el mismo `modelo` y `razonamiento`.
+    investigador: str = ""
+    sombra_l4_path: str = ""
+
     def timeout_s(self) -> float:
         return 10.0
