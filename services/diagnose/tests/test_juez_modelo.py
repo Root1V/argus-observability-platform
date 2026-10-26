@@ -122,3 +122,49 @@ def test_el_razonamiento_se_dice_como_lo_entiende_cada_familia() -> None:
 def test_el_razonamiento_cambia_el_run() -> None:
     """synaptum rechaza reanudar con otro muestreo: tiene que ser otro run."""
     assert id_del_run("m", "p", "high") != id_del_run("m", "p", None)
+
+
+# --- B-42: el modelo que completa a las reglas ----------------------------------
+
+
+class _Reglas:
+    nombre = "reglas"
+
+    def __init__(self, causa):
+        self.causa = causa
+
+    def juzgar(self, exp):
+        from diagnose.juicio import Veredicto
+
+        return Veredicto(root_cause=self.causa, confidence="media", evidence=["ALCANCE: 3 de 3"], origen="reglas")
+
+
+def test_al_completar_el_modelo_ve_el_veredicto_de_las_reglas() -> None:
+    from diagnose.juicio import Veredicto
+
+    p = pedir(_exp(), Veredicto(root_cause="la llamada a /oauth2/token recibe 400", confidence="media"))
+    assert "<<<REGLAS" in p and "la llamada a /oauth2/token recibe 400" in p
+    assert "precisalo" in p
+
+
+def test_sin_causa_previa_se_le_dice_que_no_la_hay() -> None:
+    from diagnose.juicio import Veredicto
+
+    assert "ninguna: las reglas no encontraron causa" in pedir(_exp(), Veredicto(root_cause=None))
+
+
+def test_el_juez_que_completa_se_nombra_por_las_dos_partes() -> None:
+    juez = JuezConModelo(lambda: FakeGateway(says('{"causa": "x", "confianza": "media", "evidencia": []}')),
+                         modelo="doble", completa_a=_Reglas("y"))
+    v = juez.juzgar(_exp())
+
+    assert juez.nombre == "reglas+modelo:doble"
+    assert v.origen == "reglas+modelo:doble" and v.root_cause == "x"
+
+
+def test_si_el_modelo_falla_completar_no_sale_peor_que_las_reglas() -> None:
+    juez = JuezConModelo(lambda: FakeGateway(*[says("no se") for _ in range(5)]),
+                         modelo="doble", completa_a=_Reglas("la causa de las reglas"))
+    v = juez.juzgar(_exp())
+
+    assert v.root_cause == "la causa de las reglas" and v.origen == "reglas"

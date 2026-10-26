@@ -345,7 +345,7 @@ def _main(argv: list[str] | None = None) -> int:
     cap.add_argument("--caso", required=True, help="id del caso, p. ej. veritium-tenant")
     cap.add_argument("--bus", default="http://127.0.0.1:8080")
     ev = sub.add_parser("evaluar", help="pasa un juez sobre el banco")
-    ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo"))
+    ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo", "reglas+modelo"))
     ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
     ev.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     ev.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"),
@@ -357,13 +357,14 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.orden == "evaluar":
         casos = cargar()
-        if "modelo" in (args.juez, args.calificador) and not os.environ.get("AXONIUM_CLIENT_ID"):
+        if ("modelo" in args.juez or args.calificador == "modelo") and not os.environ.get("AXONIUM_CLIENT_ID"):
             print("el modelo necesita AXONIUM_CLIENT_ID y AXONIUM_CLIENT_SECRET en el entorno")
             return 2
-        if args.juez == "modelo":
+        if args.juez in ("modelo", "reglas+modelo"):
             from .juez_modelo import JuezConModelo, gateway_axonium
 
-            juez = JuezConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento)
+            juez = JuezConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento,
+                                 completa_a=JuezDeReglas() if args.juez == "reglas+modelo" else None)
         else:
             juez = JuezDeReglas()
         calificador = None

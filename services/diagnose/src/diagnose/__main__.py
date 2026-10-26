@@ -60,7 +60,8 @@ def _juez_en_sombra(settings: Settings, log: logging.Logger):
     personas es el de las reglas y no depende de esto. Se dice en el log y se
     sigue sin sombra.
     """
-    if settings.juez_sombra != "modelo":
+    # `modelo` compite con las reglas; `reglas+modelo` revisa su veredicto (B-42).
+    if settings.juez_sombra not in ("modelo", "reglas+modelo"):
         return None
     import os
 
@@ -69,7 +70,12 @@ def _juez_en_sombra(settings: Settings, log: logging.Logger):
         return None
     from .juez_modelo import JuezConModelo, gateway_axonium
 
-    return JuezConModelo(gateway_axonium, modelo=settings.modelo)
+    return JuezConModelo(
+        gateway_axonium,
+        modelo=settings.modelo,
+        razonamiento=settings.razonamiento or None,
+        completa_a=JuezDeReglas() if settings.juez_sombra == "reglas+modelo" else None,
+    )
 
 
 if __name__ == "__main__":
