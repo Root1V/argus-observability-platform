@@ -31,7 +31,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F0** | Plano central | ✅ | 7/7 |
 | **F1** | Librerías y primeras apps | 🚧 | 12/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
-| **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 2/8 |
+| **F3** | Diagnóstico L3 y memoria de incidentes | ⏳ | 3/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
@@ -140,8 +140,8 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F3-01` | ⏳ | Perfil `agents`: Temporal arrancado | |
-| `F3-02` | ⏳ | Worker Temporal propio, dependencias mínimas | D-012: no compartir árbol con `aeon-ai` |
+| `F3-01` | ✅ | Perfil `agents` arrancado | Ya corre `diagnose`. **Sin Temporal**: los agentes se construyen con synaptum, que trae su propia durabilidad — D-135 |
+| `F3-02` | ⏳ | Worker de agentes con **synaptum**, dependencias mínimas | Árbol propio, extras solo los que use; Python ≥ 3.13 — D-135 |
 | `F3-03` | ⏳ | Agente de **triage** barato, modelo pequeño | Filtra antes de invocar al caro. Lo que ya filtra sin modelo: `_toca` salta lo resuelto, lo que tiene causa y los **síntomas**, y espera 600 s antes de reintentar uno sin causa |
 | `F3-04` | ✅ | **L3**: diagnóstico de un disparo como activity suelta | Cerrado **sin Temporal y sin modelo**, y las dos cosas a propósito. Sin Temporal porque el almacén de incidentes YA es la cola —un incidente abierto sin causa *es* trabajo pendiente y sobrevive a un reinicio— así que es reanudable sin durabilidad de workflow; D-013 ya decía que L3 no es un workflow. Sin modelo porque el juez de reglas es el **control** del experimento de `F3-08`: un modelo que acierta el 70% no dice nada si cien líneas de reglas aciertan el 65%. Corriendo en el perfil `agents`; dos incidentes reales de Prometheus diagnosticados correctamente al primer ciclo — D-130, D-131, D-132 |
 | `F3-05` | ⏳ | Almacén de incidentes con **búsqueda vectorial** | pgvector; arranca vacío y se llena solo |
@@ -155,7 +155,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F4-01` | ⏳ | Workflow Temporal multi-paso, **una activity por herramienta** | D-012 |
+| `F4-01` | ⏳ | Investigación multi-paso con **synaptum**: cada paso, un checkpoint | Reanudar con el mismo `run_id` no repite inferencias — D-135 |
 | `F4-02` | ⏳ | Presupuesto duro: 40 tool calls, 300k tokens, 15 min | Informe parcial al agotarse |
 | `F4-03` | ⏳ | **Shadow mode**: investiga y registra, no notifica | Hasta que el banco lo respalde |
 | `F4-04` | ⏳ | Trazar el propio agente en Langfuse | Es una app LLM más |

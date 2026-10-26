@@ -267,7 +267,7 @@ distintos. Generar en vez de escribir a mano lo hace imposible.
 
 ## D-012 · Temporal como runtime de los agentes
 
-**Estado**: 🧪 Vigente sin validar · se ejerce en `F3`
+**Estado**: ⛔ Sustituida por D-135 (25/10): los agentes se construyen con synaptum. Se conserva el razonamiento sobre durabilidad, que synaptum cubre
 
 **Decisión**. Temporal, que ya está desplegado en `aeon-ai`. Worker propio con
 task queue propia.
@@ -7012,3 +7012,61 @@ nuevos y no vistos **tiene** que poder bajar la cifra, y una prueba que lo
 impidiera sería un incentivo para no añadir casos difíciles. Se fija la
 invariante —**ningún `falla` con confianza `alta`**— y que el banco sea lo que
 dice ser.
+
+---
+
+## D-135 · Los agentes se construyen con synaptum
+
+**Estado**: ✅ Vigente · decisión del dueño del proyecto, 25/10 · sustituye la parte de *framework* de D-012
+
+**Decisión**. Los agentes de Argus —el juez con modelo de L3, la investigación de
+L4, el postmortem y la remediación de L5— se construyen con **synaptum**
+(`synaptum-framework`, hoy `1.0.0rc6`).
+
+**Por qué cambia lo que decía el plan**. `PLAN.md §8.6` y D-012 descartaron
+synaptum frente a Temporal con una tabla: *no sobrevive a la caída del worker,
+esperar una aprobación hay que construirlo, MCP y observabilidad pendientes*.
+Esa tabla describía la línea 0.x. Leído su roadmap el 25/10, las cuatro filas
+están cerradas:
+
+| lo que faltaba | hoy |
+|---|---|
+| sobrevivir a una caída | `Checkpointer` SQLite (`SYN-24`): al reanudar con el mismo `run_id`, **una inferencia ya pagada no se vuelve a pagar** |
+| esperar una aprobación | `ApprovalStep` y la disposición `require_approval` (`SYN-05`, `H4`): interrumpir es dejar de iterar, reanudar es volver a llamar |
+| MCP | cliente MCP como extra opcional (`SYN-39`) |
+| observabilidad | instrumentación OTel GenAI (`SYN-37`), aplazada a propósito para esperar a esta plataforma |
+
+Y la razón de D-012 que más pesaba —*el plano central es un portátil que se
+suspende*— la cubre el mismo mecanismo: un run interrumpido por el sueño se
+reanuda con su `run_id` sin repetir lo hecho. El matiz de D-012 sobre L4 («una
+activity por herramienta, no un bucle dentro de una activity») sale gratis:
+**cada `yield` del bucle es una frontera de checkpoint.**
+
+**Lo que no cambia**:
+
+- **D-013 sigue en pie.** L3 no es un agente: el juez con modelo es **una**
+  llamada con salida estructurada sobre el expediente. Con synaptum eso es un
+  run de un solo paso de modelo, sin herramientas, detrás de la interfaz `Juez`
+  que ya existe — y se mide en el banco de F3-08 contra el juez de reglas.
+- **Worker propio, árbol de dependencias propio.** synaptum no tiene
+  dependencias duras (`SYN-30`) y los proveedores van por extras, así que no
+  hereda el conflicto `crewai`/`openai-agents` de `aeon-ai`.
+- **No se toca synaptum desde aquí.** Si falta algo, va como petición a su
+  equipo, igual que con el resto del portafolio.
+
+**Dos consecuencias que hay que tener presentes**:
+
+1. **Python ≥ 3.13.** synaptum lo exige y el espacio de trabajo declara
+   `>=3.11`. Los servicios que lo usen (`diagnose` y los que vengan) subirán su
+   `requires-python`; las imágenes ya corren 3.13. Las librerías que importan
+   las aplicaciones (`argus-semconv`, `argus-sdk`) **no** dependen de synaptum
+   y se quedan en 3.11.
+2. **El modelo local pasa por Axonium.** El roadmap de synaptum fija una regla
+   del dueño: *toda la inferencia local se resuelve en Prometheus, y la única
+   forma de llegar a sus modelos es el SDK Axonium* — que synaptum trae como
+   extra (`[axonium]`, `SYN-52`). Elegir el modelo del juez sigue pendiente;
+   si es local, el camino ya está decidido.
+
+**Lo que queda de Temporal**: nada en el camino de los agentes. Si algún día
+hace falta orquestar procesos largos que no sean agentes, se decidirá entonces;
+hoy no hay ninguno.
