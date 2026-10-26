@@ -7240,3 +7240,79 @@ arriba, `Found 3 errors.`
 Es la familia de «verificado era verificado en el árbol» (D-124), un escalón más
 abajo: aquí ni siquiera el árbol. Desde este commit la comprobación lee el
 código de salida (`set -o pipefail`), y los tres errores están corregidos.
+
+---
+
+## D-138 · La primera medida del modelo: peor que las reglas, y el calificador tampoco sirve para él
+
+**Estado**: ✅ Medido · el modelo se queda en sombra
+
+**Contexto**. El 26/10 el dueño puso en `.env` el cliente de Axonium pedido en
+A-52. Prometheus ofrece **un solo modelo**, `gpt-oss-20b-mxfp4`, el que ya estaba
+por defecto. Se pasó el banco entero, caso a caso, con temperatura cero.
+
+### La cifra automática
+
+```
+no vistos  2 · acierta 0 · parcial 0 · se abstiene 1 · falla 1 (con confianza alta: 0)
+diseño     8 · acierta 2 · parcial 3 · se abstiene 1 · falla 2 (con confianza alta: 1)
+```
+
+Frente a las reglas —no vistos 2 de 2, diseño 7 de 8— es claramente peor. Y
+tiene un `falla` con confianza alta, que es lo único que el banco no tolera.
+
+### Pero la cifra automática miente en las dos direcciones
+
+D-134 avisó: calificar por palabras clave funciona con plantillas y es frágil
+con un modelo, que dice lo mismo con otras palabras. **Pasó en tres casos**, y en
+los tres el modelo tenía razón:
+
+- `veritium-pendingrollback-sintoma`, el «falla con alta»: el modelo dio como
+  causa *«null value in column "tenant"… violates not-null constraint»*, que
+  **es** la excepción original. Falló porque no escribió «rollback».
+- `canario-silencio-host-dormido`: *«host o ingesta»*. Correcto y escueto.
+- `veritium-tenant-proceso-viejo`: *«sin valor para la columna tenant»* en vez
+  de «null value».
+
+Y en la otra dirección, el modelo **falla de verdad y siempre igual: no usa los
+bloques decisivos del expediente**.
+
+| caso | lo que tenía delante | lo que hizo |
+|---|---|---|
+| `tei` | `EMISION ANTERIOR: NADA en los 30 días anteriores` | se abstuvo |
+| `gateway-silencio` | `la plataforma ENTERA recibió datos en 11 de los 60 minutos` | se abstuvo |
+| `tenant` | `su primer error llegó 542 min después de arrancar` | se quedó en el síntoma |
+
+Las reglas aciertan exactamente esos tres. Leído a mano —un juicio, no una
+medida—, el modelo acierta lo que se resuelve leyendo el árbol (el 502 y el
+`/v1/backends`) y pierde todo lo que depende de los bloques nuevos.
+
+### Lo que vio en producción
+
+Arrancado en sombra, las tres primeras comparaciones sobre incidentes reales
+traen dos defectos más:
+
+1. **Escribe en inglés** pese a que la regla 8 de sus instrucciones dice
+   «escribe en español».
+2. En un incidente de burn-rate de `prosodia-worker` **toma una coincidencia
+   temporal por causa**, con confianza media —*«gateway errors coinciding with
+   worker incidents suggest…»*—, que es lo que prohíbe la regla 5. Las reglas se
+   abstienen. Sin causa conocida no se puede decir quién acierta; el
+   razonamiento es el que este proyecto lleva semanas desaprendiendo.
+
+Y lo que el diseño tenía que garantizar, se cumple: esos avisos siguen diciendo
+«investigando…». Lo que propuso el modelo no llegó a nadie.
+
+### Qué se decide
+
+- **El modelo se queda en sombra.** Para eso existe la sombra.
+- **No se ajusta el prompt contra el banco.** Con 10 casos, ajustar las
+  instrucciones mirando los fallos los convertiría todos en casos de diseño, y
+  el modelo acabaría parafraseando las reglas.
+- **Hace falta un calificador que entienda paráfrasis** antes de leer cualquier
+  cifra del modelo como medida, y ese calificador hay que medirlo contra las
+  etiquetas humanas del banco (`B-41`).
+- **Una opción a evaluar**: darle al modelo el veredicto de las reglas como
+  parte del expediente. Ya no competiría con ellas: las completaría donde se
+  abstienen. Cambia la pregunta de «¿quién acierta más?» a «¿añade algo?»
+  (`B-42`).
