@@ -32,13 +32,15 @@ def main() -> int:
         log.error("juez.desconocido", extra={"juez": settings.juez})
         return 2
 
-    diagnosticador = Diagnosticador(settings, almacen=almacen, juez=JuezDeReglas())
+    sombra = _juez_en_sombra(settings, log)
+    diagnosticador = Diagnosticador(settings, almacen=almacen, juez=JuezDeReglas(), sombra=sombra)
     log.info(
         "diagnose.ready",
         extra={
             "alertbus": settings.alertbus_url,
             "clickhouse": settings.clickhouse_url,
             "juez": settings.juez,
+            "sombra": sombra.nombre if sombra else "",
             "intervalo_s": settings.intervalo_s,
         },
     )
@@ -49,6 +51,25 @@ def main() -> int:
     finally:
         diagnosticador.cerrar()
     return 0
+
+
+def _juez_en_sombra(settings: Settings, log: logging.Logger):
+    """El juez con modelo, si se pidio y hay con que.
+
+    Pedido sin credencial NO tumba el servicio: el diagnostico que llega a las
+    personas es el de las reglas y no depende de esto. Se dice en el log y se
+    sigue sin sombra.
+    """
+    if settings.juez_sombra != "modelo":
+        return None
+    import os
+
+    if not os.environ.get("AXONIUM_CLIENT_ID"):
+        log.warning("sombra.sin_credencial", extra={"falta": "AXONIUM_CLIENT_ID / AXONIUM_CLIENT_SECRET"})
+        return None
+    from .juez_modelo import JuezConModelo, gateway_axonium
+
+    return JuezConModelo(gateway_axonium, modelo=settings.modelo)
 
 
 if __name__ == "__main__":

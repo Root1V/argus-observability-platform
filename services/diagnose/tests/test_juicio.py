@@ -12,7 +12,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from diagnose.expediente import Alcance, Arbol, Concurrente, Cambios, Contraparte, Emision, Expediente, Historia, Instancia, Plataforma, Span
+from diagnose.expediente import (
+    Alcance,
+    Arbol,
+    Cambios,
+    Concurrente,
+    Contraparte,
+    Emision,
+    Expediente,
+    Historia,
+    Instancia,
+    Plataforma,
+    Span,
+)
 from diagnose.juicio import JuezDeReglas
 
 

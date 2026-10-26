@@ -287,7 +287,9 @@ def _main(argv: list[str] | None = None) -> int:
     cap.add_argument("huella")
     cap.add_argument("--caso", required=True, help="id del caso, p. ej. veritium-tenant")
     cap.add_argument("--bus", default="http://127.0.0.1:8080")
-    sub.add_parser("evaluar", help="pasa el juez de reglas sobre el banco")
+    ev = sub.add_parser("evaluar", help="pasa un juez sobre el banco")
+    ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo"))
+    ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
     rec = sub.add_parser("recapturar", help="rehace el expediente de un caso sin tocar su etiqueta")
     rec.add_argument("caso")
     rec.add_argument("--bus", default="http://127.0.0.1:8080")
@@ -295,7 +297,16 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.orden == "evaluar":
         casos = cargar()
-        print(informe(evaluar(JuezDeReglas(), casos), casos))
+        if args.juez == "modelo":
+            if not os.environ.get("AXONIUM_CLIENT_ID"):
+                print("el juez con modelo necesita AXONIUM_CLIENT_ID y AXONIUM_CLIENT_SECRET en el entorno")
+                return 2
+            from .juez_modelo import JuezConModelo, gateway_axonium
+
+            juez = JuezConModelo(gateway_axonium, modelo=args.modelo)
+        else:
+            juez = JuezDeReglas()
+        print(informe(evaluar(juez, casos), casos))
         return 0
 
     historico = httpx.get(f"{args.bus}/incidents/history?dias=30", timeout=30).json()

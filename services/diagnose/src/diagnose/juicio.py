@@ -466,7 +466,7 @@ def _hay_una_excepcion_con_nombre(exp: Expediente) -> tuple[str, Confianza] | No
         # destapo con un mensaje en el que la original empezaba pasado el
         # caracter 280 — justo donde esta regla lo recortaba.
         if "Original exception was:" in mensaje:
-            exterior, original = mensaje.split("Original exception was:", 1)
+            _, original = mensaje.split("Original exception was:", 1)
             return (
                 f"`{_ultimo_segmento(span.excepcion)}` en «{span.nombre}» ({span.servicio}) es un "
                 f"SINTOMA: la sesion se deshizo por una excepcion anterior. La causa es esa "

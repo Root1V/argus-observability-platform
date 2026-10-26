@@ -280,6 +280,25 @@ services:
       DIAGNOSE_INTERVALO_S: ${DIAGNOSE_INTERVALO_S:-10}
       DIAGNOSE_MAX_POR_CICLO: ${DIAGNOSE_MAX_POR_CICLO:-3}
       ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
+      # El juez con modelo, EN SOMBRA (D-135, F4-03): juzga y se registra en
+      # `sombra.jsonl`; el aviso sigue llevando el veredicto de las reglas.
+      # Sin `AXONIUM_CLIENT_ID` no arranca y lo dice en el log — el diagnostico
+      # de las reglas no depende de esto.
+      DIAGNOSE_JUEZ_SOMBRA: ${DIAGNOSE_JUEZ_SOMBRA:-modelo}
+      DIAGNOSE_MODELO: ${DIAGNOSE_MODELO:-gpt-oss-20b-mxfp4}
+      DIAGNOSE_SOMBRA_PATH: /var/lib/argus/sombra.jsonl
+      # La unica puerta a la inferencia local es Axonium (regla del dueño). La
+      # credencial es un cliente OAuth de Prometheus para Argus: se pide a su
+      # equipo y la pone el dueño en .env, no se crea desde aqui.
+      AXONIUM_CLIENT_ID: ${AXONIUM_CLIENT_ID:-}
+      AXONIUM_CLIENT_SECRET: ${AXONIUM_CLIENT_SECRET:-}
+      # Dentro del contenedor `127.0.0.1` es el contenedor, no el Mac. El valor
+      # por defecto de Axonium apunta ahi y daria «conexion rechazada».
+      AXONIUM_GATEWAY_BASE_URL: ${AXONIUM_GATEWAY_BASE_URL:-http://host.docker.internal:8020}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - diagnose-data:/var/lib/argus
 
   canary:
     <<: *restart
@@ -522,6 +541,8 @@ services:
 volumes:
   grafana-data:
   alertbus-data:
+  # Lo que juzga el modelo en sombra, una linea por juicio (D-135).
+  diagnose-data:
   # Volumenes NOMBRADOS: son lo que hace portable el plano central.
   clickhouse-data:
   vm-data:

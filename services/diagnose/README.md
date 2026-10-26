@@ -88,6 +88,20 @@ no. **La cifra que vale es la de los no vistos**, y un caso que motiva un
 cambio de regla pasa a diseño: ya no mide nada que el juez no haya visto. La
 primera medida honesta fue cero aciertos en lo no visto (D-134).
 
+## El juez con modelo, en sombra
+
+`juez_modelo.py`: el mismo expediente, **una** llamada con `synaptum.generate`,
+un `Dictamen` tipado. Corre después de las reglas, se registra en
+`sombra.jsonl` y **no toca el aviso** hasta que el banco lo respalde (D-137).
+
+Necesita un cliente de Axonium —`AXONIUM_CLIENT_ID` y `AXONIUM_CLIENT_SECRET`
+en `.env`—, que se pide al equipo de Prometheus. Sin él, el juez en sombra no
+arranca y lo dice; las reglas siguen igual.
+
+```bash
+uv run python -m diagnose.banco evaluar --juez modelo   # con la credencial en el entorno
+```
+
 ## Arrancarlo
 
 ```bash

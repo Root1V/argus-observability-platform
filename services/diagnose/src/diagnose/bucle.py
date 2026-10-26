@@ -45,9 +45,12 @@ class Diagnosticador:
         almacen: Almacen | None = None,
         juez: Juez | None = None,
         cliente: httpx.Client | None = None,
+        sombra: Juez | None = None,
     ) -> None:
         self.settings = settings
         self.juez: Juez = juez or JuezDeReglas()
+        # El juez en sombra: juzga, se registra, y no toca el aviso.
+        self.sombra = sombra
         self._almacen = almacen
         self._http = cliente or httpx.Client(timeout=settings.timeout_s())
         # Huella -> cuando se juzgo por ultima vez y con cuantas senales. Las
@@ -62,6 +65,8 @@ class Diagnosticador:
             "sin_causa": 0,
             "fallidos": 0,
             "saltados_por_espera": 0,
+            "sombra_juzgados": 0,
+            "sombra_fallidos": 0,
         }
 
     # --- Un ciclo ------------------------------------------------------------
@@ -115,6 +120,7 @@ class Diagnosticador:
         self._juzgados[expediente.huella] = (datetime.now(UTC), expediente.senales)
 
         self._devolver(expediente.huella, veredicto)
+        self._en_sombra(expediente, veredicto)
         log.info(
             "diagnose.done",
             extra={
@@ -127,6 +133,53 @@ class Diagnosticador:
             },
         )
         return expediente, veredicto
+
+    def _en_sombra(self, expediente: Expediente, de_las_reglas: Veredicto) -> None:
+        """El juez con modelo, despues de que el aviso ya tenga su veredicto.
+
+        Despues y no antes por dos razones: el veredicto de las reglas no
+        espera a una inferencia de segundos, y un fallo aqui —red, credencial,
+        un modelo que no valida— no puede costarle nada al diagnostico que si
+        llega a una persona. Por eso todo va dentro de un `try`.
+        """
+        if self.sombra is None:
+            return
+        try:
+            del_modelo = self.sombra.juzgar(expediente)
+        except Exception as exc:  # noqa: BLE001 - la sombra nunca tumba el diagnostico
+            self.stats["sombra_fallidos"] += 1
+            log.warning("sombra.failed", extra={"huella": expediente.huella, "error": str(exc)[:200]})
+            return
+        self.stats["sombra_juzgados"] += 1
+        registro = {
+            "cuando": datetime.now(UTC).isoformat(),
+            "huella": expediente.huella,
+            "incidente": expediente.incidente_id,
+            "app": expediente.app,
+            "componente": expediente.componente,
+            "firma": expediente.firma[:120],
+            "reglas": de_las_reglas.model_dump(),
+            "modelo": del_modelo.model_dump(),
+            # Si coinciden en tener causa o no. La comparacion de fondo la hace
+            # el banco; esto es para ver de un vistazo cuanto discrepan.
+            "coinciden_en_tener_causa": de_las_reglas.tiene_causa == del_modelo.tiene_causa,
+        }
+        log.info(
+            "sombra.done",
+            extra={"huella": expediente.huella, "origen": del_modelo.origen,
+                   "causa": del_modelo.tiene_causa, "confianza": del_modelo.confidence},
+        )
+        if self.settings.sombra_path:
+            try:
+                import json
+                from pathlib import Path
+
+                ruta = Path(self.settings.sombra_path)
+                ruta.parent.mkdir(parents=True, exist_ok=True)
+                with ruta.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("sombra.write_failed", extra={"error": str(exc)[:200]})
 
     # --- A quien se le pregunta y a quien se le contesta ---------------------
 
