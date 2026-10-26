@@ -31,7 +31,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F0** | Plano central | ✅ | 7/7 |
 | **F1** | Librerías y primeras apps | 🚧 | 12/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
-| **F3** | Diagnóstico L3 y memoria de incidentes | 🚧 | 5/8 |
+| **F3** | Diagnóstico L3 y memoria de incidentes | 🚧 | 6/8 |
 | **F4** | Investigación agéntica L4 | ⏳ | 0/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
@@ -146,7 +146,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `F3-04` | ✅ | **L3**: diagnóstico de un disparo como activity suelta | Cerrado **sin Temporal y sin modelo**, y las dos cosas a propósito. Sin Temporal porque el almacén de incidentes YA es la cola —un incidente abierto sin causa *es* trabajo pendiente y sobrevive a un reinicio— así que es reanudable sin durabilidad de workflow; D-013 ya decía que L3 no es un workflow. Sin modelo porque el juez de reglas es el **control** del experimento de `F3-08`: un modelo que acierta el 70% no dice nada si cien líneas de reglas aciertan el 65%. Corriendo en el perfil `agents`; dos incidentes reales de Prometheus diagnosticados correctamente al primer ciclo — D-130, D-131, D-132 |
 | `F3-05` | ⏳ | Almacén de incidentes con **búsqueda vectorial** | pgvector; arranca vacío y se llena solo |
 | `F3-06` | ✅ | Agente de **memoria**: top-N incidentes similares | El de mayor retorno después del de RCA **Hecho el 26/10 por clase y episodio, sin vectores (D-142)**: 853 incidentes → 203 episodios; va al aviso como «VISTO ANTES» |
-| `F3-07` | ⏳ | `mcp-obs`: herramientas de solo lectura sobre telemetría | |
+| `F3-07` | ✅ | `mcp-obs`: herramientas de solo lectura sobre telemetría | **Hecho el 26/10 (D-143)**: `python -m diagnose.mcp_obs`, 9 herramientas de consultas fijas, todas `READ` para synaptum; verificado de punta a punta contra el stack |
 | `F3-08` | ✅ | **Banco de pruebas de incidentes** (5–10 con causa conocida) | Cerrado con **7 casos reales**, expediente congelado y causa establecida fuera de L3. La primera medida honesta en lo no visto fue **cero aciertos**: los dos primeros «aciertos» eran eco de la firma, y uno de ellos daba el síntoma como causa. Hoy: no vistos 2 · parcial 1 · se abstiene 1 · falla 0; diseño 5 · acierta 4. **Dos no vistos es poco, y es el estado real** — D-134 |
 
 ---

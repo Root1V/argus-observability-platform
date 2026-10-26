@@ -7533,3 +7533,39 @@ memoria.
 **Límite**: la búsqueda es por clase EXACTA dentro de la app. No encuentra «lo
 mismo con otra clase» ni «lo mismo en otra app»: eso es F3-05, con vectores, y
 necesita un modelo de embeddings servido por Prometheus.
+
+---
+
+## D-143 · F3-07: `mcp-obs`, consultas fijas como herramientas MCP de solo lectura
+
+**Estado**: ✅ Verificado de punta a punta · todavía no lo usa nadie (lo usará L4, F4-01)
+
+**Qué es**. `python -m diagnose.mcp_obs`: un servidor MCP por stdio con nueve
+herramientas: `incidentes_abiertos`, `incidente`, `expediente`, `traza`,
+`alcance`, `recurrencia`, `linea_base`, `concurrentes` y `registro`. Vive dentro
+de `diagnose` para reutilizar el almacén y la recolección de L3: el
+`expediente` que devuelve es **el mismo texto** que lee el juez.
+
+**Decisiones**:
+
+- **Consultas fijas, no SQL libre.** Un agente con SQL contra ClickHouse puede
+  leer cualquier fila de cualquier equipo y tumbar el almacén con una consulta
+  sin `WHERE`. Es la misma razón de D-013.
+- **Solo lectura, declarado y garantizado.** Cada herramienta lleva
+  `readOnlyHint=true` y `destructiveHint=false`, y synaptum las clasifica como
+  `READ`. Lo verificado por el cliente: 9 de 9. Que no escriban lo garantiza el
+  código, no la pista: `Almacen.consulta` rechaza todo lo que no sea `SELECT` y
+  del alert-bus solo se hacen `GET`.
+- **Sin volcados de filas**, línea a línea. El primer test lo cazó: `sanear`
+  sobre el expediente entero cortaba en el primer `DETAIL:` y se llevaba todo lo
+  que venía detrás.
+- **Ventanas acotadas**: un modelo puede pedir 3.650 días de recurrencia, y el
+  almacén guarda 30.
+- **`mcp` 2.3.** Es la versión que resolvió uv. `FastMCP` pasa a llamarse
+  `MCPServer`, y el cliente de synaptum (`ClientSession`, `stdio_client`) sigue
+  funcionando con ella.
+
+**Verificado** con `synaptum.mcp.MCPTools.stdio` contra el stack real: los
+incidentes abiertos, la línea base de `/v1/backends` (p50 60,2 s, 352 de ~9.664
+por encima de 75 s) y el expediente de un incidente abierto, con su bloque
+«VISTO ANTES».
