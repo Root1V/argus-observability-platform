@@ -201,6 +201,7 @@
       "codigo": null,
       "estado": null,
       "ms": null,
+      "linea_base": null,
       "discrepa": false
     },
     "emision": {
@@ -281,6 +282,11 @@
       ],
       "sin_identidad": false
     },
+    "plataforma": {
+      "consultada": false,
+      "minutos_con_datos": 0,
+      "minutos_mirados": 60
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,
@@ -300,6 +306,7 @@
       }
     },
     "concurrentes": [],
+    "hermanos": [],
     "aguas_arriba": [
       "redis-main"
     ],

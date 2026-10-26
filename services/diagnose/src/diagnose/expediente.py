@@ -209,6 +209,22 @@ class Alcance(BaseModel):
         return self.totales > 0 and self.fallidas >= self.totales
 
 
+class LineaBase(BaseModel):
+    """Lo normal del destino en esa ruta, en los dias anteriores (B-35). Estimado, ver `Almacen.linea_base`."""
+
+    dias: int = 7
+    guardadas: int = 0
+    estimadas: int = 0
+    p50_ms: float | None = None
+    p95_ms: float | None = None
+    plazo_ms: float = 0.0
+    sobre_plazo: int = 0
+
+    @property
+    def fraccion_sobre_plazo(self) -> float | None:
+        return self.sobre_plazo / self.estimadas if self.estimadas else None
+
+
 class Contraparte(BaseModel):
     """El otro lado de la llamada saliente que fallo.
 
@@ -236,6 +252,7 @@ class Contraparte(BaseModel):
     codigo: str | None = None        # su propio codigo de respuesta
     estado: str | None = None        # su propio StatusCode de span
     ms: float | None = None
+    linea_base: LineaBase | None = None
     # Discrepancia: el que llama lo cuenta como error y el que atiende no.
     # Es un hallazgo en si mismo y casi siempre el mismo: un 4xx es error para
     # el cliente —pidio mal— y NO lo es para el servidor, que hizo su trabajo
@@ -436,6 +453,16 @@ class Expediente(BaseModel):
                     f"  atendida : {c.servicio}, codigo {c.codigo or '?'}, estado de span {c.estado or '?'}"
                     + (f", {c.ms:.0f}ms" if c.ms is not None else ""),
                 ]
+                if (lb := c.linea_base) is not None and lb.estimadas and lb.p50_ms is not None:
+                    lineas.append(
+                        f"  normalmente: p50 {lb.p50_ms / 1000:.1f} s, p95 {(lb.p95_ms or 0) / 1000:.1f} s en "
+                        f"~{lb.estimadas} peticiones de los {lb.dias} dias anteriores ({lb.guardadas} guardadas;"
+                        " las rapidas se guardan al 10% y cuentan x10)"
+                    )
+                    lineas.append(
+                        f"  el {(lb.fraccion_sobre_plazo or 0) * 100:.1f}% tarda mas de lo que espero quien llama"
+                        f" ({lb.plazo_ms / 1000:.1f} s)"
+                    )
                 if c.discrepa:
                     lineas.append(
                         "  DISCREPAN : quien llama lo cuenta como error y quien atiende no."

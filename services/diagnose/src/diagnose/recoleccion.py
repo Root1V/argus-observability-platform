@@ -38,6 +38,7 @@ from .expediente import (
     Hermano,
     Historia,
     Instancia,
+    LineaBase,
     Plataforma,
     arbol_desde_filas,
 )
@@ -478,4 +479,42 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         c.ms = float(fila.get("Duration") or 0) / 1e6
         c.discrepa = llamada.error and c.estado != "Error"
         break
+    if c.encontrada and c.servicio:
+        c.linea_base = _linea_base(almacen, servicio=c.servicio, ruta=ruta, hasta=inicio, plazo_ms=llamada.ms,
+                                   lagunas=lagunas)
     return c
+
+
+# Por debajo de esto la linea base no dice nada: veinte peticiones estimadas
+# son dos guardadas si todas fueron rapidas.
+MIN_LINEA_BASE = 20
+
+
+def _linea_base(almacen: Almacen, *, servicio: str, ruta: str, hasta: datetime, plazo_ms: float,
+                lagunas: list[str]) -> LineaBase | None:
+    try:
+        filas = almacen.linea_base(servicio=servicio, ruta=ruta, hasta=hasta, plazo_ms=plazo_ms)
+    except ErrorDeAlmacen as exc:
+        lagunas.append(f"linea base: {exc}")
+        return None
+    f = filas[0] if filas else {}
+    lb = LineaBase(
+        guardadas=int(f.get("guardadas") or 0),
+        estimadas=int(f.get("estimadas") or 0),
+        p50_ms=_numero(f.get("p50_ms")),
+        p95_ms=_numero(f.get("p95_ms")),
+        plazo_ms=plazo_ms,
+        sobre_plazo=int(f.get("sobre_plazo") or 0),
+    )
+    if lb.estimadas < MIN_LINEA_BASE:
+        lagunas.append(f"linea base: solo ~{lb.estimadas} peticiones de {servicio} en esa ruta en {lb.dias} dias")
+        return None
+    return lb
+
+
+def _numero(valor: Any) -> float | None:
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return n if n == n else None  # NaN: ClickHouse devuelve nan para un cuantil sin filas

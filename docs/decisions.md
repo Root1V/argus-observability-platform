@@ -7453,3 +7453,43 @@ la vez apuntan a algo que COMPARTEN —lo más probable, su Redis/Valkey— …�
 **No hay caso en el banco** porque la causa no está establecida fuera de L3:
 que fuera el Valkey es una deducción, y Centinela no lo ha confirmado. La regla
 dice «lo más probable» con confianza media y no afirma más.
+
+---
+
+## D-141 · B-35: la línea base del destino, ponderada por el muestreo
+
+**Estado**: ✅ En producción
+
+**Contexto**. La regla del destino lento comparaba dos duraciones de una sola
+petición («tardó 81 s, el gateway esperó 75 s») y terminaba con un «o… o…»: la
+latencia del destino, o un plazo más corto que su tiempo de respuesta normal.
+Son dos diagnósticos con dos arreglos distintos, y el expediente no tenía con
+qué elegir.
+
+### Qué se hizo
+
+- **Consulta nueva, `Almacen.linea_base`**: p50, p95 y cuántas peticiones
+  pasaron del plazo de quien llama, para el servicio que atendió y esa ruta,
+  en los 7 días **anteriores a la llamada** que falló. Tarda unos 20 ms.
+- **Ponderada por el muestreo de cola.** El colector guarda toda traza de 3 s o
+  más o con error, y un 10 % del resto. Sin corregirlo, en una ruta rápida las
+  peticiones rápidas estarían diez veces infrarrepresentadas. Cada span rápido
+  y sin error cuenta por 10. Es aproximado: la política mira la duración de la
+  traza y no la del span. En `/oauth2/token` (rápida) la corrección importa:
+  317 spans guardados representan ~2.774 peticiones. En `/v1/backends` (lenta)
+  casi no cambia nada.
+- **El bloque `contraparte` lo enseña**, y con menos de 20 peticiones estimadas
+  se anota como laguna en vez de como dato.
+- **La regla elige**: si el 1 % o más de las respuestas habituales pasa del
+  plazo, dice *«no es una anomalía… plazo metido dentro de su tiempo de
+  respuesta normal»*. Si no, dice *«fue una excepción»*. Sin línea base, sigue
+  diciendo las dos posibilidades.
+
+### Lo que dice el caso del banco
+
+`prometheus-backends-lento`, recapturado con su etiqueta intacta: p50 60,2 s,
+p95 60,6 s sobre ~8.734 peticiones, y **el 4,1 % pasa de los 75 s**. Sigue en
+`acierta`, ahora con el diagnóstico que pedía B-35. El p95 de 71,6 s que citaba
+B-35 venía de otra ventana y sin ponderar, así que no es comparable con este. La
+forma sí coincide: la mayoría en torno a un minuto, con una cola que cruza el
+plazo.

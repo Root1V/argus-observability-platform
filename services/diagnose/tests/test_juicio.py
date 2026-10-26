@@ -23,6 +23,7 @@ from diagnose.expediente import (
     Hermano,
     Historia,
     Instancia,
+    LineaBase,
     Plataforma,
     Span,
 )
@@ -526,3 +527,39 @@ def test_un_solo_hermano_no_basta_para_dejar_de_mirar_el_componente() -> None:
 
     v = JuezDeReglas().juzgar(exp)
     assert v.root_cause is None or "componentes de centinela" not in v.root_cause
+
+
+# --- B-35 ---------------------------------------------------------------------
+
+
+def _lento(linea_base: LineaBase | None) -> Expediente:
+    """El ReadTimeout del gateway contra /v1/backends: 75 s esperando, 81 s tardo manager-api."""
+    arbol = Arbol(trace_id="t", spans=[Span(span_id="s", nombre="GET", servicio="gateway", tipo="Client",
+                                            ms=75_236.0, error=True, clase="httpx.ReadTimeout",
+                                            ruta="http://127.0.0.1:8091/v1/backends")])
+    contraparte = Contraparte(llamada="GET (ReadTimeout)", destino="http://127.0.0.1:8091/v1/backends",
+                              encontrada=True, servicio="manager-api", codigo="200", estado="Unset",
+                              ms=81_471.0, discrepa=True, linea_base=linea_base)
+    return _exp(firma="ReadTimeout", arbol=arbol, contraparte=contraparte)
+
+
+def test_un_plazo_metido_en_lo_normal_del_destino_no_es_una_anomalia() -> None:
+    lb = LineaBase(guardadas=7298, estimadas=7298, p50_ms=60_200, p95_ms=71_600, plazo_ms=75_236, sobre_plazo=190)
+    v = JuezDeReglas().juzgar(_lento(lb))
+
+    assert v.confidence == "alta"
+    assert "no es una anomalia" in v.root_cause
+    assert "p50 60.2 s" in v.root_cause
+
+
+def test_un_destino_que_casi_nunca_pasa_del_plazo_fue_una_excepcion() -> None:
+    lb = LineaBase(guardadas=500, estimadas=4000, p50_ms=900, p95_ms=2_500, plazo_ms=75_236, sobre_plazo=2)
+    v = JuezDeReglas().juzgar(_lento(lb))
+
+    assert "fue una excepcion" in v.root_cause
+
+
+def test_sin_linea_base_se_dicen_las_dos_posibilidades() -> None:
+    v = JuezDeReglas().juzgar(_lento(None))
+
+    assert "o un plazo de espera mas corto" in v.root_cause

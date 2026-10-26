@@ -234,14 +234,45 @@ def _el_destino_tardo_mas_de_lo_que_se_espero(exp: Expediente) -> tuple[str, Con
         return None
     if c.ms < eslabon.ms:
         return None
-    return (
+    hecho = (
         f"{c.servicio} atendio la llamada a {c.destino} y la contesto bien "
         f"(codigo {c.codigo or '?'}), pero tardo {c.ms / 1000:.0f} s, y "
         f"{exp.app}/{exp.componente} se rindio a los {eslabon.ms / 1000:.0f} s. "
-        f"La peticion no tiene nada de malo: la causa es la latencia de {c.servicio}, "
-        "o un plazo de espera mas corto que su tiempo de respuesta normal.",
+    )
+    # B-35: con la linea base, «tardo mucho» se separa en dos diagnosticos con
+    # dos arreglos distintos. Sin ella, se dicen los dos y se deja elegir.
+    lb = c.linea_base
+    fraccion = lb.fraccion_sobre_plazo if lb is not None else None
+    if lb is None or fraccion is None or lb.p50_ms is None:
+        return (
+            hecho + f"La peticion no tiene nada de malo: la causa es la latencia de {c.servicio}, "
+            "o un plazo de espera mas corto que su tiempo de respuesta normal.",
+            "alta",
+        )
+    normal = (
+        f"p50 {lb.p50_ms / 1000:.1f} s, p95 {(lb.p95_ms or 0) / 1000:.1f} s "
+        f"en ~{lb.estimadas} peticiones de {lb.dias} dias"
+    )
+    if fraccion >= PASA_DEL_PLAZO_HABITUALMENTE:
+        return (
+            hecho + f"Y no es una anomalia: {c.servicio} tarda esto normalmente en esa ruta —{normal}— "
+            f"y el {fraccion * 100:.1f}% de sus respuestas llega despues de los {eslabon.ms / 1000:.0f} s "
+            f"que espera {exp.componente}. La causa es la latencia habitual de {c.servicio} contra un "
+            "plazo metido dentro de su tiempo de respuesta normal: seguira fallando mientras no cambie "
+            "uno de los dos.",
+            "alta",
+        )
+    return (
+        hecho + f"Y fue una excepcion: normalmente {normal}, y solo el {fraccion * 100:.1f}% pasa del "
+        f"plazo. La causa es la latencia de {c.servicio} en ese momento, no el plazo.",
         "alta",
     )
+
+
+# Desde que fraccion de respuestas tardias un plazo deja de ser «casi nunca»
+# para ser «parte de lo normal». Un 1 % de un servicio con trafico es un fallo
+# cada pocos minutos.
+PASA_DEL_PLAZO_HABITUALMENTE = 0.01
 
 
 def _la_contraparte_lo_dio_por_bueno(exp: Expediente) -> tuple[str, Confianza] | None:

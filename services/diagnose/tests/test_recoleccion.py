@@ -25,7 +25,8 @@ LLAMADA_DESDE = datetime(2026, 10, 25, 8, 2, 47, 796142, tzinfo=UTC)
 class AlmacenFalso:
     """Devuelve lo que se le diga y anota lo que se le pregunto."""
 
-    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None, emision=None, instancias=None, minutos=60) -> None:
+    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None, emision=None, instancias=None, minutos=60, linea_base=None) -> None:
+        self._linea_base = linea_base or []
         self._spans = spans if spans is not None else TRAZA_DEL_502
         self._recurrencia = recurrencia or []
         self._emision = emision or []
@@ -63,6 +64,10 @@ class AlmacenFalso:
     def instancias(self, **kw):
         self.preguntas.append(("instancias", kw))
         return self._instancias
+
+    def linea_base(self, **kw):
+        self.preguntas.append(("linea_base", kw))
+        return self._linea_base
 
     def minutos_con_datos(self, **kw):
         self.preguntas.append(("minutos_con_datos", kw))
@@ -480,3 +485,32 @@ def test_una_clase_sin_nombre_no_hace_hermanos() -> None:
     exp = recolectar(_incidente(app="centinela", component="c", signature="error", trace_ids=[]), historico=historico)
 
     assert exp.hermanos == []
+
+
+# --- B-35: la linea base del destino ------------------------------------------
+
+
+def test_la_linea_base_se_pide_al_que_atendio_hasta_la_hora_de_la_llamada() -> None:
+    """Lo normal se mide ANTES del incidente: despues no lo sabia nadie."""
+    alm = AlmacenFalso(
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")],
+        linea_base=[{"guardadas": 40, "estimadas": 220, "p50_ms": 80.0, "p95_ms": 150.0, "sobre_plazo": 3}],
+    )
+    exp = recolectar(_incidente(), almacen=alm)
+
+    kw = next(kw for q, kw in alm.preguntas if q == "linea_base")
+    assert kw["servicio"] == "auth-service" and kw["ruta"] == "/oauth2/token"
+    assert kw["hasta"] == LLAMADA_DESDE
+    assert exp.contraparte.linea_base.p50_ms == 80.0
+    assert "normalmente: p50 0.1 s" in exp.texto()
+
+
+def test_una_linea_base_con_pocas_peticiones_es_una_laguna_y_no_un_dato() -> None:
+    alm = AlmacenFalso(
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")],
+        linea_base=[{"guardadas": 1, "estimadas": 10, "p50_ms": 80.0, "p95_ms": 80.0, "sobre_plazo": 0}],
+    )
+    exp = recolectar(_incidente(), almacen=alm)
+
+    assert exp.contraparte.linea_base is None
+    assert any(x.startswith("linea base: solo ~10") for x in exp.lagunas)
