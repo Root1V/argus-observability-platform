@@ -103,10 +103,13 @@ class JuezDeReglas:
         evidencia = _evidencia(exp)
 
         for regla in (
+            _nunca_ha_emitido,
+            _calla_toda_la_plataforma,
             _el_destino_tardo_mas_de_lo_que_se_espero,
             _la_contraparte_lo_dio_por_bueno,
             _el_destino_respondio_un_error,
             _la_llamada_no_obtuvo_respuesta,
+            _empezo_a_mitad_de_un_proceso,
             _la_firma_nombra_el_sintoma,
             _hay_una_excepcion_con_nombre,
             _una_dependencia_falla_a_la_vez,
@@ -149,6 +152,56 @@ def _no_hubo_respuesta(clase: str | None, excepcion: str | None) -> bool:
 # Cada una devuelve `(causa, confianza)` o `None`. Son funciones de modulo y no
 # metodos para que una prueba pueda ejercer UNA sola: la pregunta «¿dispara la
 # regla del puente con este expediente?» no deberia necesitar montar el juez.
+
+
+def _nunca_ha_emitido(exp: Expediente) -> tuple[str, Confianza] | None:
+    """Un silencio sobre un componente que no ha emitido NADA en 30 dias (B-39).
+
+    Va primera y con confianza alta porque no es una inferencia: es un conteo
+    sobre todas las tablas que la sonda de silencio puede ver. Lo que NO afirma
+    es por que: parado, sin cablear o dado de alta antes de tiempo son las tres
+    lecturas, y las tres se arreglan fuera del servicio.
+
+    Sale del silencio de `tei`: 166 señales de `page` sobre un componente cuyas
+    instancias estaban paradas y que no habia emitido un dato en todo el
+    historico. El juez se abstenia, que con el expediente de entonces era lo
+    correcto; con este bloque ya no hace falta.
+    """
+    e = exp.emision
+    if not e.nunca:
+        return None
+    return (
+        f"{exp.app}/{exp.componente} no dejo de emitir: no ha emitido NADA —ni trazas, ni logs, "
+        f"ni metricas— en los {e.dias} dias anteriores. La sonda vigila un componente que nunca "
+        "ha hablado. O esta parado, o no esta cableado, o se dio de alta en el registro antes de "
+        "tiempo; las tres cosas se arreglan fuera del servicio.",
+        "alta",
+    )
+
+
+def _calla_toda_la_plataforma(exp: Expediente) -> tuple[str, Confianza] | None:
+    """Un silencio mientras la plataforma ENTERA solo recibe datos a rafagas.
+
+    Entonces el silencio no es del servicio. Salio de un caso no visto que el
+    juez FALLO: el 23/10 a las 10:50 el canario abrio silencio sobre tres
+    servicios a la vez y el juez culpo al gateway por seis `PermissionError`
+    —una dependencia declarada con errores en la ventana— mientras el portatil
+    del plano central dormia y la plataforma llevaba 45 de los 60 minutos
+    anteriores sin recibir un solo span de nadie.
+
+    Confianza media: lo medido es que no es el servicio; entre el host y la
+    ingesta no se puede elegir desde aqui.
+    """
+    pl = exp.plataforma
+    if not pl.a_rafagas:
+        return None
+    return (
+        f"No es {exp.app}/{exp.componente}: en los {pl.minutos_mirados} minutos anteriores la plataforma "
+        f"ENTERA recibio datos solo en {pl.minutos_con_datos}, a rafagas. El silencio es del host del plano "
+        "central o de la ingesta —un portatil que duerme y despierta unos minutos cada cuarto de hora hace "
+        "exactamente esto—, no de este servicio. Si el host despierta, el incidente se cierra solo.",
+        "media",
+    )
 
 
 def _el_destino_tardo_mas_de_lo_que_se_espero(exp: Expediente) -> tuple[str, Confianza] | None:
@@ -297,6 +350,64 @@ def _la_llamada_no_obtuvo_respuesta(exp: Expediente) -> tuple[str, Confianza] | 
     )
 
 
+# Clases que dicen «el esquema de la base no es el que el codigo espera». Si
+# aparecen a mitad de la vida de un proceso, lo que cambio fue la base.
+DE_ESQUEMA = ("notnullviolation", "undefinedcolumn", "undefinedtable", "integrityerror",
+              "foreignkeyviolation", "uniqueviolation", "datatypemismatch", "programmingerror")
+
+# Un proceso que lleva al menos esto vivo antes de su primer error no fallo por
+# arrancar: fallo porque algo cambio debajo.
+MINUTOS_SIN_FALLAR = 60
+
+
+def _empezo_a_mitad_de_un_proceso(exp: Expediente) -> tuple[str, Confianza] | None:
+    """El fallo empieza con el proceso ya en marcha, sin cambio de version (B-38).
+
+    Entonces no fue un despliegue de este codigo: lo que cambio esta FUERA del
+    proceso —el esquema de la base, la configuracion, una dependencia— y el
+    proceso sigue con lo que cargo al arrancar.
+
+    Sale del `NOT NULL` de Veritium del 14/10: una instancia viva desde las
+    02:06 empieza a fallar a las 11:10, nueve horas despues, y su sustituta de
+    las 11:32 no falla ninguna. La causa confirmada era una migracion aplicada
+    con la API de la version anterior todavia corriendo.
+
+    Dos guardas, y las dos evitan el mismo error — llamar «cambio» a algo que
+    no cambio:
+
+    - **No es cronico.** Un `ReadTimeout` que pasa todos los dias tambien
+      «empieza» a mitad de cualquier proceso viejo; eso no es un cambio.
+    - **Una sola version.** Si la version cambio en la ventana, eso ES un
+      despliegue, y lo que hay que mirar es el despliegue.
+    """
+    c = exp.cambios
+    m = c.minutos_en_marcha_antes_del_fallo
+    if not c.consultada or m is None or m < MINUTOS_SIN_FALLAR:
+        return None
+    if len(c.versiones) > 1 or exp.historia.es_cronico or exp.historia.dias_con_errores > 1:
+        return None
+
+    horas = m / 60
+    eslabon = exp.arbol.eslabon_mas_profundo
+    clase = (eslabon.excepcion or eslabon.clase) if eslabon else exp.firma
+    clase_corta = _ultimo_segmento(_clase_de(clase or ""))
+
+    base = (
+        f"El fallo (`{clase_corta}`) empieza con el proceso de {exp.componente} ya en marcha desde hace "
+        f"al menos {horas:.0f} h y sin cambio de version ({', '.join(sorted(c.versiones)) or '?'}): no fue un "
+        "despliegue de este codigo. Lo que cambio esta FUERA del proceso, y el proceso sigue con lo que "
+        "cargo al arrancar."
+    )
+    if any(m_ in (clase or "").lower() for m_ in DE_ESQUEMA):
+        return (
+            base + " Siendo un error de esquema de la base, lo mas probable es una migracion aplicada "
+            "con este proceso todavia corriendo el codigo anterior: reiniciarlo con el codigo nuevo "
+            "deberia cortarlo.",
+            "media",
+        )
+    return (base + " Mira que cambio en su configuracion o en sus dependencias a esa hora.", "media")
+
+
 def _la_firma_nombra_el_sintoma(exp: Expediente) -> tuple[str, Confianza] | None:
     """El eslabon mas profundo tiene otra clase que la firma del aviso.
 
@@ -392,6 +503,12 @@ def _una_dependencia_falla_a_la_vez(exp: Expediente) -> tuple[str, Confianza] | 
     ya suprime por topologia cuando los dos tienen incidente abierto; esto coge
     el caso en que la dependencia falla sin llegar a abrir incidente propio.
     """
+    # No para un silencio: un componente callado no esta fallando llamadas, y
+    # culpar a una dependencia por sus errores en esa ventana es correlacionar
+    # dos cosas que no se tocan. Asi fallo el primer caso no visto de silencio:
+    # el gateway con seis errores, culpado de que veritium-api no emitiera.
+    if exp.tipo_senal == "silence" or "silencio" in exp.firma:
+        return None
     arriba = [c for c in exp.concurrentes if c.aguas_arriba and c.errores]
     if not arriba:
         return None
@@ -465,6 +582,10 @@ def _evidencia(exp: Expediente) -> list[str]:
         # Sin trazas que mirar, solo queda el almacen de incidentes, y de el
         # no se puede deducir «primera vez»: solo que no hay registro.
         hechos.append("sin incidentes anteriores registrados con esta firma")
+
+    e = exp.emision
+    if e.consultada and not e.nunca and e.ultima:
+        hechos.append(f"emitia: {e.total} datos en {e.dias} dias, el ultimo el {e.ultima:%Y-%m-%d %H:%M}Z")
 
     for c in exp.concurrentes[:2]:
         marca = " (dependencia declarada)" if c.aguas_arriba else ""

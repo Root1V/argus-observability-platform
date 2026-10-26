@@ -7070,3 +7070,88 @@ activity por herramienta, no un bucle dentro de una activity») sale gratis:
 **Lo que queda de Temporal**: nada en el camino de los agentes. Si algún día
 hace falta orquestar procesos largos que no sean agentes, se decidirá entonces;
 hoy no hay ninguno.
+
+---
+
+## D-136 · Tres bloques nuevos en el expediente, y cómo se midieron sin hacerse trampas
+
+**Estado**: ✅ Vigente · banco: 10 casos, 2 no vistos, los dos acertados
+
+**Decisión**. El expediente de L3 gana tres bloques, cada uno con su regla:
+
+| bloque | pregunta | regla | sale de |
+|---|---|---|---|
+| `emision` | ¿ha emitido **alguna vez** este componente? | `_nunca_ha_emitido` · alta | `B-39` · caso `tei` |
+| `cambios` | ¿empezó el fallo con un proceso nuevo, o a mitad de uno viejo? | `_empezo_a_mitad_de_un_proceso` · media | `B-38` · caso `tenant` |
+| `plataforma` | ¿recibía datos la plataforma **entera** antes del silencio? | `_calla_toda_la_plataforma` · media | caso no visto **fallado** |
+
+Y una guarda: la regla de «una dependencia falla a la vez» **no se aplica a un
+silencio**. Un componente callado no está fallando llamadas.
+
+### El problema de método, y el orden que lo resolvió
+
+`B-38` y `B-39` salieron de los dos únicos casos no vistos del banco. Escribir
+sus reglas mirándolos los convierte en casos de diseño y deja el banco **sin
+nada no visto**. Así que, antes de escribir una línea:
+
+1. **Buscar casos nuevos con causa conocida y etiquetarlos antes de que exista
+   el código.** El primero: el silencio de `veritium-api` del 23/10 a las
+   10:50, con la verdad medida aparte —huecos simultáneos en **todos** los
+   servicios y `pmset -g log` con el Mac en `Sleep`/`DarkWake`—.
+2. **Pasarle el juez de entonces, sin tocar nada.** **Falló**, con confianza
+   media: culpó al gateway por seis `PermissionError` —una dependencia
+   declarada con errores en la ventana— mientras la plataforma llevaba 45 de
+   los 60 minutos anteriores sin recibir un span de nadie.
+3. **Implementar `B-39`** y comprobar que no rompe el caso no visto. No lo
+   rompe: el componente emitía hasta las 10:50 y la regla no dice «nunca», que
+   era el falso positivo que ese caso estaba ahí para cazar.
+4. **Implementar `B-38`.** Sobre `tenant`, el veredicto reproduce desde la
+   telemetría la causa que confirmó Veritium:
+
+   ```
+   veritium-api  instancia 7e6f05f3  02:06 → 11:32   548 errores   v0.3.0
+   veritium-api  instancia 4d56e252  11:32 → 12:53     0 errores   v0.3.0
+   ```
+
+   El fallo empieza nueve horas después de que arrancara el proceso y sin
+   cambio de versión: lo que cambió está **fuera** del proceso, y siendo un
+   error de esquema, lo probable es una migración con el código viejo todavía
+   corriendo. En el momento del diagnóstico la segunda fila no se ve —sería ver
+   el futuro—; la inferencia sale de la primera.
+5. **Arreglar el fallo del paso 2**, sabiendo que eso gasta el último caso no
+   visto. Se hizo igual: el juez culpaba a una dependencia en **cada** noche en
+   que el portátil duerme, y eso pesa más que la pureza del banco.
+6. **Y reponer casos no vistos** con verdad **independiente de lo que mide la
+   regla**. La regla mira telemetría; la verdad viene del registro de energía
+   del Mac. Dos silencios más —el gateway el 23/10 a las 01:13 UTC y el propio
+   canario el 25/10 a las 03:03—, etiquetados con `pmset` **antes** de pasarles
+   el juez. Los dos, acertados.
+
+### Por qué el umbral de la plataforma está donde está
+
+Medido sobre una semana, las horas son de dos clases y casi no hay término
+medio: **60 de 60** minutos con datos (despierta) o **menos de 20** (el host
+dormido, despertando unos tres minutos cada dieciséis). De 162 horas, solo 13
+caen entre 20 y 49. El umbral —menos de la mitad— cae en el hueco. Los dos casos
+no vistos dieron 11 y 13 minutos de 60.
+
+### Lo que el banco dice ahora, y lo que no
+
+```
+no vistos  2 casos · acierta 2 · parcial 0 · se abstiene 0 · falla 0 (con confianza alta: 0)
+diseño     8 casos · acierta 7 · parcial 1 · se abstiene 0 · falla 0 (con confianza alta: 0)
+```
+
+**Los dos no vistos son del mismo tipo que el caso del que salió la regla.**
+Prueban que el umbral generaliza a otras noches, no que el juez sepa hacer algo
+distinto. Hace falta un caso no visto de **otra clase** antes de leer esta cifra
+como una tasa de acierto.
+
+Y dos precisiones que el propio trabajo obligó a hacer:
+
+- La edad de un proceso es la de su **primer span observado**, no su arranque:
+  un proceso sin tráfico no emite. Es una cota inferior, y el veredicto dice
+  «al menos».
+- `recapturar` rehace el expediente de un caso **a fecha del incidente** sin
+  tocar su etiqueta. La verdad de un caso no cambia porque el expediente sepa
+  más; lo que cambia es lo que el juez puede ver.

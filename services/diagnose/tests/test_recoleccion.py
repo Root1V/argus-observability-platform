@@ -25,9 +25,12 @@ LLAMADA_DESDE = datetime(2026, 10, 25, 8, 2, 47, 796142, tzinfo=UTC)
 class AlmacenFalso:
     """Devuelve lo que se le diga y anota lo que se le pregunto."""
 
-    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None) -> None:
+    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None, emision=None, instancias=None, minutos=60) -> None:
         self._spans = spans if spans is not None else TRAZA_DEL_502
         self._recurrencia = recurrencia or []
+        self._emision = emision or []
+        self._instancias = instancias or []
+        self._minutos = minutos
         self._alcance = alcance or []
         self._concurrentes = concurrentes or []
         self._contraparte = contraparte or []
@@ -52,6 +55,18 @@ class AlmacenFalso:
     def recurrencia(self, **kw):
         self.preguntas.append(("recurrencia", kw))
         return self._recurrencia
+
+    def emision(self, **kw):
+        self.preguntas.append(("emision", kw))
+        return self._emision
+
+    def instancias(self, **kw):
+        self.preguntas.append(("instancias", kw))
+        return self._instancias
+
+    def minutos_con_datos(self, **kw):
+        self.preguntas.append(("minutos_con_datos", kw))
+        return self._minutos
 
     def cerrar(self): ...
 
@@ -322,3 +337,109 @@ def test_una_firma_que_es_un_mensaje_cuenta_por_la_clase_del_ejemplar() -> None:
 
     # En la traza real del 502 la clase que empieza la firma es `400`.
     assert dict(almacen.preguntas)["recurrencia"]["clase"] == "400"
+
+
+# --- Emision anterior: «nunca hablo» frente a «dejo de hablar» (B-39) ---------
+
+
+def _filas_emision(**por_fuente):
+    fuentes = ("trazas", "logs", "metricas_suma", "metricas_gauge", "metricas_histograma")
+    return [
+        {"fuente": f, "n": por_fuente.get(f, 0),
+         "primera": "2026-10-01 00:00:00.000000000" if por_fuente.get(f) else "1970-01-01 00:00:00.000000000",
+         "ultima": "2026-10-23 10:45:12.000000000" if por_fuente.get(f) else "1970-01-01 00:00:00.000000000"}
+        for f in fuentes
+    ]
+
+
+def test_un_silencio_sobre_algo_que_nunca_emitio_se_ve() -> None:
+    exp = recolectar(
+        _incidente(kind="burn_rate", signature="canary-silencio", trace_ids=[]),
+        almacen=AlmacenFalso(emision=_filas_emision()), registro=[], historico=[],
+    )
+
+    assert exp.emision.consultada
+    assert exp.emision.nunca
+    assert "no consta que haya hablado nunca" in exp.texto()
+
+
+def test_un_silencio_sobre_algo_que_emitia_dice_hasta_cuando() -> None:
+    """Y las tablas vacias no meten su `1970` como primera fecha."""
+    exp = recolectar(
+        _incidente(kind="burn_rate", signature="canary-silencio", trace_ids=[]),
+        almacen=AlmacenFalso(emision=_filas_emision(trazas=1200, metricas_suma=30)),
+        registro=[], historico=[],
+    )
+
+    assert not exp.emision.nunca
+    assert exp.emision.total == 1230
+    assert exp.emision.primera is not None and exp.emision.primera.year == 2026
+    assert exp.emision.ultima is not None and exp.emision.ultima.hour == 10
+
+
+def test_un_error_no_pregunta_por_la_emision() -> None:
+    """Si fallo, emitio: la pregunta solo tiene sentido para un silencio."""
+    almacen = AlmacenFalso()
+    recolectar(_incidente(), almacen=almacen, registro=[], historico=[])
+
+    assert "emision" not in dict(almacen.preguntas)
+
+
+# --- Procesos: reinicios y despliegues (B-38) ---------------------------------
+
+
+def _inst(instancia, desde, hasta, errores=0, primer_error="1970-01-01 00:00:00.000000000", version="0.3.0"):
+    return {"instancia": instancia, "version": version, "desde": desde, "hasta": hasta,
+            "errores": errores, "primer_error": primer_error}
+
+
+def test_se_ve_cuanto_llevaba_vivo_el_proceso_cuando_empezo_a_fallar() -> None:
+    exp = recolectar(
+        _incidente(),
+        almacen=AlmacenFalso(instancias=[
+            _inst("api-7e6f", "2026-10-14 02:06:42.764009000", "2026-10-14 11:14:00.000000000",
+                  errores=40, primer_error="2026-10-14 11:10:37.101295000"),
+        ]),
+        registro=[], historico=[],
+    )
+
+    c = exp.cambios
+    assert c.consultada and c.reinicios == 0
+    assert c.minutos_en_marcha_antes_del_fallo is not None
+    assert 540 < c.minutos_en_marcha_antes_del_fallo < 550
+    assert "PROCESOS" in exp.texto()
+
+
+def test_una_instancia_sin_errores_no_trae_el_1970_como_primer_error() -> None:
+    exp = recolectar(
+        _incidente(),
+        almacen=AlmacenFalso(instancias=[_inst("a", "2026-10-14 02:00:00.000000000", "2026-10-14 11:00:00.000000000")]),
+        registro=[], historico=[],
+    )
+
+    assert exp.cambios.actual is not None
+    assert exp.cambios.actual.primer_error is None
+
+
+def test_un_componente_sin_identidad_de_proceso_lo_dice() -> None:
+    """Que no emita `service.instance.id` no es lo mismo que «no hubo reinicios»."""
+    exp = recolectar(
+        _incidente(),
+        almacen=AlmacenFalso(instancias=[_inst("", "2026-10-14 02:00:00.000000000", "2026-10-14 11:00:00.000000000")]),
+        registro=[], historico=[],
+    )
+
+    assert exp.cambios.sin_identidad
+    assert "no se pueden ver reinicios" in exp.texto()
+
+
+def test_la_plataforma_se_mide_hasta_la_apertura_y_no_despues() -> None:
+    """Justo despues de abrirse vuelve una rafaga; medirla seria ver el futuro."""
+    almacen = AlmacenFalso(minutos=14)
+    exp = recolectar(
+        _incidente(kind="burn_rate", signature="canary-silencio", trace_ids=[]),
+        almacen=almacen, registro=[], historico=[],
+    )
+
+    assert dict(almacen.preguntas)["minutos_con_datos"]["hasta"] == datetime(2026, 10, 25, 8, 2, 47, 784727, tzinfo=UTC)
+    assert exp.plataforma.a_rafagas

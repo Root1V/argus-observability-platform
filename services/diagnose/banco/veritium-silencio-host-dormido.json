@@ -1,0 +1,177 @@
+{
+  "id": "veritium-silencio-host-dormido",
+  "titulo": "Silencio de veritium-api: no era veritium, era el host dormido",
+  "causa_real": "El 23/10 entre las 10:00 y las 10:50 UTC el Mac del plano central estaba en ciclos de Sleep/DarkWake con bateria. La ingesta se corto para TODOS los servicios a la vez —a las 10:50 hubo un solo span en toda la plataforma— y el canario abrio silencio sobre veritium-api, auth-service y manager-api al mismo minuto. Ninguno de los tres habia dejado de funcionar: emitian hasta las 10:45.",
+  "fuente": "medicion independiente el 25/10, antes de escribir B-39: spans por 5 min de todos los servicios en ClickHouse (huecos simultaneos) y `pmset -g log` del Mac (Sleep / DarkWake from Deep Idle, Using Batt)",
+  "nivel": "medida",
+  "usado_para_disenar": true,
+  "sintoma": [
+    {
+      "hecho": "veritium-api no emite telemetria",
+      "alguna_de": [
+        "veritium-api",
+        "silencio",
+        "no emite",
+        "dejo de emitir"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "todos los servicios callaron a la vez",
+      "alguna_de": [
+        "todos los servicios",
+        "toda la plataforma",
+        "a la vez",
+        "simultane",
+        "la ingesta"
+      ]
+    },
+    {
+      "hecho": "el problema es del host o de la ingesta, no del servicio",
+      "alguna_de": [
+        "host",
+        "ingesta",
+        "durmi",
+        "dormid",
+        "suspend",
+        "plano central"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que nunca emitio",
+      "alguna_de": [
+        "nunca",
+        "sin cablear",
+        "ningun span en los 30"
+      ]
+    },
+    {
+      "hecho": "culpa al propio servicio",
+      "alguna_de": [
+        "veritium-api se cayo",
+        "veritium-api esta caido"
+      ]
+    }
+  ],
+  "notas": "Etiquetado ANTES de escribir la regla de B-39, como contraste: un componente que DEJO de hablar, no uno que nunca hablo. Los otros dos silencios del mismo minuto (auth-service, manager-api) son el mismo evento y no se capturan: contarlos triplicaria un solo caso. PASO A DISEÑO el 25/10: entro como no visto, el juez lo FALLO culpando al gateway, y de el salieron `_calla_toda_la_plataforma` y la guarda que impide culpar a una dependencia de un silencio.",
+  "capturado_en": "2026-10-25T20:13:58.072172-05:00",
+  "incidente": {
+    "id": "7b4c1cea0ca6",
+    "fingerprint": "4d91a812ca843625",
+    "kind": "burn_rate",
+    "severity": "page",
+    "app": "veritium",
+    "component": "veritium-api",
+    "environment": null,
+    "title": "veritium-api dejó de emitir telemetría",
+    "signature": "canary-silencio",
+    "state": "resolved",
+    "opened_at": "2026-10-23T10:50:16.074325Z",
+    "updated_at": "2026-10-23T10:50:16.076841Z",
+    "last_seen_at": "2026-10-23T10:50:16.076843Z",
+    "resolved_at": "2026-10-23T11:05:16.550687Z",
+    "count": 1,
+    "trace_ids": [],
+    "components_affected": [
+      "veritium-api"
+    ],
+    "suppressed_by": "88b4eea86205",
+    "symptoms": [],
+    "thread_key": "argus-4d91a812ca843625",
+    "notified_at": "2026-10-23T10:58:06.415738Z",
+    "attributes": {
+      "labels": {
+        "alertname": "canary-silencio",
+        "service_namespace": "veritium",
+        "service_name": "veritium-api",
+        "source": "canary"
+      },
+      "annotations": {
+        "summary": "veritium-api dejó de emitir telemetría",
+        "canary.detalle": "sin telemetría en 15 min",
+        "canary.resultado": "silencio"
+      }
+    }
+  },
+  "expediente": {
+    "incidente_id": "7b4c1cea0ca6",
+    "huella": "4d91a812ca843625",
+    "app": "veritium",
+    "componente": "veritium-api",
+    "firma": "canary-silencio",
+    "tipo_senal": "burn_rate",
+    "severidad": "page",
+    "titulo": "veritium-api dejó de emitir telemetría",
+    "senales": 1,
+    "edad_s": 0.002518,
+    "entorno": null,
+    "arbol": {
+      "trace_id": "",
+      "spans": [],
+      "truncado": false
+    },
+    "contraparte": null,
+    "emision": {
+      "consultada": true,
+      "dias": 30,
+      "por_fuente": {
+        "logs": 3322,
+        "metricas_gauge": 0,
+        "trazas": 620653,
+        "metricas_suma": 496804,
+        "metricas_histograma": 556829
+      },
+      "primera": "2026-10-14T02:06:42.697993Z",
+      "ultima": "2026-10-23T10:50:21.685123Z"
+    },
+    "cambios": {
+      "consultada": false,
+      "horas": 24,
+      "instancias": [],
+      "sin_identidad": false
+    },
+    "plataforma": {
+      "consultada": true,
+      "minutos_con_datos": 14,
+      "minutos_mirados": 60
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 0,
+      "dias_mirados": 0,
+      "errores_en_trazas": 0,
+      "primer_dia": null
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 0,
+      "ventana_min": 5,
+      "rutas": {}
+    },
+    "concurrentes": [
+      {
+        "servicio": "gateway",
+        "clase": "PermissionError",
+        "errores": 6,
+        "aguas_arriba": true
+      }
+    ],
+    "aguas_arriba": [
+      "aeon-ai",
+      "prometheus-inference-platform",
+      "postgres-main",
+      "minio-main"
+    ],
+    "aguas_abajo": [],
+    "lagunas": [
+      "arbol: el incidente no trae ninguna traza de ejemplo",
+      "alcance: ningun span `Server` de veritium/veritium-api en la ventana; el incidente puede venir de un span interno o de una llamada saliente"
+    ]
+  }
+}

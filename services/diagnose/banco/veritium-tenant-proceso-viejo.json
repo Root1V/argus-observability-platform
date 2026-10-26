@@ -51,7 +51,7 @@
       ]
     }
   ],
-  "notas": "Ningun bloque del expediente puede ver un despliegue o una migracion: no hay eventos de cambio en el almacen. Este caso mide un HUECO DEL EXPEDIENTE, no del juez — el mejor juez posible con este expediente se queda en `parcial`.",
+  "notas": "Ningun bloque del expediente puede ver un despliegue o una migracion: no hay eventos de cambio en el almacen. Este caso mide un HUECO DEL EXPEDIENTE, no del juez — el mejor juez posible con este expediente se queda en `parcial`. PASO A DISEÑO el 25/10: la regla `_empezo_a_mitad_de_un_proceso` y el bloque de procesos (B-38) se escribieron mirando este caso. Desde entonces lo acierta —el veredicto reproduce desde la telemetria la causa que confirmo Veritium— y eso ya no mide nada no visto.",
   "capturado_en": "2026-10-25T04:00:14.758242-05:00",
   "incidente": {
     "id": "cf96e066807d",
@@ -115,6 +115,28 @@
       "truncado": false
     },
     "contraparte": null,
+    "emision": {
+      "consultada": false,
+      "dias": 30,
+      "por_fuente": {},
+      "primera": null,
+      "ultima": null
+    },
+    "cambios": {
+      "consultada": true,
+      "horas": 24,
+      "instancias": [
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-7e6f05f3",
+          "version": "0.3.0",
+          "desde": "2026-10-14T02:06:42.764009Z",
+          "hasta": "2026-10-14T11:14:36.519183Z",
+          "errores": 110,
+          "primer_error": "2026-10-14T11:08:56.495430Z"
+        }
+      ],
+      "sin_identidad": false
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,
@@ -163,5 +185,6 @@
     "lagunas": [
       "recurrencia: la clase `NotNullViolationError: null value in column \"tenant\" of rela` no aparece como `error.type`; no se puede contar"
     ]
-  }
+  },
+  "usado_para_disenar": true
 }

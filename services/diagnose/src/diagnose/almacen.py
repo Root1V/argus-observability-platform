@@ -312,6 +312,101 @@ class Almacen:
         )
 
 
+    def emision(self, *, app: str, componente: str, hasta: datetime, dias: int = 30) -> list[dict[str, Any]]:
+        """Cuanto emitio el componente en los N dias anteriores, por tabla.
+
+        Es la pregunta que no hacia nadie (B-39): para una sonda de silencio,
+        «nunca hablo» y «dejo de hablar» son diagnosticos opuestos. El silencio
+        de `tei` abrio 166 señales de `page` sobre un componente que no habia
+        emitido un solo dato en todo el historico — sus instancias estaban
+        paradas (P-42).
+
+        Todas las tablas y no solo las trazas: hay componentes que solo emiten
+        metricas o logs, y la sonda de silencio del canario mira trazas, sumas
+        e histogramas. «Nunca emitio» tiene que valer para todo lo que esa
+        sonda puede ver, o es una afirmacion mas fuerte que el dato.
+        """
+        filtro = (
+            "ResourceAttributes['service.namespace'] = {app:String} "
+            "AND ServiceName = {componente:String}"
+        )
+        partes = []
+        for fuente, tabla, columna in (
+            ("trazas", "otel_traces", "Timestamp"),
+            ("logs", "otel_logs", "Timestamp"),
+            ("metricas_suma", "otel_metrics_sum", "TimeUnix"),
+            ("metricas_gauge", "otel_metrics_gauge", "TimeUnix"),
+            ("metricas_histograma", "otel_metrics_histogram", "TimeUnix"),
+        ):
+            partes.append(
+                f"SELECT '{fuente}' AS fuente, count() AS n, "
+                f"toString(min({columna})) AS primera, toString(max({columna})) AS ultima "
+                f"FROM {self.base}.{tabla} WHERE {columna} BETWEEN {{desde:DateTime64(9)}} "
+                f"AND {{hasta:DateTime64(9)}} AND {filtro}"
+            )
+        return self.consulta(
+            "\nUNION ALL\n".join(partes),
+            desde=hasta - timedelta(days=dias),
+            hasta=hasta,
+            app=app,
+            componente=componente,
+        )
+
+
+    def instancias(self, *, app: str, componente: str, hasta: datetime, horas: int = 24) -> list[dict[str, Any]]:
+        """Los procesos del componente en las N horas anteriores: cuando nacio cada uno y cuando fallo.
+
+        `service.instance.id` cambia en cada arranque, asi que esto es la
+        historia de reinicios y despliegues sin que nadie la registre aparte
+        (B-38). En el `NOT NULL` de Veritium del 14/10 se lee entera: una
+        instancia en marcha desde las 02:06 empieza a fallar a las 11:10 —548
+        errores— y la que la sustituye a las 11:32 no falla ninguna. Misma
+        version las dos.
+        """
+        return self.consulta(
+            f"""
+            SELECT
+                ResourceAttributes['service.instance.id'] AS instancia,
+                ResourceAttributes['service.version'] AS version,
+                toString(min(Timestamp)) AS desde,
+                toString(max(Timestamp)) AS hasta,
+                countIf(StatusCode = 'Error') AS errores,
+                toString(minIf(Timestamp, StatusCode = 'Error')) AS primer_error
+            FROM {self.base}.otel_traces
+            WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
+              AND ResourceAttributes['service.namespace'] = {{app:String}}
+              AND ServiceName = {{componente:String}}
+            GROUP BY instancia, version
+            ORDER BY min(Timestamp)
+            LIMIT {LIMITE_FILAS}
+            """,
+            desde=hasta - timedelta(hours=horas),
+            hasta=hasta,
+            app=app,
+            componente=componente,
+        )
+
+
+    def minutos_con_datos(self, *, hasta: datetime, minutos: int = 60) -> int:
+        """En cuantos de los N minutos anteriores recibio datos la plataforma ENTERA.
+
+        Medido sobre una semana, las horas son de dos clases y casi no hay
+        termino medio: 60 de 60 minutos con datos (despierta) o menos de 20 (el
+        portatil del plano central dormido, despertando a rafagas de tres
+        minutos cada dieciseis). De 162 horas, solo 13 caen entre 20 y 49.
+        """
+        filas = self.consulta(
+            f"""
+            SELECT uniqExact(toStartOfMinute(Timestamp)) AS minutos
+            FROM {self.base}.otel_traces
+            WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
+            """,
+            desde=hasta - timedelta(minutes=minutos),
+            hasta=hasta,
+        )
+        return int(filas[0]["minutos"]) if filas else 0
+
+
 def _una_linea(texto: str) -> str:
     """El motivo de una laguna acaba en una notificacion, asi que cabe en una linea.
 
