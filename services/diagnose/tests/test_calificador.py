@@ -30,13 +30,13 @@ def _cal(*respuestas) -> ConModelo:
 
 
 def test_un_si_con_cita_del_texto_es_un_si() -> None:
-    c = _cal(says('{"afirma": true, "cita": "manager-api tarda mas de lo que el gateway espera"}'))
+    c = _cal(says('{"fragmento_del_texto": "manager-api tarda mas de lo que el gateway espera", "afirma": true}'))
     assert c.afirma("Probablemente manager-api tarda mas de lo que el gateway espera.", HECHO)
 
 
 def test_un_si_cuya_cita_no_esta_en_el_texto_es_un_no() -> None:
     """La misma desconfianza que con el juez: lo comprobable se comprueba con codigo."""
-    c = _cal(says('{"afirma": true, "cita": "la latencia de manager-api"}'))
+    c = _cal(says('{"fragmento_del_texto": "la latencia de manager-api", "afirma": true}'))
 
     assert not c.afirma("El gateway envia una peticion mal formada.", HECHO)
     assert c.citas_rechazadas == 1

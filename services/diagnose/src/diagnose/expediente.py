@@ -50,6 +50,7 @@ MAX_HERMANOS = 8
 # minutos y no uno: los procesos de una app no arrancan ni reintentan en el
 # mismo segundo, y el emisor sella la hora con su reloj (B-34).
 VENTANA_HERMANOS_S = 300
+MAX_MEMORIA = 3
 
 
 class Span(BaseModel):
@@ -376,6 +377,33 @@ class Hermano(BaseModel):
     segundos: float = 0.0
 
 
+class Precedente(BaseModel):
+    """Un EPISODIO anterior de la misma clase de fallo en la misma app (F3-06).
+
+    Episodio y no incidente, que es lo que B-32 pedia resolver: los 454
+    `NotNullViolationError` de `veritium-api` del 14/10 son UN precedente con
+    454 incidentes, no 454 precedentes. Se agrupa por componente y dia, y la
+    clase se normaliza al ultimo segmento de lo que hay antes de los dos
+    puntos, que es lo que funde las firmas-mensaje de antes de D-118.
+    """
+
+    componente: str
+    clase: str
+    dia: str
+    incidentes: int = 1
+    # La causa anotada mas reciente del episodio, la escribiera quien la
+    # escribiera. Puede ser de L3: «esto ya paso y entonces se dijo X» es
+    # memoria aunque X lo dijera una regla, y quien lo lea sabe de donde sale.
+    causa: str | None = None
+    resuelto: bool = True
+
+    def resumen(self) -> str:
+        linea = f"{self.dia} · {self.componente} · {self.incidentes} incidente(s) de {self.clase}"
+        if self.causa:
+            linea += f" — se anoto: {self.causa[:160]}"
+        return linea
+
+
 class Expediente(BaseModel):
     """El contexto completo de un incidente, acotado y sin opinion."""
 
@@ -402,6 +430,7 @@ class Expediente(BaseModel):
     alcance: Alcance = Field(default_factory=Alcance)
     concurrentes: list[Concurrente] = Field(default_factory=list)
     hermanos: list[Hermano] = Field(default_factory=list)
+    memoria: list[Precedente] = Field(default_factory=list)
     aguas_arriba: list[str] = Field(default_factory=list)
     aguas_abajo: list[str] = Field(default_factory=list)
 
@@ -554,6 +583,12 @@ class Expediente(BaseModel):
             )
             bloques.append(
                 f"OTROS COMPONENTES DE {self.app.upper()} CON LA MISMA CLASE A LA VEZ\n" + "\n".join(lineas)
+            )
+
+        if self.memoria:
+            bloques.append(
+                "VISTO ANTES (misma app y misma clase; un episodio = un componente en un dia)\n"
+                + "\n".join(f"  {p.resumen()}" for p in self.memoria[:MAX_MEMORIA])
             )
 
         if self.aguas_arriba or self.aguas_abajo:

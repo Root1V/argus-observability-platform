@@ -514,3 +514,52 @@ def test_una_linea_base_con_pocas_peticiones_es_una_laguna_y_no_un_dato() -> Non
 
     assert exp.contraparte.linea_base is None
     assert any(x.startswith("linea base: solo ~10") for x in exp.lagunas)
+
+
+# --- F3-06: la memoria, por episodios -------------------------------------------
+
+
+def _pasado(componente: str, dia: str, firma: str, causa: str | None = None, estado: str = "resolved",
+            ident: str | None = None) -> dict[str, Any]:
+    return {"id": ident or f"{componente}-{dia}-{len(firma)}-{causa}", "app": "veritium", "component": componente,
+            "signature": firma, "opened_at": f"{dia}T10:00:00+00:00", "root_cause": causa, "state": estado}
+
+
+def test_cientos_de_incidentes_de_un_dia_son_un_solo_precedente() -> None:
+    """B-32: 454 `NotNullViolation` del 14/10 bajo firmas-mensaje distintas no son 454 precedentes."""
+    historico = [
+        _pasado("veritium-api", "2026-10-14", f"NotNullViolationError: null value in column \"tenant\" fila {i}",
+                ident=f"x{i}")
+        for i in range(454)
+    ]
+    historico.append(_pasado("veritium-api", "2026-10-20", "asyncpg.exceptions.NotNullViolationError",
+                             causa="una migracion con el proceso viejo vivo"))
+    historico.append(_pasado("veritium-api", "2026-10-21", "TypeError: otra clase"))
+    historico.append(_pasado("veritium-api", "2026-10-26", "NotNullViolationError"))        # despues: no
+    exp = recolectar(_incidente(app="veritium", component="veritium-api", signature="NotNullViolationError",
+                                trace_ids=[]), historico=historico)
+
+    assert [(p.dia, p.incidentes) for p in exp.memoria] == [("2026-10-20", 1), ("2026-10-14", 454)]
+    assert exp.memoria[0].causa == "una migracion con el proceso viejo vivo"
+    assert "VISTO ANTES" in exp.texto()
+
+
+def test_la_memoria_va_en_el_enriquecimiento_la_diga_quien_la_diga() -> None:
+    from diagnose.expediente import Precedente
+    from diagnose.juicio import Veredicto
+
+    v = Veredicto(root_cause=None, similar_incidents=[Precedente(componente="a", clase="X", dia="2026-10-20").resumen()])
+    assert v.como_enriquecimiento()["similar_incidents"] == ["2026-10-20 · a · 1 incidente(s) de X"]
+
+
+def test_la_causa_anotada_se_desenvuelve_hasta_la_original() -> None:
+    """El 26/10 el `ReadTimeout` del gateway llevaba tres «Ya paso» anidados."""
+    from diagnose.recoleccion import causa_original
+
+    original = "`TypeError` en «RunActivity:x» (aeon-worker): mensaje"
+    una = f"Ya paso: esta firma ha abierto 2 incidentes y en uno anterior se anoto «{original}». Confianza media."
+    dos = f"Ya paso: esta firma ha abierto 3 incidentes y en uno anterior se anoto «{una}». Confianza media."
+
+    assert causa_original(dos) == original
+    assert causa_original(original) == original
+    assert causa_original(None) is None

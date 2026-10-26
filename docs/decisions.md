@@ -7493,3 +7493,43 @@ p95 60,6 s sobre ~8.734 peticiones, y **el 4,1 % pasa de los 75 s**. Sigue en
 B-35 venía de otra ventana y sin ponderar, así que no es comparable con este. La
 forma sí coincide: la mayoría en torno a un minuto, con una cola que cruza el
 plazo.
+
+---
+
+## D-142 · F3-06: la memoria agrupa por episodios, y la regla «ya pasó» se citaba a sí misma
+
+**Estado**: ✅ En producción · por clase, sin vectores (F3-05 sigue pendiente)
+
+**Contexto**. B-32 bloqueaba F3-06: sobre el histórico, un «top-N de
+parecidos» habría devuelto 454 copias del mismo `NOT NULL` como 454
+precedentes, de cuando la firma era el mensaje entero.
+
+### Qué se hizo
+
+- **Clase normalizada**: el último segmento de lo que va antes de los dos
+  puntos (`_ultimo_segmento(_clase_de(firma))`), lo mismo que ya usaban las
+  reglas para B-33.
+- **Episodio = componente + día.** Medido sobre el histórico del 26/10: **853
+  incidentes, 151 clases, 203 episodios**. Los 454 `NotNullViolationError` de
+  `veritium-api` del 14/10 son **un** precedente con 453 incidentes.
+- **Bloque `memoria`** del expediente: hasta 3 episodios anteriores de la misma
+  clase en la misma app. Primero los que tienen causa anotada, después el mismo
+  componente y después los más recientes. Solo lo abierto **antes** del
+  incidente.
+- **Va al aviso**: el veredicto lleva `similar_incidents`, que el alert-bus ya
+  sabía pintar como «VISTO ANTES». Lo añade el bucle, sea cual sea el juez,
+  porque es un hecho del histórico y no una opinión.
+
+### El defecto que destapó
+
+Al probarlo con el `ReadTimeout` real del gateway, la causa anotada del
+episodio era *«Ya pasó: … se anotó «Ya pasó: … se anotó «manager-api…»»»*. La
+regla `_ya_paso_y_alguien_anoto_la_causa` cita la causa del incidente anterior,
+y cuando esa causa era a su vez un «ya pasó», cada reapertura añadía un nivel.
+Estaba **en producción**, en los avisos. Ahora `causa_original` desenvuelve
+hasta la causa que de verdad se diagnosticó, tanto en la historia como en la
+memoria.
+
+**Límite**: la búsqueda es por clase EXACTA dentro de la app. No encuentra «lo
+mismo con otra clase» ni «lo mismo en otra app»: eso es F3-05, con vectores, y
+necesita un modelo de embeddings servido por Prometheus.

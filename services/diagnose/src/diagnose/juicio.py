@@ -64,6 +64,10 @@ class Veredicto(BaseModel):
     # escribio una regla o un modelo?» sin mirar la hora del despliegue.
     origen: str = "reglas"
 
+    # F3-06: episodios anteriores de la misma clase, ya redactados. Es el
+    # `similar_incidents` del esquema, que el aviso enseña como «VISTO ANTES».
+    similar_incidents: list[str] = Field(default_factory=list)
+
     @property
     def tiene_causa(self) -> bool:
         return bool(self.root_cause)
@@ -76,6 +80,8 @@ class Veredicto(BaseModel):
         }
         if self.root_cause:
             cuerpo["root_cause"] = self.root_cause
+        if self.similar_incidents:
+            cuerpo["similar_incidents"] = self.similar_incidents
         return cuerpo
 
 

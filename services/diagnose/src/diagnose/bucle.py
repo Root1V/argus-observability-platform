@@ -114,6 +114,9 @@ class Diagnosticador:
             historico=historico,
         )
         veredicto = self.juez.juzgar(expediente)
+        # La memoria va con el veredicto la diga quien la diga: es un hecho del
+        # historico, no una opinion del juez (F3-06).
+        veredicto.similar_incidents = [p.resumen() for p in expediente.memoria]
 
         self.stats["diagnosticados"] += 1
         self.stats["con_causa" if veredicto.tiene_causa else "sin_causa"] += 1

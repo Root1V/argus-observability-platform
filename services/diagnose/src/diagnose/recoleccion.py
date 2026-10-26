@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 
 from .almacen import Almacen, ErrorDeAlmacen
 from .expediente import (
+    MAX_MEMORIA,
     VENTANA_HERMANOS_S,
     Alcance,
     Arbol,
@@ -40,6 +41,7 @@ from .expediente import (
     Instancia,
     LineaBase,
     Plataforma,
+    Precedente,
     arbol_desde_filas,
 )
 
@@ -122,6 +124,7 @@ def recolectar(
     else:
         exp.historia = _historia(exp, historico)
         exp.hermanos = _hermanos(exp, historico, abierto)
+        exp.memoria = _memoria(exp, historico, abierto)
 
     if almacen is None:
         exp.lagunas.append("trazas: sin almacen de telemetria configurado")
@@ -337,11 +340,30 @@ def _historia(exp: Expediente, historico: list[dict[str, Any]]) -> Historia:
     # tres.
     vistas: set[str] = set()
     for d in sorted(propios, key=lambda d: str(d.get("opened_at") or ""), reverse=True):
-        causa = d.get("root_cause")
+        causa = causa_original(d.get("root_cause"))
         if causa and causa not in vistas and d.get("id") != exp.incidente_id:
-            vistas.add(str(causa))
-            h.causas_anteriores.append(str(causa))
+            vistas.add(causa)
+            h.causas_anteriores.append(causa)
     return h
+
+
+def causa_original(causa: Any) -> str | None:
+    """La causa anotada, sin los «Ya paso: … se anoto «…»» que la envuelven.
+
+    La regla `_ya_paso_y_alguien_anoto_la_causa` cita la causa del incidente
+    anterior, y si ESA tambien era un «Ya paso», la cita se anida: el 26/10 el
+    `ReadTimeout` del gateway llevaba tres niveles de «Ya paso» antes de llegar
+    a lo que de verdad se diagnostico. Se desenvuelve hasta la original.
+    """
+    if not causa:
+        return None
+    texto = str(causa)
+    while texto.startswith(PREFIJO_YA_PASO) and "«" in texto and "»" in texto:
+        texto = texto[texto.index("«") + 1 : texto.rindex("»")]
+    return texto or None
+
+
+PREFIJO_YA_PASO = "Ya paso:"
 
 
 # Clases que no dicen nada por si solas: tres componentes con `error` a la vez
@@ -377,6 +399,52 @@ def _hermanos(exp: Expediente, historico: list[dict[str, Any]], abierto: datetim
         if previo is None or abs(segundos) < abs(previo.segundos):
             cercanos[componente] = Hermano(componente=componente, firma=str(d.get("signature") or ""), segundos=segundos)
     return sorted(cercanos.values(), key=lambda h: (abs(h.segundos), h.componente))
+
+
+def _memoria(exp: Expediente, historico: list[dict[str, Any]], abierto: datetime) -> list[Precedente]:
+    """Los episodios anteriores de esta clase en esta app, los que tienen causa primero (F3-06).
+
+    Lo que B-32 pedia antes de poder hacer memoria: agrupar. Sobre el historico
+    del 26/10, 853 incidentes son 151 clases y 203 episodios. Sin agrupar, un
+    «top 3 de parecidos» habrian sido tres copias del mismo `NOT NULL`.
+
+    Solo lo abierto ANTES de este incidente: la memoria es lo que se sabia.
+    Busqueda por clase, no por parecido de texto: eso es F3-05, con vectores.
+    """
+    from .juicio import _clase_de, _ultimo_segmento
+
+    clase = _ultimo_segmento(_clase_de(exp.firma))
+    if clase.lower() in CLASES_SIN_NOMBRE:
+        return []
+    episodios: dict[tuple[str, str], dict[str, Any]] = {}
+    for d in historico:
+        if d.get("app") != exp.app or str(d.get("id") or "") == exp.incidente_id:
+            continue
+        if _ultimo_segmento(_clase_de(str(d.get("signature") or ""))) != clase:
+            continue
+        cuando = _fecha(d.get("opened_at"))
+        if cuando is None or cuando >= abierto:
+            continue
+        clave = (str(d.get("component") or ""), f"{cuando:%Y-%m-%d}")
+        e = episodios.setdefault(clave, {"n": 0, "causa": None, "cuando_causa": None, "abiertos": 0})
+        e["n"] += 1
+        if d.get("state") != "resolved":
+            e["abiertos"] += 1
+        if (causa := causa_original(d.get("root_cause"))) and (e["cuando_causa"] is None or cuando > e["cuando_causa"]):
+            e["causa"], e["cuando_causa"] = causa, cuando
+    precedentes = [
+        Precedente(componente=c, clase=clase, dia=dia, incidentes=e["n"], causa=e["causa"], resuelto=not e["abiertos"])
+        for (c, dia), e in episodios.items()
+    ]
+    # Con causa primero —es lo que alguien puede usar—, y dentro de eso lo
+    # mas reciente y el mismo componente antes que sus vecinos.
+    precedentes.sort(key=lambda p: (p.causa is None, p.componente != exp.componente, _invertir(p.dia)))
+    return precedentes[:MAX_MEMORIA]
+
+
+def _invertir(dia: str) -> str:
+    """Para ordenar fechas `AAAA-MM-DD` de la mas reciente a la mas antigua."""
+    return "".join(chr(ord("9") - ord(ch) + ord("0")) if ch.isdigit() else ch for ch in dia)
 
 
 def _alcance(filas: list[dict[str, Any]], *, ventana_min: int) -> Alcance:
