@@ -267,7 +267,7 @@ distintos. Generar en vez de escribir a mano lo hace imposible.
 
 ## D-012 · Temporal como runtime de los agentes
 
-**Estado**: 🧪 Vigente sin validar · se ejerce en `F3`
+**Estado**: ⛔ Sustituida por D-135 (25/10): los agentes se construyen con synaptum. Se conserva el razonamiento sobre durabilidad, que synaptum cubre
 
 **Decisión**. Temporal, que ya está desplegado en `aeon-ai`. Worker propio con
 task queue propia.
@@ -7012,3 +7012,146 @@ nuevos y no vistos **tiene** que poder bajar la cifra, y una prueba que lo
 impidiera sería un incentivo para no añadir casos difíciles. Se fija la
 invariante —**ningún `falla` con confianza `alta`**— y que el banco sea lo que
 dice ser.
+
+---
+
+## D-135 · Los agentes se construyen con synaptum
+
+**Estado**: ✅ Vigente · decisión del dueño del proyecto, 25/10 · sustituye la parte de *framework* de D-012
+
+**Decisión**. Los agentes de Argus —el juez con modelo de L3, la investigación de
+L4, el postmortem y la remediación de L5— se construyen con **synaptum**
+(`synaptum-framework`, hoy `1.0.0rc6`).
+
+**Por qué cambia lo que decía el plan**. `PLAN.md §8.6` y D-012 descartaron
+synaptum frente a Temporal con una tabla: *no sobrevive a la caída del worker,
+esperar una aprobación hay que construirlo, MCP y observabilidad pendientes*.
+Esa tabla describía la línea 0.x. Leído su roadmap el 25/10, las cuatro filas
+están cerradas:
+
+| lo que faltaba | hoy |
+|---|---|
+| sobrevivir a una caída | `Checkpointer` SQLite (`SYN-24`): al reanudar con el mismo `run_id`, **una inferencia ya pagada no se vuelve a pagar** |
+| esperar una aprobación | `ApprovalStep` y la disposición `require_approval` (`SYN-05`, `H4`): interrumpir es dejar de iterar, reanudar es volver a llamar |
+| MCP | cliente MCP como extra opcional (`SYN-39`) |
+| observabilidad | instrumentación OTel GenAI (`SYN-37`), aplazada a propósito para esperar a esta plataforma |
+
+Y la razón de D-012 que más pesaba —*el plano central es un portátil que se
+suspende*— la cubre el mismo mecanismo: un run interrumpido por el sueño se
+reanuda con su `run_id` sin repetir lo hecho. El matiz de D-012 sobre L4 («una
+activity por herramienta, no un bucle dentro de una activity») sale gratis:
+**cada `yield` del bucle es una frontera de checkpoint.**
+
+**Lo que no cambia**:
+
+- **D-013 sigue en pie.** L3 no es un agente: el juez con modelo es **una**
+  llamada con salida estructurada sobre el expediente. Con synaptum eso es un
+  run de un solo paso de modelo, sin herramientas, detrás de la interfaz `Juez`
+  que ya existe — y se mide en el banco de F3-08 contra el juez de reglas.
+- **Worker propio, árbol de dependencias propio.** synaptum no tiene
+  dependencias duras (`SYN-30`) y los proveedores van por extras, así que no
+  hereda el conflicto `crewai`/`openai-agents` de `aeon-ai`.
+- **No se toca synaptum desde aquí.** Si falta algo, va como petición a su
+  equipo, igual que con el resto del portafolio.
+
+**Dos consecuencias que hay que tener presentes**:
+
+1. **Python ≥ 3.13.** synaptum lo exige y el espacio de trabajo declara
+   `>=3.11`. Los servicios que lo usen (`diagnose` y los que vengan) subirán su
+   `requires-python`; las imágenes ya corren 3.13. Las librerías que importan
+   las aplicaciones (`argus-semconv`, `argus-sdk`) **no** dependen de synaptum
+   y se quedan en 3.11.
+2. **El modelo local pasa por Axonium.** El roadmap de synaptum fija una regla
+   del dueño: *toda la inferencia local se resuelve en Prometheus, y la única
+   forma de llegar a sus modelos es el SDK Axonium* — que synaptum trae como
+   extra (`[axonium]`, `SYN-52`). Elegir el modelo del juez sigue pendiente;
+   si es local, el camino ya está decidido.
+
+**Lo que queda de Temporal**: nada en el camino de los agentes. Si algún día
+hace falta orquestar procesos largos que no sean agentes, se decidirá entonces;
+hoy no hay ninguno.
+
+---
+
+## D-136 · Tres bloques nuevos en el expediente, y cómo se midieron sin hacerse trampas
+
+**Estado**: ✅ Vigente · banco: 10 casos, 2 no vistos, los dos acertados
+
+**Decisión**. El expediente de L3 gana tres bloques, cada uno con su regla:
+
+| bloque | pregunta | regla | sale de |
+|---|---|---|---|
+| `emision` | ¿ha emitido **alguna vez** este componente? | `_nunca_ha_emitido` · alta | `B-39` · caso `tei` |
+| `cambios` | ¿empezó el fallo con un proceso nuevo, o a mitad de uno viejo? | `_empezo_a_mitad_de_un_proceso` · media | `B-38` · caso `tenant` |
+| `plataforma` | ¿recibía datos la plataforma **entera** antes del silencio? | `_calla_toda_la_plataforma` · media | caso no visto **fallado** |
+
+Y una guarda: la regla de «una dependencia falla a la vez» **no se aplica a un
+silencio**. Un componente callado no está fallando llamadas.
+
+### El problema de método, y el orden que lo resolvió
+
+`B-38` y `B-39` salieron de los dos únicos casos no vistos del banco. Escribir
+sus reglas mirándolos los convierte en casos de diseño y deja el banco **sin
+nada no visto**. Así que, antes de escribir una línea:
+
+1. **Buscar casos nuevos con causa conocida y etiquetarlos antes de que exista
+   el código.** El primero: el silencio de `veritium-api` del 23/10 a las
+   10:50, con la verdad medida aparte —huecos simultáneos en **todos** los
+   servicios y `pmset -g log` con el Mac en `Sleep`/`DarkWake`—.
+2. **Pasarle el juez de entonces, sin tocar nada.** **Falló**, con confianza
+   media: culpó al gateway por seis `PermissionError` —una dependencia
+   declarada con errores en la ventana— mientras la plataforma llevaba 45 de
+   los 60 minutos anteriores sin recibir un span de nadie.
+3. **Implementar `B-39`** y comprobar que no rompe el caso no visto. No lo
+   rompe: el componente emitía hasta las 10:50 y la regla no dice «nunca», que
+   era el falso positivo que ese caso estaba ahí para cazar.
+4. **Implementar `B-38`.** Sobre `tenant`, el veredicto reproduce desde la
+   telemetría la causa que confirmó Veritium:
+
+   ```
+   veritium-api  instancia 7e6f05f3  02:06 → 11:32   548 errores   v0.3.0
+   veritium-api  instancia 4d56e252  11:32 → 12:53     0 errores   v0.3.0
+   ```
+
+   El fallo empieza nueve horas después de que arrancara el proceso y sin
+   cambio de versión: lo que cambió está **fuera** del proceso, y siendo un
+   error de esquema, lo probable es una migración con el código viejo todavía
+   corriendo. En el momento del diagnóstico la segunda fila no se ve —sería ver
+   el futuro—; la inferencia sale de la primera.
+5. **Arreglar el fallo del paso 2**, sabiendo que eso gasta el último caso no
+   visto. Se hizo igual: el juez culpaba a una dependencia en **cada** noche en
+   que el portátil duerme, y eso pesa más que la pureza del banco.
+6. **Y reponer casos no vistos** con verdad **independiente de lo que mide la
+   regla**. La regla mira telemetría; la verdad viene del registro de energía
+   del Mac. Dos silencios más —el gateway el 23/10 a las 01:13 UTC y el propio
+   canario el 25/10 a las 03:03—, etiquetados con `pmset` **antes** de pasarles
+   el juez. Los dos, acertados.
+
+### Por qué el umbral de la plataforma está donde está
+
+Medido sobre una semana, las horas son de dos clases y casi no hay término
+medio: **60 de 60** minutos con datos (despierta) o **menos de 20** (el host
+dormido, despertando unos tres minutos cada dieciséis). De 162 horas, solo 13
+caen entre 20 y 49. El umbral —menos de la mitad— cae en el hueco. Los dos casos
+no vistos dieron 11 y 13 minutos de 60.
+
+### Lo que el banco dice ahora, y lo que no
+
+```
+no vistos  2 casos · acierta 2 · parcial 0 · se abstiene 0 · falla 0 (con confianza alta: 0)
+diseño     8 casos · acierta 7 · parcial 1 · se abstiene 0 · falla 0 (con confianza alta: 0)
+```
+
+**Los dos no vistos son del mismo tipo que el caso del que salió la regla.**
+Prueban que el umbral generaliza a otras noches, no que el juez sepa hacer algo
+distinto. Hace falta un caso no visto de **otra clase** antes de leer esta cifra
+como una tasa de acierto.
+
+Y dos precisiones que el propio trabajo obligó a hacer:
+
+- La edad de un proceso es la de su **primer span observado**, no su arranque:
+  un proceso sin tráfico no emite. Es una cota inferior, y el veredicto dice
+  «al menos».
+- `recapturar` rehace el expediente de un caso **a fecha del incidente** sin
+  tocar su etiqueta. La verdad de un caso no cambia porque el expediente sepa
+  más; lo que cambia es lo que el juez puede ver.

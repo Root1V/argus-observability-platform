@@ -682,6 +682,28 @@
       "truncado": true
     },
     "contraparte": null,
+    "emision": {
+      "consultada": false,
+      "dias": 30,
+      "por_fuente": {},
+      "primera": null,
+      "ultima": null
+    },
+    "cambios": {
+      "consultada": true,
+      "horas": 24,
+      "instancias": [
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-20371450",
+          "version": "0.3.0",
+          "desde": "2026-10-14T02:07:18.722547Z",
+          "hasta": "2026-10-14T11:15:21.721059Z",
+          "errores": 13,
+          "primer_error": "2026-10-14T02:09:17.893150Z"
+        }
+      ],
+      "sin_identidad": false
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,

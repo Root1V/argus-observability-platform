@@ -1,0 +1,173 @@
+{
+  "id": "gateway-silencio-host-dormido",
+  "titulo": "Silencio del gateway de Prometheus: el host del plano central dormido",
+  "causa_real": "El 23/10 desde las 19:55 hora local el Mac del plano central encadenaba DarkWake from Deep Idle; el canario abrio silencio sobre el gateway a las 01:13 UTC (20:13 local), en medio de esos ciclos. El gateway no habia dejado de funcionar: lo que se detenia era el host.",
+  "fuente": "`pmset -g log` del Mac (DarkWake from Deep Idle a las 19:55, 20:13, 20:14, 20:17, 20:19 hora local), mirado ANTES de pasarle el juez",
+  "nivel": "medida",
+  "usado_para_disenar": false,
+  "sintoma": [
+    {
+      "hecho": "el gateway no emite telemetria",
+      "alguna_de": [
+        "gateway",
+        "silencio",
+        "no emite",
+        "dejo de emitir"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "todos los servicios callaron a la vez",
+      "alguna_de": [
+        "todos los servicios",
+        "toda la plataforma",
+        "plataforma entera",
+        "a la vez",
+        "simultane",
+        "la ingesta"
+      ]
+    },
+    {
+      "hecho": "el problema es del host o de la ingesta, no del servicio",
+      "alguna_de": [
+        "host",
+        "ingesta",
+        "durmi",
+        "dormid",
+        "duerme",
+        "suspend",
+        "plano central"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que nunca emitio",
+      "alguna_de": [
+        "nunca",
+        "sin cablear"
+      ]
+    },
+    {
+      "hecho": "culpa al propio servicio o a una dependencia",
+      "alguna_de": [
+        "se cayo",
+        "esta caido",
+        "aguas arriba",
+        "redis"
+      ]
+    }
+  ],
+  "notas": "Etiquetado antes de evaluar. La verdad sale del registro de energia del Mac, que es independiente de lo que mide la regla (la telemetria).",
+  "capturado_en": "2026-10-25T20:21:30.615925-05:00",
+  "incidente": {
+    "id": "1c36ef6b10dc",
+    "fingerprint": "991a868fb667bc1d",
+    "kind": "burn_rate",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "gateway",
+    "environment": null,
+    "title": "gateway dejó de emitir telemetría",
+    "signature": "canary-silencio",
+    "state": "resolved",
+    "opened_at": "2026-10-24T01:13:21.945626Z",
+    "updated_at": "2026-10-24T01:13:21.947495Z",
+    "last_seen_at": "2026-10-24T01:13:21.947497Z",
+    "resolved_at": "2026-10-24T01:33:12.218336Z",
+    "count": 1,
+    "trace_ids": [],
+    "components_affected": [
+      "gateway"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-991a868fb667bc1d",
+    "notified_at": "2026-10-24T01:13:21.950454Z",
+    "attributes": {
+      "labels": {
+        "alertname": "canary-silencio",
+        "service_namespace": "prometheus-inference-platform",
+        "service_name": "gateway",
+        "source": "canary"
+      },
+      "annotations": {
+        "summary": "gateway dejó de emitir telemetría",
+        "canary.detalle": "sin telemetría en 15 min",
+        "canary.resultado": "silencio"
+      }
+    }
+  },
+  "expediente": {
+    "incidente_id": "1c36ef6b10dc",
+    "huella": "991a868fb667bc1d",
+    "app": "prometheus-inference-platform",
+    "componente": "gateway",
+    "firma": "canary-silencio",
+    "tipo_senal": "burn_rate",
+    "severidad": "page",
+    "titulo": "gateway dejó de emitir telemetría",
+    "senales": 1,
+    "edad_s": 0.001871,
+    "entorno": null,
+    "arbol": {
+      "trace_id": "",
+      "spans": [],
+      "truncado": false
+    },
+    "contraparte": null,
+    "emision": {
+      "consultada": true,
+      "dias": 30,
+      "por_fuente": {
+        "logs": 87808,
+        "trazas": 461612,
+        "metricas_suma": 3463756,
+        "metricas_gauge": 0,
+        "metricas_histograma": 4908354
+      },
+      "primera": "2026-09-25T23:55:32.760319Z",
+      "ultima": "2026-10-24T01:17:21.876101Z"
+    },
+    "cambios": {
+      "consultada": false,
+      "horas": 24,
+      "instancias": [],
+      "sin_identidad": false
+    },
+    "plataforma": {
+      "consultada": true,
+      "minutos_con_datos": 11,
+      "minutos_mirados": 60
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 0,
+      "dias_mirados": 0,
+      "errores_en_trazas": 0,
+      "primer_dia": null
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 0,
+      "ventana_min": 5,
+      "rutas": {}
+    },
+    "concurrentes": [],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": [
+      "arbol: el incidente no trae ninguna traza de ejemplo",
+      "alcance: ningun span `Server` de prometheus-inference-platform/gateway en la ventana; el incidente puede venir de un span interno o de una llamada saliente"
+    ]
+  }
+}

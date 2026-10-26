@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from diagnose.expediente import Alcance, Arbol, Concurrente, Contraparte, Expediente, Historia, Span
+from diagnose.expediente import Alcance, Arbol, Concurrente, Cambios, Contraparte, Emision, Expediente, Historia, Instancia, Plataforma, Span
 from diagnose.juicio import JuezDeReglas
 
 
@@ -380,3 +380,110 @@ def test_un_pending_rollback_se_diagnostica_como_sintoma_de_la_excepcion_origina
     # Los valores de la fila no salen al aviso.
     assert "CODIGO-FALSO-999" not in v.root_cause
     assert "uuid-falso" not in v.root_cause
+
+
+def test_un_silencio_sobre_algo_que_nunca_emitio_es_una_causa_con_confianza_alta() -> None:
+    """No es una inferencia: es un conteo sobre todo lo que la sonda puede ver (B-39)."""
+    exp = _exp(
+        componente="tei", firma="canary-silencio", tipo_senal="burn_rate",
+        emision=Emision(consultada=True, por_fuente={"trazas": 0, "logs": 0, "metricas_suma": 0}),
+        # Lo tentador seria culpar al que hace ruido: aqui no puede ganar.
+        concurrentes=[Concurrente(servicio="redis", clase="TimeoutError", errores=40, aguas_arriba=True)],
+    )
+    v = JuezDeReglas().juzgar(exp)
+
+    assert v.confidence == "alta"
+    assert v.root_cause is not None
+    assert "no ha emitido NADA" in v.root_cause
+    assert "redis" not in v.root_cause
+
+
+def test_un_silencio_sobre_algo_que_emitia_no_dice_nunca() -> None:
+    """El falso positivo que esta regla podria tener, y no puede tener."""
+    exp = _exp(
+        firma="canary-silencio", tipo_senal="burn_rate",
+        emision=Emision(consultada=True, por_fuente={"trazas": 1200}),
+    )
+    v = JuezDeReglas().juzgar(exp)
+
+    assert "nunca" not in (v.root_cause or "")
+
+
+def _cambios(minutos_vivo: int, versiones=("0.3.0",)) -> Cambios:
+    from datetime import timedelta
+
+    desde = datetime(2026, 10, 14, 2, 6, tzinfo=UTC)
+    return Cambios(consultada=True, instancias=[
+        Instancia(instancia=f"i{n}", version=v, desde=desde, hasta=desde + timedelta(hours=10),
+                  errores=40, primer_error=desde + timedelta(minutes=minutos_vivo))
+        for n, v in enumerate(versiones)
+    ])
+
+
+def _arbol_de_esquema() -> Arbol:
+    return Arbol(trace_id="t", spans=[
+        Span(span_id="a", nombre="INSERT", tipo="Client", servicio="veritium-api", error=True,
+             excepcion="asyncpg.exceptions.NotNullViolationError", mensaje="null value in column x"),
+    ])
+
+
+def test_un_error_de_esquema_a_mitad_de_un_proceso_apunta_a_una_migracion() -> None:
+    """B-38: nueve horas vivo sin fallar, y empieza a fallar con un error de esquema."""
+    exp = _exp(firma="NotNullViolationError", arbol=_arbol_de_esquema(), cambios=_cambios(544))
+    v = JuezDeReglas().juzgar(exp)
+
+    assert v.root_cause is not None
+    assert "FUERA del proceso" in v.root_cause
+    assert "migracion" in v.root_cause
+    assert v.confidence == "media"
+
+
+def test_un_fallo_cronico_no_se_lee_como_un_cambio() -> None:
+    """Un `ReadTimeout` de todos los dias tambien «empieza» a mitad de un proceso viejo."""
+    exp = _exp(
+        arbol=_arbol_de_esquema(), cambios=_cambios(544),
+        historia=Historia(dias_con_errores=27, dias_mirados=30),
+    )
+    assert "FUERA del proceso" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+def test_si_la_version_cambio_no_es_un_cambio_externo() -> None:
+    """Dos versiones en la ventana ES un despliegue, y lo que hay que mirar es el despliegue."""
+    exp = _exp(arbol=_arbol_de_esquema(), cambios=_cambios(544, versiones=("0.3.0", "0.3.1")))
+    assert "FUERA del proceso" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+def test_un_proceso_que_falla_al_poco_de_arrancar_no_dispara() -> None:
+    exp = _exp(arbol=_arbol_de_esquema(), cambios=_cambios(5))
+    assert "FUERA del proceso" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+def test_un_silencio_con_la_plataforma_a_rafagas_no_es_del_servicio() -> None:
+    """El caso no visto que el juez fallo: culpaba a una dependencia con seis errores."""
+    exp = _exp(
+        app="veritium", componente="veritium-api", firma="canary-silencio", tipo_senal="burn_rate",
+        aguas_arriba=["prometheus-inference-platform"],
+        plataforma=Plataforma(consultada=True, minutos_con_datos=14),
+        emision=Emision(consultada=True, por_fuente={"trazas": 1_677_608}),
+        concurrentes=[Concurrente(servicio="gateway", clase="PermissionError", errores=6, aguas_arriba=True)],
+    )
+    v = JuezDeReglas().juzgar(exp)
+
+    assert v.root_cause is not None
+    assert "No es veritium/veritium-api" in v.root_cause
+    assert "gateway" not in v.root_cause
+
+
+def test_un_silencio_nunca_culpa_a_una_dependencia_por_sus_errores() -> None:
+    exp = _exp(
+        firma="canary-silencio", tipo_senal="burn_rate",
+        plataforma=Plataforma(consultada=True, minutos_con_datos=60),
+        concurrentes=[Concurrente(servicio="gateway", clase="PermissionError", errores=6, aguas_arriba=True)],
+    )
+    assert "gateway" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+def test_una_plataforma_despierta_no_dispara_la_regla_de_las_rafagas() -> None:
+    exp = _exp(firma="canary-silencio", tipo_senal="burn_rate",
+               plataforma=Plataforma(consultada=True, minutos_con_datos=58))
+    assert "No es" not in (JuezDeReglas().juzgar(exp).root_cause or "")

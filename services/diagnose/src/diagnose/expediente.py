@@ -238,6 +238,95 @@ class Contraparte(BaseModel):
     discrepa: bool = False
 
 
+class Emision(BaseModel):
+    """Lo que el componente emitio en los 30 dias anteriores al incidente.
+
+    Solo se recolecta para los silencios: es la diferencia entre «dejo de
+    hablar» y «nunca hablo» (B-39). `consultada=False` no es «no emitio»: es
+    que no se pregunto.
+    """
+
+    consultada: bool = False
+    dias: int = 30
+    por_fuente: dict[str, int] = Field(default_factory=dict)
+    primera: datetime | None = None
+    ultima: datetime | None = None
+
+    @property
+    def total(self) -> int:
+        return sum(self.por_fuente.values())
+
+    @property
+    def nunca(self) -> bool:
+        return self.consultada and self.total == 0
+
+
+class Instancia(BaseModel):
+    instancia: str
+    version: str = ""
+    desde: datetime | None = None
+    hasta: datetime | None = None
+    errores: int = 0
+    primer_error: datetime | None = None
+
+
+class Cambios(BaseModel):
+    """Los procesos del componente en las 24 h anteriores (B-38).
+
+    Lo que el almacen no tiene es un registro de despliegues; lo que si tiene
+    es `service.instance.id`, que cambia en cada arranque. Con eso se ve si el
+    fallo empezo con un proceso nuevo —un despliegue, un reinicio— o a mitad de
+    la vida de uno viejo, y las dos cosas apuntan a sitios distintos.
+
+    `consultada=False` es que no se pregunto; `sin_identidad=True` es que se
+    pregunto y el componente no emite `service.instance.id`, que es distinto de
+    «no hubo reinicios».
+    """
+
+    consultada: bool = False
+    horas: int = 24
+    instancias: list[Instancia] = Field(default_factory=list)
+    sin_identidad: bool = False
+
+    @property
+    def actual(self) -> Instancia | None:
+        return max(self.instancias, key=lambda i: i.hasta or datetime.min.replace(tzinfo=UTC), default=None)
+
+    @property
+    def versiones(self) -> set[str]:
+        return {i.version for i in self.instancias if i.version}
+
+    @property
+    def reinicios(self) -> int:
+        return max(0, len(self.instancias) - 1)
+
+    @property
+    def minutos_en_marcha_antes_del_fallo(self) -> float | None:
+        """Cuanto llevaba vivo el proceso actual cuando dio su primer error."""
+        a = self.actual
+        if a is None or a.desde is None or a.primer_error is None:
+            return None
+        return (a.primer_error - a.desde).total_seconds() / 60
+
+
+
+class Plataforma(BaseModel):
+    """Si la plataforma ENTERA recibia datos antes de que se abriera el incidente.
+
+    Solo para silencios, y medido hasta la apertura y no despues: lo que se ve
+    despues no lo podia ver nadie en ese momento.
+    """
+
+    consultada: bool = False
+    minutos_con_datos: int = 0
+    minutos_mirados: int = 60
+
+    @property
+    def a_rafagas(self) -> bool:
+        """Menos de la mitad de los minutos con datos: el regimen del host dormido."""
+        return self.consultada and self.minutos_con_datos * 2 < self.minutos_mirados
+
+
 class Concurrente(BaseModel):
     """Otro servicio con errores en la misma ventana."""
 
@@ -269,6 +358,9 @@ class Expediente(BaseModel):
     # --- Los cinco bloques de contexto ---------------------------------------
     arbol: Arbol = Field(default_factory=Arbol)
     contraparte: Contraparte | None = None
+    emision: Emision = Field(default_factory=Emision)
+    cambios: Cambios = Field(default_factory=Cambios)
+    plataforma: Plataforma = Field(default_factory=Plataforma)
     historia: Historia = Field(default_factory=Historia)
     alcance: Alcance = Field(default_factory=Alcance)
     concurrentes: list[Concurrente] = Field(default_factory=list)
@@ -358,6 +450,42 @@ class Expediente(BaseModel):
             for ruta, n in sorted(a.rutas.items(), key=lambda kv: -kv[1])[:5]:
                 lineas.append(f"  {n:>6}  {ruta}")
             bloques.append("ALCANCE\n" + "\n".join(lineas))
+
+        c = self.cambios
+        if c.consultada and (a := c.actual) is not None:
+            lineas = [
+                f"  {len(c.instancias)} proceso(s) en {c.horas} h · versiones: {', '.join(sorted(c.versiones)) or '?'}"
+            ]
+            if a.desde:
+                # El primer span OBSERVADO, no el arranque: un proceso sin
+                # trafico no emite. Es una cota inferior de su edad, y se dice asi.
+                lineas.append(f"  el actual emite desde el {a.desde:%Y-%m-%d %H:%M}Z (al menos "
+                              f"{((a.hasta or a.desde) - a.desde).total_seconds() / 3600:.1f} h vivo)")
+            if (m := c.minutos_en_marcha_antes_del_fallo) is not None:
+                lineas.append(f"  su primer error llego {m:.0f} min despues de arrancar")
+            bloques.append("PROCESOS (reinicios y despliegues)\n" + "\n".join(lineas))
+        elif c.sin_identidad:
+            bloques.append("PROCESOS\n  el componente no emite `service.instance.id`: no se pueden ver reinicios")
+
+        pl = self.plataforma
+        if pl.consultada:
+            linea = (f"  la plataforma ENTERA recibio datos en {pl.minutos_con_datos} de los "
+                     f"{pl.minutos_mirados} minutos anteriores")
+            if pl.a_rafagas:
+                linea += "\n  a rafagas: el silencio no es de este servicio, es del host o de la ingesta"
+            bloques.append("PLATAFORMA\n" + linea)
+
+        e = self.emision
+        if e.consultada:
+            if e.nunca:
+                bloques.append(
+                    f"EMISION ANTERIOR\n  NADA en los {e.dias} dias anteriores: ni trazas, ni logs, ni metricas.\n"
+                    "  No es que dejara de hablar: no consta que haya hablado nunca."
+                )
+            else:
+                fuentes = ", ".join(f"{k} {v}" for k, v in e.por_fuente.items() if v)
+                ultima = f"; ultimo dato el {e.ultima:%Y-%m-%d %H:%M}Z" if e.ultima else ""
+                bloques.append(f"EMISION ANTERIOR\n  {e.total} datos en {e.dias} dias ({fuentes}){ultima}")
 
         if self.concurrentes:
             lineas = [

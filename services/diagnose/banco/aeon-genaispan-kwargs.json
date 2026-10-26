@@ -130,6 +130,188 @@
       "truncado": false
     },
     "contraparte": null,
+    "emision": {
+      "consultada": false,
+      "dias": 30,
+      "por_fuente": {},
+      "primera": null,
+      "ultima": null
+    },
+    "cambios": {
+      "consultada": true,
+      "horas": 24,
+      "instancias": [
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-3e6cd48b",
+          "version": "",
+          "desde": "2026-09-29T12:54:32.326587Z",
+          "hasta": "2026-09-29T12:54:32.326702Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-6a401b94",
+          "version": "",
+          "desde": "2026-09-29T12:54:34.637442Z",
+          "hasta": "2026-09-29T12:54:34.659951Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-6f5a7685",
+          "version": "",
+          "desde": "2026-09-29T12:54:38.197148Z",
+          "hasta": "2026-09-29T12:54:38.222537Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-05c9e66a",
+          "version": "",
+          "desde": "2026-09-29T12:54:40.596657Z",
+          "hasta": "2026-09-29T12:54:40.619147Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-fec6a838",
+          "version": "",
+          "desde": "2026-09-29T12:54:43.165151Z",
+          "hasta": "2026-09-29T12:54:43.170024Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-16c6ca9e",
+          "version": "",
+          "desde": "2026-09-29T12:54:45.591187Z",
+          "hasta": "2026-09-29T12:54:46.134313Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-eaae362c",
+          "version": "",
+          "desde": "2026-09-30T02:54:51.479547Z",
+          "hasta": "2026-09-30T02:54:54.502609Z",
+          "errores": 6,
+          "primer_error": "2026-09-30T02:54:51.479547Z"
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-376ca84a",
+          "version": "",
+          "desde": "2026-09-30T02:55:32.155647Z",
+          "hasta": "2026-09-30T02:55:35.180205Z",
+          "errores": 6,
+          "primer_error": "2026-09-30T02:55:32.155647Z"
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-0163709e",
+          "version": "",
+          "desde": "2026-09-30T02:55:58.051667Z",
+          "hasta": "2026-09-30T02:55:58.077711Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-12ae34de",
+          "version": "",
+          "desde": "2026-09-30T02:56:11.444749Z",
+          "hasta": "2026-09-30T02:56:11.467255Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-cd3cde39",
+          "version": "",
+          "desde": "2026-09-30T02:56:45.837435Z",
+          "hasta": "2026-09-30T02:56:45.857193Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-37a53c7c",
+          "version": "",
+          "desde": "2026-09-30T02:56:47.996678Z",
+          "hasta": "2026-09-30T02:56:48.017783Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-c5967161",
+          "version": "",
+          "desde": "2026-09-30T02:56:50.191244Z",
+          "hasta": "2026-09-30T02:56:50.216111Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-71e62f70",
+          "version": "",
+          "desde": "2026-09-30T03:00:28.379589Z",
+          "hasta": "2026-09-30T03:00:43.405531Z",
+          "errores": 10,
+          "primer_error": "2026-09-30T03:00:28.379589Z"
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-a15bd884",
+          "version": "",
+          "desde": "2026-09-30T03:00:58.746932Z",
+          "hasta": "2026-09-30T03:00:58.763653Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-5d30578b",
+          "version": "",
+          "desde": "2026-09-30T03:01:03.100726Z",
+          "hasta": "2026-09-30T03:01:03.124533Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-d356df7b",
+          "version": "",
+          "desde": "2026-09-30T03:01:05.440020Z",
+          "hasta": "2026-09-30T03:01:05.464935Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-ff523e3d",
+          "version": "",
+          "desde": "2026-09-30T03:01:07.762208Z",
+          "hasta": "2026-09-30T03:01:07.786345Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-0f1c071c",
+          "version": "",
+          "desde": "2026-09-30T03:01:10.262477Z",
+          "hasta": "2026-09-30T03:01:10.265925Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-12a1282f",
+          "version": "",
+          "desde": "2026-09-30T03:01:12.556329Z",
+          "hasta": "2026-09-30T03:01:12.768880Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "MacBook-Pro-de-Emeric--Caren.local-b37cafcb",
+          "version": "",
+          "desde": "2026-09-30T03:01:30.152518Z",
+          "hasta": "2026-09-30T03:01:45.178514Z",
+          "errores": 10,
+          "primer_error": "2026-09-30T03:01:30.152518Z"
+        }
+      ],
+      "sin_identidad": false
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,

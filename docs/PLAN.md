@@ -812,6 +812,8 @@ No construyas diecisiete.
 
 ### 8.6 Runtime: Temporal
 
+> **Sustituido el 25/10 por D-135: los agentes se construyen con synaptum.** La tabla de abajo describía su línea 0.x; en `1.0.0rc6` tiene checkpoint durable, aprobaciones, MCP y OTel GenAI. Se conserva por el razonamiento.
+
 Cuatro candidatos: `synaptum-framework` propio, Temporal (ya desplegado en `aeon-ai`), Claude Agent SDK directo, LangGraph.
 
 **Recomendación: Temporal.** *El requisito duro es la durabilidad y la espera de aprobación humana, y ese es exactamente el problema que Temporal resuelve y que ninguno de los otros resuelve sin que lo construyas tú.*

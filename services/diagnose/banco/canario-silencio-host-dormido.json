@@ -1,0 +1,178 @@
+{
+  "id": "canario-silencio-host-dormido",
+  "titulo": "Silencio del propio canario: el host dormido hasta cuatro minutos antes",
+  "causa_real": "El 24/10 de 21:25 a 21:57 hora local el Mac encadenaba DarkWake from Deep Idle; desperto de verdad a las 21:59:25 (tapa abierta). El silencio del canario se abrio a las 03:03 UTC (22:03 local), cuatro minutos despues: el canario habia callado mientras el host dormia. Es el despertar que analice en D-129.",
+  "fuente": "`pmset -g log` del Mac (DarkWake de 21:25 a 21:57 y Wake 21:59:25 lid, hora local) y D-129, mirado ANTES de pasarle el juez",
+  "nivel": "medida",
+  "usado_para_disenar": false,
+  "sintoma": [
+    {
+      "hecho": "el canario no emite telemetria",
+      "alguna_de": [
+        "canary",
+        "canario",
+        "silencio",
+        "no emite",
+        "dejo de emitir"
+      ]
+    }
+  ],
+  "causa": [
+    {
+      "hecho": "todos los servicios callaron a la vez",
+      "alguna_de": [
+        "todos los servicios",
+        "toda la plataforma",
+        "plataforma entera",
+        "a la vez",
+        "simultane",
+        "la ingesta"
+      ]
+    },
+    {
+      "hecho": "el problema es del host o de la ingesta, no del servicio",
+      "alguna_de": [
+        "host",
+        "ingesta",
+        "durmi",
+        "dormid",
+        "duerme",
+        "suspend",
+        "plano central"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que nunca emitio",
+      "alguna_de": [
+        "nunca",
+        "sin cablear"
+      ]
+    },
+    {
+      "hecho": "culpa a una dependencia",
+      "alguna_de": [
+        "aguas arriba",
+        "clickhouse",
+        "victoriametrics"
+      ]
+    }
+  ],
+  "notas": "Etiquetado antes de evaluar. Mas dificil que el del gateway: el host ya llevaba cuatro minutos despierto al abrirse, asi que la ultima parte de la ventana tiene datos. Un umbral demasiado estricto lo pierde.",
+  "capturado_en": "2026-10-25T20:21:32.310114-05:00",
+  "incidente": {
+    "id": "a12543aed0f6",
+    "fingerprint": "356c4dc80f23a955",
+    "kind": "burn_rate",
+    "severity": "page",
+    "app": "argus",
+    "component": "canary",
+    "environment": null,
+    "title": "canary dejó de emitir telemetría",
+    "signature": "canary-silencio",
+    "state": "resolved",
+    "opened_at": "2026-10-25T03:03:20.625785Z",
+    "updated_at": "2026-10-25T03:03:20.626109Z",
+    "last_seen_at": "2026-10-25T03:03:20.626111Z",
+    "resolved_at": "2026-10-25T03:18:22.728060Z",
+    "count": 1,
+    "trace_ids": [],
+    "components_affected": [
+      "canary"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-356c4dc80f23a955",
+    "notified_at": "2026-10-25T03:03:20.629997Z",
+    "attributes": {
+      "labels": {
+        "alertname": "canary-silencio",
+        "service_namespace": "argus",
+        "service_name": "canary",
+        "source": "canary"
+      },
+      "annotations": {
+        "summary": "canary dejó de emitir telemetría",
+        "canary.detalle": "sin telemetría en 15 min",
+        "canary.resultado": "silencio"
+      }
+    }
+  },
+  "expediente": {
+    "incidente_id": "a12543aed0f6",
+    "huella": "356c4dc80f23a955",
+    "app": "argus",
+    "componente": "canary",
+    "firma": "canary-silencio",
+    "tipo_senal": "burn_rate",
+    "severidad": "page",
+    "titulo": "canary dejó de emitir telemetría",
+    "senales": 1,
+    "edad_s": 0.000326,
+    "entorno": null,
+    "arbol": {
+      "trace_id": "",
+      "spans": [],
+      "truncado": false
+    },
+    "contraparte": null,
+    "emision": {
+      "consultada": true,
+      "dias": 30,
+      "por_fuente": {
+        "logs": 16298,
+        "metricas_gauge": 0,
+        "trazas": 2102,
+        "metricas_histograma": 71249,
+        "metricas_suma": 71249
+      },
+      "primera": "2026-09-25T23:55:32.760319Z",
+      "ultima": "2026-10-25T03:07:17.883472Z"
+    },
+    "cambios": {
+      "consultada": false,
+      "horas": 24,
+      "instancias": [],
+      "sin_identidad": false
+    },
+    "plataforma": {
+      "consultada": true,
+      "minutos_con_datos": 13,
+      "minutos_mirados": 60
+    },
+    "historia": {
+      "veces": 0,
+      "primera_vez": null,
+      "ultima_vez": null,
+      "causas_anteriores": [],
+      "dias_con_errores": 0,
+      "dias_mirados": 0,
+      "errores_en_trazas": 0,
+      "primer_dia": null
+    },
+    "alcance": {
+      "fallidas": 0,
+      "totales": 0,
+      "ventana_min": 5,
+      "rutas": {}
+    },
+    "concurrentes": [
+      {
+        "servicio": "veritium-worker",
+        "clase": "",
+        "errores": 1,
+        "aguas_arriba": false
+      }
+    ],
+    "aguas_arriba": [
+      "clickhouse",
+      "victoriametrics"
+    ],
+    "aguas_abajo": [],
+    "lagunas": [
+      "arbol: el incidente no trae ninguna traza de ejemplo",
+      "alcance: ningun span `Server` de argus/canary en la ventana; el incidente puede venir de un span interno o de una llamada saliente"
+    ]
+  }
+}

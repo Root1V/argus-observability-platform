@@ -288,6 +288,9 @@ def _main(argv: list[str] | None = None) -> int:
     cap.add_argument("--caso", required=True, help="id del caso, p. ej. veritium-tenant")
     cap.add_argument("--bus", default="http://127.0.0.1:8080")
     sub.add_parser("evaluar", help="pasa el juez de reglas sobre el banco")
+    rec = sub.add_parser("recapturar", help="rehace el expediente de un caso sin tocar su etiqueta")
+    rec.add_argument("caso")
+    rec.add_argument("--bus", default="http://127.0.0.1:8080")
     args = parser.parse_args(argv)
 
     if args.orden == "evaluar":
@@ -297,16 +300,32 @@ def _main(argv: list[str] | None = None) -> int:
 
     historico = httpx.get(f"{args.bus}/incidents/history?dias=30", timeout=30).json()
     registro = httpx.get(f"{args.bus}/registry", timeout=10).json()
-    candidatos = [d for d in historico if d.get("fingerprint") == args.huella]
-    if not candidatos:
-        print(f"no hay ningun incidente con huella {args.huella} en el historico")
-        return 1
-    incidente = max(candidatos, key=lambda d: str(d.get("opened_at")))
     almacen = Almacen(
         os.environ.get("DIAGNOSE_CLICKHOUSE_URL", "http://127.0.0.1:8123"),
         os.environ["DIAGNOSE_CLICKHOUSE_USER"],
         os.environ["DIAGNOSE_CLICKHOUSE_PASSWORD"],
     )
+
+    if args.orden == "recapturar":
+        # Cuando el expediente gana un bloque, los casos congelados no lo
+        # tienen. Esto lo recalcula A FECHA DEL INCIDENTE —el historico se
+        # corta igual y las consultas llevan su `hasta`— y deja la etiqueta
+        # exactamente como estaba: la verdad de un caso no cambia porque el
+        # expediente sepa mas.
+        destino = DIRECTORIO / f"{args.caso}.json"
+        caso = json.loads(destino.read_text(encoding="utf-8"))
+        incidente = caso["incidente"]
+        expediente = capturar(incidente, almacen=almacen, registro=registro, historico=historico)
+        caso["expediente"] = sanear(json.loads(expediente.model_dump_json()))
+        destino.write_text(json.dumps(caso, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"→ {destino}  ({len(expediente.lagunas)} lagunas)")
+        return 0
+
+    candidatos = [d for d in historico if d.get("fingerprint") == args.huella]
+    if not candidatos:
+        print(f"no hay ningun incidente con huella {args.huella} en el historico")
+        return 1
+    incidente = max(candidatos, key=lambda d: str(d.get("opened_at")))
     expediente = capturar(incidente, almacen=almacen, registro=registro, historico=historico)
     destino = DIRECTORIO / f"{args.caso}.json"
     borrador = {

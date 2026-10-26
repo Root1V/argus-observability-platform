@@ -42,7 +42,7 @@
       ]
     }
   ],
-  "notas": "Sin arbol, sin alcance y con 8 servicios con errores a la vez — el gateway con 3.356 PermissionError —, lo tentador es culpar a lo que hace ruido. Con este expediente lo correcto es ABSTENERSE: ningun bloque pregunta «¿ha emitido alguna vez este componente?», que es la consulta que lo resolveria.",
+  "notas": "Sin arbol, sin alcance y con 8 servicios con errores a la vez — el gateway con 3.356 PermissionError —, lo tentador es culpar a lo que hace ruido. Con este expediente lo correcto es ABSTENERSE: ningun bloque pregunta «¿ha emitido alguna vez este componente?», que es la consulta que lo resolveria. PASO A DISEÑO el 25/10: la regla `_nunca_ha_emitido` (B-39) se escribio mirando este caso. Desde entonces lo acierta con confianza alta, y eso ya no mide nada no visto.",
   "capturado_en": "2026-10-25T04:00:22.506794-05:00",
   "incidente": {
     "id": "eda6dd756ee1",
@@ -100,6 +100,30 @@
       "truncado": false
     },
     "contraparte": null,
+    "emision": {
+      "consultada": true,
+      "dias": 30,
+      "por_fuente": {
+        "metricas_suma": 0,
+        "trazas": 0,
+        "metricas_gauge": 0,
+        "metricas_histograma": 0,
+        "logs": 0
+      },
+      "primera": null,
+      "ultima": null
+    },
+    "cambios": {
+      "consultada": false,
+      "horas": 24,
+      "instancias": [],
+      "sin_identidad": false
+    },
+    "plataforma": {
+      "consultada": true,
+      "minutos_con_datos": 13,
+      "minutos_mirados": 60
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,
@@ -201,5 +225,6 @@
       "arbol: el incidente no trae ninguna traza de ejemplo",
       "alcance: ningun span `Server` de prometheus-inference-platform/tei en la ventana; el incidente puede venir de un span interno o de una llamada saliente"
     ]
-  }
+  },
+  "usado_para_disenar": true
 }

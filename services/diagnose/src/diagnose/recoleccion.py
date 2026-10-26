@@ -30,7 +30,11 @@ from .expediente import (
     Alcance,
     Arbol,
     Concurrente,
+    Cambios,
     Contraparte,
+    Emision,
+    Instancia,
+    Plataforma,
     Expediente,
     Historia,
     arbol_desde_filas,
@@ -179,6 +183,26 @@ def recolectar(
                 f"recurrencia: la clase `{clase[:60]}` no aparece como `error.type`; no se puede contar"
             )
 
+    # --- 5d. Procesos: reinicios y despliegues (B-38) ----------------------
+    if exp.tipo_senal == "error":
+        try:
+            exp.cambios = _cambios(almacen.instancias(app=exp.app, componente=exp.componente, hasta=hasta))
+        except ErrorDeAlmacen as exc:
+            exp.lagunas.append(f"procesos: {exc}")
+
+    # --- 5c. Emision anterior, solo para silencios (B-39) -------------------
+    if _es_un_silencio(exp):
+        try:
+            exp.emision = _emision(almacen.emision(app=exp.app, componente=exp.componente, hasta=hasta))
+        except ErrorDeAlmacen as exc:
+            exp.lagunas.append(f"emision: {exc}")
+        # Hasta la APERTURA, no hasta el final de la ventana: la plataforma
+        # vuelve a rafagas justo despues, y medir eso seria ver el futuro.
+        try:
+            exp.plataforma = Plataforma(consultada=True, minutos_con_datos=almacen.minutos_con_datos(hasta=abierto))
+        except ErrorDeAlmacen as exc:
+            exp.lagunas.append(f"plataforma: {exc}")
+
     # --- 6. Concurrentes ----------------------------------------------------
     try:
         exp.concurrentes = _concurrentes(
@@ -193,6 +217,53 @@ def recolectar(
 
 
 # --- Los seis bloques, uno por funcion ---------------------------------------
+
+
+def _es_un_silencio(exp: Expediente) -> bool:
+    """El canario abre los silencios como `burn_rate` con firma `canary-silencio`."""
+    return exp.tipo_senal == "silence" or "silencio" in exp.firma
+
+
+def _emision(filas: list[dict[str, Any]]) -> Emision:
+    from .expediente import _como_fecha
+
+    e = Emision(consultada=True)
+    for fila in filas:
+        n = int(fila.get("n") or 0)
+        e.por_fuente[str(fila.get("fuente"))] = n
+        if not n:
+            continue
+        # `min`/`max` de una tabla vacia salen como 1970: solo cuentan con datos.
+        for campo, mejor in (("primera", min), ("ultima", max)):
+            fecha = _como_fecha(fila.get(campo))
+            if fecha is not None:
+                actual = getattr(e, campo)
+                setattr(e, campo, fecha if actual is None else mejor(actual, fecha))
+    return e
+
+
+def _cambios(filas: list[dict[str, Any]]) -> Cambios:
+    from .expediente import _como_fecha
+
+    c = Cambios(consultada=True)
+    for fila in filas:
+        inst = str(fila.get("instancia") or "")
+        if not inst:
+            c.sin_identidad = True
+            continue
+        errores = int(fila.get("errores") or 0)
+        c.instancias.append(Instancia(
+            instancia=inst,
+            version=str(fila.get("version") or ""),
+            desde=_como_fecha(fila.get("desde")),
+            hasta=_como_fecha(fila.get("hasta")),
+            errores=errores,
+            # `minIf` sin coincidencias devuelve 1970: solo vale si hubo errores.
+            primer_error=_como_fecha(fila.get("primer_error")) if errores else None,
+        ))
+    if c.instancias:
+        c.sin_identidad = False
+    return c
 
 
 def _clase_para_contar(exp: Expediente) -> str:
