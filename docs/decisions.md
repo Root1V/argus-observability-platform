@@ -7634,3 +7634,109 @@ por encima de 75 s) y el expediente de un incidente abierto, con su bloque
 
 **Apagado** (`DIAGNOSE_INVESTIGADOR` vacío) hasta tener una medida. El banco de
 F3-08 mide jueces de un solo paso, y L4 necesita su propia medida.
+
+---
+
+## D-145 · L3 se tomaba a sí mismo por el otro lado de la llamada, con confianza alta
+
+**Estado**: ✅ Corregido y desplegado
+
+**Cómo se vio**. Al probar L4 en vivo (D-146) sobre un `page` real (`503` del
+gateway, 26/10), lo que había que contrastar era el expediente, y el expediente
+destapó el fallo:
+
+- **Lo que pasaba**: el gateway llamaba a `127.0.0.1:8087/v1/chat/completions` y
+  recibía `ConnectError: All connection attempts failed`, tres veces en la misma
+  petición. En ese puerto no escuchaba nadie.
+- **Lo que decía L3, con confianza alta**: «gateway atendió la llamada… pero tardó
+  1 s, y gateway se rindió a los 0 s. Y no es una anomalía: el 98,5 % de sus
+  respuestas llega después de los 0 s…».
+
+**Dos defectos encadenados**:
+
+1. **El puente se empalmaba con el que llama.** `Almacen.contraparte` buscaba
+   spans `Server` por RUTA, y el gateway **sirve** `/v1/chat/completions` además
+   de **llamarlo**. Su llamada fallida se emparejaba con su propio span de
+   servidor. No era nuevo: la causa anotada el 25/10 («tardó 23 s y el gateway
+   se rindió a los 19 s») salió del mismo emparejamiento.
+2. **La regla del destino lento aceptaba cualquier «sin respuesta»**, incluido el
+   `ConnectError`. Con un error de conexión el destino no aceptó nada, así que
+   no pudo tardar. La línea base de D-141 heredó el error: un plazo de 2 ms daba
+   «el 98,5 % tarda más de 0,0 s».
+
+**Arreglo**:
+
+- La contraparte **excluye el servicio que llama**, en la consulta y en el
+  emparejamiento.
+- «El destino tardó» y la línea base son **solo para timeouts**.
+- **Regla nueva, `_nadie_acepto_la_conexion`**, con confianza alta: la clase del
+  error es la propia medición del cliente HTTP. Ahora el mismo incidente dice
+  *«no pudo abrir conexión con http://127.0.0.1:8087/… (3 intentos en la misma
+  petición): `ConnectError`. En esa dirección no escuchaba nadie…»*.
+- **Las causas guardadas se etiquetan como «L3 anotó, sin confirmar»**, en
+  HISTORIA y en VISTO ANTES. Hoy ninguna persona anota causas, así que toda
+  causa guardada es de L3, y algunas son de este defecto. L4 repitió una de ellas
+  como si fuera un hecho.
+
+El banco no cambia: 2 de 2 en no vistos y 6 aciertos en diseño. Ningún caso
+tenía un `ConnectError`, y ese es justo el hueco por el que entró esto. **Hace
+falta un caso de banco con un destino caído.** El incidente de hoy lo es, pero su
+causa la ha establecido L3, no una fuente independiente.
+
+---
+
+## D-146 · Qwen3 medido como juez y como investigador: se queda en sombra, L4 apagado
+
+**Estado**: ✅ Medido · sombra de L3 con Qwen en modo «completa» · L4 apagado
+
+`gpt-oss-20b-mxfp4` dejó de estar disponible el 26/10. El dueño gestionó
+`qwen3-30b-a3b-q4-k-m-local` con Prometheus y el permiso para nuestro cliente.
+
+### El juez, en el banco
+
+| juez | no vistos (aciertos) | diseño | fallos con confianza alta |
+|---|---|---|---|
+| **reglas** | **2/2** | **6 aciertos**, 2 parciales | 0 |
+| Qwen compite, sin razonamiento | 0/2 (se abstiene) | 0 aciertos, 4 parciales, 2 fallos | **2** |
+| Qwen compite, con razonamiento | 1/2 | 2 aciertos, 3 fallos | 1 |
+| Qwen completa a las reglas, sin razonamiento | 2/2 | 4 aciertos, 4 parciales | 0 |
+| Qwen completa a las reglas, con razonamiento | 2/2 | 3 aciertos, 5 parciales | 0 |
+
+**B-42 respondido: completar no añade nada y quita algo.** Donde las reglas
+aciertan a medias (`aeon`, `clients-names`), el modelo tampoco llega. Donde
+aciertan, a veces reescribe y pierde lo que hacía buena la causa: en `tenant` se
+cae «proceso con el código anterior», y en `pendingrollback`, «consecuencia de
+una excepción anterior». Sin razonamiento, el modelo tarda unos 3 s.
+
+**En producción** la sombra pasa a Qwen en modo «completa». Es lo único que el
+banco no puede medir: el banco no tiene casos donde las reglas se abstengan, y
+en producción sí los hay. La primera comparación real es justo uno de esos, y el
+modelo devolvió el síntoma como causa: *«no reporta métricas durante 5
+minutos»*, con confianza media. Escribe en español, que `gpt-oss` no hacía.
+
+### L4, en vivo
+
+Sobre el `503` del gateway (D-145):
+
+1. **Sin `submit_tool`, el agente no investigaba.** synaptum pedía
+   `response_format: json_schema` y la gramática del servidor obligaba a
+   contestar el JSON a la primera. Resultado: «no hay información suficiente» en 3
+   s y sin una sola herramienta. Con el informe entregado como herramienta, sí
+   investiga: `incidente`, `expediente`, `linea_base` y `concurrentes`, en 8 s y
+   ~35.000 tokens sin razonamiento, o 40 s con él.
+2. **Lo que concluyó, en las tres pasadas, fue falso**: «latencia alta, el
+   gateway se rinde». Antes de D-145 lo copiaba del diagnóstico erróneo de L3.
+   Después, de las causas antiguas guardadas, que eran de ese mismo defecto.
+3. **Atribuye evidencia a herramientas que no llamó**: cita `[traza]`,
+   `[alcance]` y `[linea_base]` habiendo llamado solo a `expediente`. Y dice que
+   no hubo errores concurrentes cuando el expediente los listaba.
+
+**L4 se queda apagado.** En sombra no avisaría a nadie, pero cada investigación
+gasta GPU de la misma plataforma que usan Centinela y Veritium, y hoy produciría
+conclusiones falsas. Lo que falta antes de encenderlo:
+
+- comprobar con código que cada `[herramienta]` citada se llamó de verdad, igual
+  que se comprueban las citas del calificador;
+- un banco para L4;
+- y un modelo que razone mejor sobre el expediente. Ninguno de los dos
+  disponibles lo hace hoy.

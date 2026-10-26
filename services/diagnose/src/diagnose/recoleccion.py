@@ -518,7 +518,7 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         return c
 
     try:
-        filas = almacen.contraparte(ruta=ruta, momento=llamada.momento)
+        filas = almacen.contraparte(ruta=ruta, momento=llamada.momento, excluir=llamada.servicio or "")
     except ErrorDeAlmacen as exc:
         lagunas.append(f"contraparte: {exc}")
         return c
@@ -540,6 +540,8 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         acaba = empieza + timedelta(milliseconds=float(fila.get("Duration") or 0) / 1e6)
         if acaba < inicio or empieza > fin:
             continue
+        if llamada.servicio and fila.get("servicio") == llamada.servicio:
+            continue  # el que llama no es su propia contraparte (D-145)
         c.encontrada = True
         c.servicio = str(fila.get("servicio") or "")
         c.codigo = str(fila.get("codigo") or "") or None
@@ -547,7 +549,11 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         c.ms = float(fila.get("Duration") or 0) / 1e6
         c.discrepa = llamada.error and c.estado != "Error"
         break
-    if c.encontrada and c.servicio:
+    # La linea base mide cuanto tarda el destino contra el plazo de quien
+    # llama, y eso solo tiene sentido si quien llama SE RINDIO esperando: con un
+    # 4xx o un `ConnectError`, la «espera» fueron 2 ms y salia «el 98,5% tarda
+    # mas de 0,0 s» (D-145).
+    if c.encontrada and c.servicio and "timeout" in f"{llamada.clase or ''} {llamada.excepcion or ''}".lower():
         c.linea_base = _linea_base(almacen, servicio=c.servicio, ruta=ruta, hasta=inicio, plazo_ms=llamada.ms,
                                    lagunas=lagunas)
     return c

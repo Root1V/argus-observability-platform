@@ -10,10 +10,15 @@ from __future__ import annotations
 import pytest
 from diagnose.investigador import Investigador, Presupuesto
 from synaptum import Risk, tool
-from synaptum.testing import FakeGateway, calls, says
+from synaptum.testing import FakeGateway, calls
 
-INFORME = ('{"causa": "manager-api tarda normalmente mas que el plazo del gateway", "confianza": "alta",'
-           ' "evidencia": ["[linea_base] el 4% pasa de 75 s"], "descartadas": ["la red: hubo respuesta 200"]}')
+INFORME = {"causa": "manager-api tarda normalmente mas que el plazo del gateway", "confianza": "alta",
+           "evidencia": ["[linea_base] el 4% pasa de 75 s"], "descartadas": ["la red: hubo respuesta 200"]}
+
+
+def entrega(**informe):
+    """El informe va por la herramienta de entrega (`submit_tool`), no como texto."""
+    return calls("submit", id="entrega", **informe)
 
 
 @tool
@@ -34,7 +39,7 @@ def _inv(*guion, presupuesto: Presupuesto | None = None, herramientas=(expedient
 
 
 def test_mira_el_expediente_y_entrega_un_informe_que_cita_y_descarta() -> None:
-    r = _inv(calls("expediente", huella="h1"), says(INFORME)).investigar("h1")
+    r = _inv(calls("expediente", huella="h1"), entrega(**INFORME)).investigar("h1")
 
     assert r.final == "informe" and not r.parcial
     assert r.herramientas_usadas == ["expediente"]
@@ -45,7 +50,7 @@ def test_mira_el_expediente_y_entrega_un_informe_que_cita_y_descarta() -> None:
 
 def test_al_agotar_las_herramientas_sale_un_informe_parcial_sin_causa() -> None:
     """F4-02: cortar no es fallar; es entregar lo visto, sin inventar una conclusion."""
-    guion = [calls("expediente", id=f"c{i}", huella="h1") for i in range(10)] + [says(INFORME)]
+    guion = [calls("expediente", id=f"c{i}", huella="h1") for i in range(10)] + [entrega(**INFORME)]
     r = _inv(*guion, presupuesto=Presupuesto(herramientas=3)).investigar("h1")
 
     assert r.final == "tope_herramientas" and r.parcial
@@ -60,14 +65,13 @@ def test_no_arranca_con_una_herramienta_que_escribe() -> None:
 
 
 def test_un_informe_sin_causa_baja_la_confianza() -> None:
-    r = _inv(says('{"causa": null, "confianza": "alta", "evidencia": [], "descartadas": []}')).investigar("h1")
+    r = _inv(entrega(causa=None, confianza="alta", evidencia=[], descartadas=[])).investigar("h1")
 
     assert r.causa is None and r.confianza == "baja" and r.final == "informe"
 
 
 def test_el_volcado_de_una_fila_no_sale_en_el_informe() -> None:
-    sucio = ('{"causa": "null value in column tenant DETAIL:  Failing row contains (0012345).", "confianza": "media",'
-             ' "evidencia": [], "descartadas": []}')
-    r = _inv(says(sucio)).investigar("h1")
+    r = _inv(entrega(causa="null value in column tenant DETAIL:  Failing row contains (0012345).",
+                     confianza="media", evidencia=[], descartadas=[])).investigar("h1")
 
     assert "0012345" not in r.causa

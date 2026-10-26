@@ -114,6 +114,7 @@ class JuezDeReglas:
             _el_destino_tardo_mas_de_lo_que_se_espero,
             _la_contraparte_lo_dio_por_bueno,
             _el_destino_respondio_un_error,
+            _nadie_acepto_la_conexion,
             _la_llamada_no_obtuvo_respuesta,
             _varios_componentes_el_mismo_fallo,
             _empezo_a_mitad_de_un_proceso,
@@ -152,6 +153,21 @@ SIN_RESPUESTA = ("timeout", "connect", "protocol", "ssl", "closed", "refused", "
 def _no_hubo_respuesta(clase: str | None, excepcion: str | None) -> bool:
     texto = f"{clase or ''} {excepcion or ''}".lower()
     return any(marca in texto for marca in SIN_RESPUESTA)
+
+
+def _es_timeout(clase: str | None, excepcion: str | None) -> bool:
+    """Quien llama se rindio ESPERANDO. Un `ConnectError` no es eso: no llego a haber a quien esperar."""
+    texto = f"{clase or ''} {excepcion or ''}".lower()
+    return "timeout" in texto and "connecttimeout" not in texto
+
+
+SIN_CONEXION = ("connecterror", "connectionrefused", "connecttimeout", "connection refused",
+                "all connection attempts failed")
+
+
+def _sin_conexion(eslabon) -> bool:
+    texto = f"{eslabon.clase or ''} {eslabon.excepcion or ''} {eslabon.mensaje or ''}".lower()
+    return any(marca in texto for marca in SIN_CONEXION)
 
 
 # --- Las reglas, de mas fuerte a mas debil -----------------------------------
@@ -236,7 +252,9 @@ def _el_destino_tardo_mas_de_lo_que_se_espero(exp: Expediente) -> tuple[str, Con
     eslabon = exp.arbol.eslabon_mas_profundo
     if c is None or not c.encontrada or c.ms is None or eslabon is None:
         return None
-    if not _no_hubo_respuesta(eslabon.clase, eslabon.excepcion):
+    # Solo un TIMEOUT: con un `ConnectError` el destino no acepto la conexion,
+    # asi que no pudo tardar, y un «otro lado» encontrado es otro (D-145).
+    if not _es_timeout(eslabon.clase, eslabon.excepcion):
         return None
     if c.ms < eslabon.ms:
         return None
@@ -343,6 +361,33 @@ def _el_destino_respondio_un_error(exp: Expediente) -> tuple[str, Confianza] | N
         f"{exp.app}/{exp.componente} esta haciendo —ruta inexistente, cuerpo invalido o "
         f"credencial rechazada—, no la disponibilidad del destino.{confirmado}",
         "media",
+    )
+
+
+def _nadie_acepto_la_conexion(exp: Expediente) -> tuple[str, Confianza] | None:
+    """La llamada saliente no llego a abrir conexion: en ese destino no escuchaba nadie.
+
+    Es el caso mas concreto de «sin respuesta» y el que mas se presta a
+    malinterpretarse: no es lentitud, no es la peticion, no es la logica del
+    destino. Es que el proceso destino no esta levantado, o no en ese puerto. El
+    26/10 el gateway devolvia `503` porque `:8087` rechazaba conexiones, y L3
+    decia con confianza alta que «el destino tardo» (D-145).
+
+    Confianza alta: lo dice la clase del error, que es una medicion del propio
+    cliente HTTP — no una inferencia.
+    """
+    eslabon = exp.arbol.eslabon_mas_profundo
+    if eslabon is None or eslabon.tipo != "Client" or not _sin_conexion(eslabon):
+        return None
+    destino = eslabon.ruta or (exp.contraparte.destino if exp.contraparte else None) or "su destino"
+    reintentos = sum(1 for s in exp.arbol.cadena_del_fallo if s.tipo == "Client" and _sin_conexion(s))
+    veces = f" ({reintentos} intentos en la misma peticion)" if reintentos > 1 else ""
+    return (
+        f"{exp.app}/{exp.componente} no pudo abrir conexion con {destino}{veces}: "
+        f"`{eslabon.clase or eslabon.excepcion}`. En esa direccion no escuchaba nadie —el servicio "
+        "destino no esta levantado, se reinicio, o escucha en otro puerto—. No es lentitud ni una "
+        "peticion mal formada: la peticion no llego a salir.",
+        "alta",
     )
 
 

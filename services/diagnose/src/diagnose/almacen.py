@@ -213,6 +213,7 @@ class Almacen:
         ruta: str,
         momento: datetime,
         margen_s: float = 3.0,
+        excluir: str = "",
     ) -> list[dict[str, Any]]:
         """Quien ATENDIO la llamada saliente que fallo. El puente.
 
@@ -241,6 +242,12 @@ class Almacen:
         la PLANTILLA (`/users/{id}`) y el cliente con el valor resuelto, asi que
         ahi el empalme falla. Es el mismo borde que D-117.
 
+        **El que llama no puede ser su propia contraparte** (`excluir`). El
+        gateway SIRVE `/v1/chat/completions` y tambien lo LLAMA en sus
+        backends: buscando solo por ruta, su llamada fallida a `:8087` —con
+        `ConnectError`, nadie escuchando— se empalmaba con su propio span de
+        servidor, y L3 concluia con confianza alta que «el destino tardo» (D-145).
+
         **Que no encuentre nada tambien es un hallazgo**, y de los buenos: si
         nadie registro haber atendido la llamada que fallo, el fallo ocurrio
         antes de llegar a la aplicacion —proxy, validacion de transporte,
@@ -257,12 +264,14 @@ class Almacen:
             WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
               AND SpanKind = 'Server'
               AND position(SpanName, {{ruta:String}}) > 0
+              AND ServiceName != {{excluir:String}}
             ORDER BY Timestamp
             LIMIT {LIMITE_FILAS}
             """,
             desde=momento - timedelta(seconds=margen_s),
             hasta=momento + timedelta(seconds=margen_s),
             ruta=ruta,
+            excluir=excluir,
         )
 
 

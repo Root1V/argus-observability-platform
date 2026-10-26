@@ -322,7 +322,7 @@ def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m diagnose.calificador")
     parser.add_argument("orden", choices=("medir",))
     parser.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"))
-    parser.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
+    parser.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "qwen3-30b-a3b-q4-k-m-local"))
     parser.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     args = parser.parse_args(argv)
 

@@ -563,3 +563,36 @@ def test_sin_linea_base_se_dicen_las_dos_posibilidades() -> None:
     v = JuezDeReglas().juzgar(_lento(None))
 
     assert "o un plazo de espera mas corto" in v.root_cause
+
+
+# --- D-145 ---------------------------------------------------------------------
+
+
+def _sin_conexion(contraparte: Contraparte | None = None) -> Expediente:
+    """El 503 del gateway del 26/10: tres `ConnectError` contra :8087."""
+    llamadas = [Span(span_id=f"c{i}", nombre="POST", servicio="gateway", tipo="Client", ms=2.0, error=True,
+                     clase="httpx.ConnectError", mensaje="All connection attempts failed",
+                     ruta="http://127.0.0.1:8087/v1/chat/completions", profundidad=2) for i in range(3)]
+    arbol = Arbol(trace_id="t", spans=[
+        Span(span_id="s", nombre="POST /v1/chat/completions", servicio="gateway", tipo="Server", ms=539.0,
+             error=True, clase="503"),
+        *llamadas,
+    ])
+    return _exp(firma="503", arbol=arbol, contraparte=contraparte)
+
+
+def test_nadie_escuchando_es_lo_que_se_diagnostica_y_no_lentitud() -> None:
+    v = JuezDeReglas().juzgar(_sin_conexion())
+
+    assert v.confidence == "alta"
+    assert "no pudo abrir conexion con http://127.0.0.1:8087" in v.root_cause
+    assert "3 intentos" in v.root_cause
+
+
+def test_con_un_connect_error_el_destino_no_pudo_tardar() -> None:
+    """Aunque el puente encuentre «otro lado», con ConnectError no es el destino tardando (D-145)."""
+    falsa = Contraparte(llamada="POST (ConnectError)", destino="http://127.0.0.1:8087/v1/chat/completions",
+                        encontrada=True, servicio="otro", codigo="503", estado="Error", ms=539.0, discrepa=False)
+    v = JuezDeReglas().juzgar(_sin_conexion(falsa))
+
+    assert "tardo" not in v.root_cause

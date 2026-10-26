@@ -36,6 +36,13 @@ log = logging.getLogger("diagnose.investigador")
 
 VERSION_INSTRUCCIONES = "l4-investigador-1"
 
+# El nombre de la herramienta con la que synaptum recoge el informe
+# (`submit_tool`). Entregar no es investigar: no cuenta para el presupuesto.
+try:
+    from synaptum.agent.agent import SUBMIT as ENTREGAR
+except ImportError:  # pragma: no cover - si synaptum lo cambia de sitio
+    ENTREGAR = "submit"
+
 
 @dataclass(frozen=True)
 class Presupuesto:
@@ -155,6 +162,12 @@ class Investigador:
             output=Informe,
             limits=Limits(max_steps=p.pasos),
             sampling=muestreo(self.modelo, self.razonamiento),
+            # El informe se entrega como una herramienta mas. Sin esto,
+            # synaptum pide `response_format: json_schema`, la gramatica del
+            # servidor obliga a contestar el JSON a la primera, y el modelo no
+            # puede pedir ninguna herramienta: la primera prueba en vivo
+            # entrego «no hay informacion suficiente» en 3 s sin mirar nada.
+            submit_tool=True,
         )
         material = f"{self.modelo}|{VERSION_INSTRUCCIONES}|{self.razonamiento or ''}|{huella}|{time.time_ns()}"
         sesion = Session("l4-" + hashlib.sha256(material.encode()).hexdigest()[:20], self._gateway(self._herramientas))
@@ -164,7 +177,8 @@ class Investigador:
             async for paso in pasos:
                 # synaptum cede cada paso de herramienta dos veces: la intencion
                 # y el resultado. Contar las dos gastaria el presupuesto a mitad.
-                if isinstance(paso, ToolStep) and paso.call is not None and paso.result is not None:
+                if (isinstance(paso, ToolStep) and paso.call is not None and paso.result is not None
+                        and paso.call.name != ENTREGAR):
                     r.herramientas_usadas.append(paso.call.name)
                 if isinstance(paso, (ModelStep, FinalStep)):
                     r.tokens += _tokens(paso.usage)

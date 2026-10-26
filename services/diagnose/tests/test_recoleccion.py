@@ -490,10 +490,22 @@ def test_una_clase_sin_nombre_no_hace_hermanos() -> None:
 # --- B-35: la linea base del destino ------------------------------------------
 
 
+def _con_timeout(clase: str = "httpx.ReadTimeout") -> list[dict[str, Any]]:
+    """La traza del 502 con la llamada saliente convertida en otra clase de fallo."""
+    import copy
+
+    spans = copy.deepcopy(TRAZA_DEL_502)
+    for fila in spans:
+        if fila["SpanKind"] == "Client":
+            fila["SpanAttributes"]["error.type"] = clase
+    return spans
+
+
 def test_la_linea_base_se_pide_al_que_atendio_hasta_la_hora_de_la_llamada() -> None:
     """Lo normal se mide ANTES del incidente: despues no lo sabia nadie."""
     alm = AlmacenFalso(
-        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")],
+        spans=_con_timeout(),
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="200")],
         linea_base=[{"guardadas": 40, "estimadas": 220, "p50_ms": 80.0, "p95_ms": 150.0, "sobre_plazo": 3}],
     )
     exp = recolectar(_incidente(), almacen=alm)
@@ -505,9 +517,30 @@ def test_la_linea_base_se_pide_al_que_atendio_hasta_la_hora_de_la_llamada() -> N
     assert "normalmente: p50 0.1 s" in exp.texto()
 
 
+def test_sin_timeout_no_hay_linea_base_que_pedir() -> None:
+    """Con un 400 o un ConnectError la «espera» fueron milisegundos: salia «el 98,5% tarda mas de 0,0 s» (D-145)."""
+    for spans in (TRAZA_DEL_502, _con_timeout("httpx.ConnectError")):
+        alm = AlmacenFalso(spans=spans,
+                           contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")])
+        recolectar(_incidente(), almacen=alm)
+        assert not any(q == "linea_base" for q, _ in alm.preguntas)
+
+
+def test_el_que_llama_no_es_su_propia_contraparte() -> None:
+    """El gateway sirve la misma ruta que llama: se empalmaba consigo mismo (D-145)."""
+    propia = {**_fila_contraparte(empieza=LLAMADA_DESDE, ms=500, estado="Error", codigo="503"), "servicio": "gateway"}
+    alm = AlmacenFalso(spans=_con_timeout("httpx.ConnectError"), contraparte=[propia])
+    exp = recolectar(_incidente(), almacen=alm)
+
+    assert exp.contraparte.encontrada is False
+    _, kw = next(p for p in alm.preguntas if p[0] == "contraparte")
+    assert kw["excluir"] == "gateway"
+
+
 def test_una_linea_base_con_pocas_peticiones_es_una_laguna_y_no_un_dato() -> None:
     alm = AlmacenFalso(
-        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")],
+        spans=_con_timeout(),
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="200")],
         linea_base=[{"guardadas": 1, "estimadas": 10, "p50_ms": 80.0, "p95_ms": 80.0, "sobre_plazo": 0}],
     )
     exp = recolectar(_incidente(), almacen=alm)

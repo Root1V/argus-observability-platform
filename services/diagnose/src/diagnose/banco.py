@@ -346,7 +346,7 @@ def _main(argv: list[str] | None = None) -> int:
     cap.add_argument("--bus", default="http://127.0.0.1:8080")
     ev = sub.add_parser("evaluar", help="pasa un juez sobre el banco")
     ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo", "reglas+modelo"))
-    ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
+    ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "qwen3-30b-a3b-q4-k-m-local"))
     ev.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     ev.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"),
                     help="quien decide si el veredicto afirma cada criterio (B-41)")

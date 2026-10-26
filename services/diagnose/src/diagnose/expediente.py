@@ -400,7 +400,7 @@ class Precedente(BaseModel):
     def resumen(self) -> str:
         linea = f"{self.dia} · {self.componente} · {self.incidentes} incidente(s) de {self.clase}"
         if self.causa:
-            linea += f" — se anoto: {self.causa[:160]}"
+            linea += f" — L3 anoto, sin confirmar: {self.causa[:160]}"
         return linea
 
 
@@ -517,7 +517,11 @@ class Expediente(BaseModel):
                 linea += f", el ultimo el {h.ultima_vez:%Y-%m-%d %H:%M}Z"
             partes = [linea]
             for causa in h.causas_anteriores[:MAX_HISTORIA]:
-                partes.append(f"  causa anotada antes: {causa}")
+                # Hoy toda causa guardada la escribio L3: ninguna persona anota
+                # causas. Dicho asi para que nadie —ni un modelo— lea un
+                # diagnostico anterior como un hecho. El 26/10 L4 repitio una
+                # causa equivocada que L3 habia anotado con el defecto de D-145.
+                partes.append(f"  L3 anoto antes, sin confirmar: {causa}")
             bloques.append("HISTORIA\n" + "\n".join(partes))
 
         a = self.alcance
