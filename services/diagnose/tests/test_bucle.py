@@ -201,3 +201,47 @@ def test_un_enrich_que_falla_se_cuenta_pero_el_diagnostico_existe() -> None:
 
     assert len(resultados) == 1
     assert d.stats["fallidos"] == 1
+
+
+# --- El juez con modelo, en sombra -------------------------------------------
+
+
+class JuezQueRevienta:
+    nombre = "revienta"
+
+    def juzgar(self, expediente):
+        raise RuntimeError("la red se fue")
+
+
+def test_la_sombra_juzga_pero_el_aviso_lleva_el_veredicto_de_las_reglas(tmp_path) -> None:
+    """F4-03: el modelo no escribe en el movil de nadie hasta que el banco lo respalde."""
+    import json
+
+    enriquecidos: list[tuple[str, dict]] = []
+    reglas = JuezQuieto(Veredicto(root_cause="dijo la regla", confidence="media"))
+    modelo = JuezQuieto(Veredicto(root_cause="dijo el modelo", confidence="alta", origen="modelo:x"))
+    ruta = tmp_path / "sombra.jsonl"
+    d = Diagnosticador(
+        Settings(alertbus_url="http://bus", sombra_path=str(ruta)),
+        almacen=None, juez=reglas, sombra=modelo, cliente=_bus([_inc()], enriquecidos),
+    )
+    d.ciclo()
+
+    assert enriquecidos[0][1]["root_cause"] == "dijo la regla"
+    assert modelo.veces == 1
+    fila = json.loads(ruta.read_text(encoding="utf-8").splitlines()[0])
+    assert fila["reglas"]["root_cause"] == "dijo la regla"
+    assert fila["modelo"]["root_cause"] == "dijo el modelo"
+
+
+def test_una_sombra_que_revienta_no_le_cuesta_nada_al_diagnostico() -> None:
+    enriquecidos: list[tuple[str, dict]] = []
+    d = Diagnosticador(
+        Settings(alertbus_url="http://bus"),
+        almacen=None, juez=JuezQuieto(), sombra=JuezQueRevienta(), cliente=_bus([_inc()], enriquecidos),
+    )
+    resultados = d.ciclo()
+
+    assert len(resultados) == 1
+    assert enriquecidos and enriquecidos[0][1]["root_cause"] == "porque si"
+    assert d.stats["sombra_fallidos"] == 1

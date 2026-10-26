@@ -29,14 +29,14 @@ from .almacen import Almacen, ErrorDeAlmacen
 from .expediente import (
     Alcance,
     Arbol,
-    Concurrente,
     Cambios,
+    Concurrente,
     Contraparte,
     Emision,
-    Instancia,
-    Plataforma,
     Expediente,
     Historia,
+    Instancia,
+    Plataforma,
     arbol_desde_filas,
 )
 

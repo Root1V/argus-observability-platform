@@ -7155,3 +7155,88 @@ Y dos precisiones que el propio trabajo obligó a hacer:
 - `recapturar` rehace el expediente de un caso **a fecha del incidente** sin
   tocar su etiqueta. La verdad de un caso no cambia porque el expediente sepa
   más; lo que cambia es lo que el juez puede ver.
+
+---
+
+## D-137 · El juez con modelo: `synaptum.generate`, en sombra, esperando una credencial
+
+**Estado**: ✅ Construido y desplegado · ⏳ sin modelo hasta que Prometheus dé un cliente (A-52)
+
+**Decisión**. El juez con modelo es `JuezConModelo`, detrás de la misma interfaz
+`Juez` que el de reglas, construido con **`synaptum.generate`**: una petición que
+devuelve un objeto validado contra un esquema (`Dictamen`), y que si la salida no
+valida la vuelve a pedir enseñándole el error al modelo, con techo de tres turnos.
+Sin herramientas y sin bucle de agente. Es D-013 escrito con D-135.
+
+**En sombra**. Corre después de las reglas, se registra al lado en
+`sombra.jsonl` —una línea por juicio, con los dos veredictos— y **no toca el
+aviso**. Es lo que pedía `F4-03`, y la razón es la de siempre en este proyecto:
+un modelo que escribe en el móvil de una persona sin haber pasado el banco es
+justo el cambio que hemos aprendido a no hacer. Un fallo de la sombra (red,
+credencial, un modelo que no valida) no le cuesta nada al diagnóstico de las
+reglas: está dentro de un `try` y se cuenta aparte.
+
+**Por qué `generate` y no `Agent`**. Los dos están en synaptum. `Agent` es el
+bucle con herramientas, que es lo que necesitará L4. `generate` es la llamada
+suelta con diario y validación. Usar `Agent` aquí sería pagar orquestación por
+algo que es una petición, que es exactamente lo que D-013 dijo que no.
+
+**Lo que no se le confía al modelo**. Todo lo que se puede comprobar con código
+se comprueba con código:
+
+- La confianza tiene que ser `alta`, `media` o `baja`; cualquier otra cosa es
+  `baja`.
+- Una causa vacía es una abstención, y una abstención no puede ser `alta`.
+- La evidencia se acota a cinco hechos y se le quita el volcado de filas. El
+  prompt lo pide; esto lo garantiza.
+- Una salida que nunca valida acaba en abstención con un `NO DISPONIBLE` en la
+  evidencia, no en una excepción.
+
+**El expediente es dato.** Trae texto escrito por aplicaciones ajenas, y va
+entre delimitadores y etiquetado como datos. No es una defensa completa contra
+inyección —`F4-06` existe para probarla en serio—, pero es la parte que cuesta
+una línea.
+
+**Temperatura cero.** El banco tiene que poder repetir una medida y obtener la
+misma cifra. El `run_id` es un hash del modelo, la versión de las instrucciones
+y la petición: el mismo expediente es el mismo run, y con un checkpointer no se
+paga dos veces.
+
+### Lo que falta: una credencial, y no la creo yo
+
+La inferencia local pasa por Axonium, y Axonium pide un cliente OAuth
+`client_credentials` del gateway de Prometheus. **Argus no tiene ninguno**, y
+registrar uno es una acción sobre la plataforma de otro equipo: va como petición
+(`A-52`), con el volumen medido —media de 36 incidentes al día, pico de 124, techo
+de 3 cada 10 s, ~1.700 tokens de entrada— y la pregunta de qué modelo recomiendan.
+La credencial la pone el dueño en `.env`; el servicio no la ve en ningún otro sitio.
+
+Mientras tanto, desplegado y comprobado: el juez en sombra **no arranca sin
+credencial y lo dice** (`sombra.sin_credencial`), las reglas siguen diagnosticando,
+y desde dentro del contenedor el gateway de Prometheus responde en
+`host.docker.internal:8020`. Ese último detalle no es menor: el valor por defecto
+de Axonium es `127.0.0.1:8020`, que dentro del contenedor es el contenedor.
+
+### Dos consecuencias
+
+- **El espacio de trabajo pasa a Python ≥ 3.13.** uv toma la intersección de los
+  miembros, y synaptum lo exige. Las librerías que instalan las aplicaciones
+  siguen declarando 3.11 en sus propias ruedas, así que a ellas no les cambia
+  nada; lo que cambia es con qué se prueban aquí.
+- **El modelo ha leído las lecciones de los casos de diseño.** Las instrucciones
+  dicen «un código HTTP es una respuesta» y «si calla toda la plataforma no es el
+  servicio», que salieron de esos casos. Así que, igual que con las reglas, **la
+  cifra del modelo que vale es la de los no vistos**.
+
+### Añadido el mismo día · dos «ruff limpio» que no lo eran
+
+Los mensajes de `2c0e5c4` (D-134) y `15773d9` (D-136) dicen *«ruff limpio»*. **No
+lo estaban**: 1 y 3 errores, de estilo —orden de imports y una variable sin usar—,
+ninguno de comportamiento. La comprobación era `ruff check . | tail -4 && echo
+RUFF-OK`, y en una tubería el código de salida es el de `tail`: imprimía OK
+pasara lo que pasara. La misma salida que lo decía traía, tres líneas más
+arriba, `Found 3 errors.`
+
+Es la familia de «verificado era verificado en el árbol» (D-124), un escalón más
+abajo: aquí ni siquiera el árbol. Desde este commit la comprobación lee el
+código de salida (`set -o pipefail`), y los tres errores están corregidos.

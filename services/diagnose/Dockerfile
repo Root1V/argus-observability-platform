@@ -16,7 +16,11 @@ COPY services/diagnose/ ./services/diagnose/
 
 RUN uv sync --frozen --no-dev --package diagnose
 
-RUN useradd --create-home --uid 10001 argus
+RUN useradd --create-home --uid 10001 argus \
+    # El volumen de la sombra se monta aqui. Un volumen nombrado hereda el
+    # dueño del directorio de la imagen la primera vez; sin esto seria de root
+    # y el proceso, que corre como `argus`, no podria escribir su registro.
+    && mkdir -p /var/lib/argus && chown argus /var/lib/argus
 USER argus
 
 CMD ["/app/.venv/bin/python", "-m", "diagnose"]

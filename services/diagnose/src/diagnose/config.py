@@ -41,5 +41,18 @@ class Settings(BaseSettings):
     # aqui y el juez de reglas sigue disponible para comparar.
     juez: str = "reglas"
 
+    # --- El juez con modelo, en sombra (D-135, F4-03) ------------------------
+    # `modelo` para encenderlo. Juzga cada expediente DESPUES de las reglas y
+    # se registra al lado; el aviso sigue llevando el veredicto de las reglas
+    # hasta que el banco de F3-08 diga lo contrario. La credencial no va aqui:
+    # `AxoniumModel` lee `AXONIUM_CLIENT_ID` / `AXONIUM_CLIENT_SECRET` del
+    # entorno, y sin ella el juez en sombra no arranca y lo dice.
+    juez_sombra: str = ""
+    modelo: str = "gpt-oss-20b-mxfp4"
+    # Donde se guarda cada pareja reglas/modelo, una linea JSON por juicio.
+    # Es lo que permite comparar los dos sobre incidentes REALES y no solo
+    # sobre el banco. Vacio = solo al log.
+    sombra_path: str = ""
+
     def timeout_s(self) -> float:
         return 10.0
