@@ -121,3 +121,33 @@ def test_ningun_caso_lleva_el_volcado_de_una_fila(caso: Caso) -> None:
     texto = caso.model_dump_json()
     for marca in ("Failing row contains", "[parameters:", "[SQL:"):
         assert marca not in texto, f"{caso.id} lleva `{marca}`"
+
+
+def test_media_causa_es_parcial_y_no_falla() -> None:
+    """«host o ingesta» sin «todos a la vez» salia `falla`, por debajo de no decir nada (D-139)."""
+    caso = _caso(
+        causa=[Criterio(hecho="todos a la vez", alguna_de=["a la vez"]), Criterio(hecho="host", alguna_de=["host"])],
+        sintoma=[Criterio(hecho="el canario calla", alguna_de=["canario"])],
+    )
+    assert calificar(caso, Veredicto(root_cause="host o ingesta", confidence="media")).resultado == "parcial"
+
+
+def test_repetir_casi_toda_la_firma_con_otro_prefijo_tambien_es_eco() -> None:
+    """Las reglas «acertaban» aeon citando la firma sin su `TypeError: ` (D-139)."""
+    caso = _caso(
+        incidente={"signature": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'", "title": "t"},
+        causa=[Criterio(hecho="por nombre", alguna_de=["keyword"])],
+    )
+    v = Veredicto(root_cause="`TypeError` en aeon-worker: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'")
+    assert calificar(caso, v).resultado != "acierta"
+
+
+def test_citar_una_parte_de_la_firma_si_cuenta() -> None:
+    """Sacar la excepcion original de dentro del PendingRollbackError ES el diagnostico."""
+    firma = ("PendingRollbackError: This Session's transaction has been rolled back due to a previous exception "
+             "during flush. To begin a new transaction with this Session, first issue Session.rollback(). "
+             "Original exception was: null value in column \"tenant\" violates not-null constraint")
+    caso = _caso(incidente={"signature": firma, "title": "t"},
+                 causa=[Criterio(hecho="tenant", alguna_de=["tenant"])])
+    v = Veredicto(root_cause="La causa es la excepcion original: null value in column \"tenant\" violates not-null constraint")
+    assert calificar(caso, v).resultado == "acierta"

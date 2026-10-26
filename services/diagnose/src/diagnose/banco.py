@@ -24,7 +24,7 @@ obvio:
 | | |
 |---|---|
 | `acierta`     | afirma la causa |
-| `parcial`     | nombra el sintoma pero no la causa |
+| `parcial`     | nombra el sintoma, o solo parte de la causa |
 | `se_abstiene` | no propone causa (`root_cause` vacio) |
 | `falla`       | afirma algo que la causa real desmiente, o una causa que no es ni sintoma ni causa |
 
@@ -32,11 +32,13 @@ obvio:
 nadie va a mirar donde no es. Y lo peor de todo es `falla` con confianza
 `alta`, que es lo que este banco existe para que no pase sin verse.
 
-La calificacion es por palabras clave, y eso tiene un limite que hay que decir:
-funciona con el juez de reglas porque sus textos son plantillas, y sera fragil
-con un modelo, que dira lo mismo con otras palabras. Cuando entre el modelo,
-hara falta un calificador que entienda paráfrasis — y ese calificador habra que
-medirlo contra estas mismas etiquetas.
+La calificacion es en dos pasos: decidir criterio a criterio si el texto lo
+afirma, y componer esas decisiones (`componer`). El primer paso es por palabras
+clave salvo que se pase otro calificador, y las palabras clave tienen un limite
+que hay que decir: funcionan con el juez de reglas porque sus textos son
+plantillas, y fallan con un modelo, que dice lo mismo con otras palabras. El
+calificador que entiende paráfrasis, y el corpus contra el que se le mide antes
+de creerle, estan en `calificador.py` (B-41).
 """
 
 from __future__ import annotations
@@ -127,40 +129,83 @@ def _lo_que_anade(texto: str, caso: Caso) -> str:
     encontraba «GenAISpan.set», «previous exception» y «tenant» dentro de la
     cita. Uno de esos dos veredictos terminaba diciendo que la causa era
     `PendingRollbackError`, que es exactamente el sintoma (D-134).
+
+    Y no solo la cita exacta: tambien la que repite casi toda la firma con
+    otro prefijo (D-139). Las reglas «acertaban» `aeon` diciendo
+    «GenAISpan.set() got an unexpected keyword argument 'argus.run.id'» — la
+    firma sin su `TypeError: `. Citar una PARTE de la firma si cuenta, y es a
+    proposito: separar la excepcion original del `PendingRollbackError` que la
+    envuelve es exactamente el diagnostico que ese caso pide.
     """
     for cita in (caso.incidente.get("signature"), caso.incidente.get("title")):
-        if cita and len(cita) > 3:
-            texto = texto.replace(str(cita), "«…»")
+        if not cita or len(cita) <= 3:
+            continue
+        cita = str(cita)
+        texto = texto.replace(cita, "«…»")
+        texto = _sin_casi_toda(texto, cita)
     return texto
 
 
-def calificar(caso: Caso, veredicto: Veredicto) -> Calificacion:
-    """Un veredicto contra la etiqueta de un caso."""
-    base = {
-        "caso": caso.id,
-        "confianza": veredicto.confidence,
-        "origen": veredicto.origen,
-        "diseno": caso.usado_para_disenar,
-        "causa_dicha": veredicto.root_cause,
-    }
-    texto = _lo_que_anade(veredicto.root_cause or "", caso)
+def _sin_casi_toda(texto: str, cita: str, *, cobertura: float = 0.8) -> str:
+    """Quita el tramo de `texto` que repite al menos el 80 % de `cita` seguido."""
+    from difflib import SequenceMatcher
 
-    prohibidos = [c.hecho for c in caso.prohibido if c.se_cumple(texto)]
+    m = SequenceMatcher(None, texto, cita, autojunk=False).find_longest_match(0, len(texto), 0, len(cita))
+    if m.size >= 20 and m.size >= cobertura * len(cita):
+        return texto[: m.a] + "«…»" + texto[m.a + m.size :]
+    return texto
+
+
+def componer(caso: Caso, root_cause: str | None, afirma: dict[str, bool]) -> tuple[Resultado, list[str], list[str]]:
+    """Las decisiones criterio a criterio → un resultado, lo que falta y lo prohibido.
+
+    Separado de DECIDIR si un texto afirma algo (B-41), porque son dos
+    preguntas: la de como se dice algo y la de cuanto vale lo dicho. Esta es
+    la segunda, y es la misma para cualquier calificador.
+
+    Media causa es `parcial`, no `falla`. Hasta B-41 `parcial` exigia el
+    sintoma entero, y un «el problema es del host o de la ingesta» sin decir
+    «todos los servicios a la vez» salia `falla` — por debajo de no decir nada,
+    para la mitad correcta de la respuesta (D-139).
+    """
+    prohibidos = [c.hecho for c in caso.prohibido if afirma.get(c.hecho)]
     if prohibidos:
-        return Calificacion(resultado="falla", prohibidos=prohibidos, **base)
-
-    if not veredicto.root_cause:
-        return Calificacion(resultado="se_abstiene", **base)
-
-    faltan_causa = [c.hecho for c in caso.causa if not c.se_cumple(texto)]
+        return "falla", [], prohibidos
+    if not root_cause:
+        return "se_abstiene", [], []
+    faltan_causa = [c.hecho for c in caso.causa if not afirma.get(c.hecho)]
     if caso.causa and not faltan_causa:
-        return Calificacion(resultado="acierta", **base)
+        return "acierta", [], []
+    media_causa = len(faltan_causa) < len(caso.causa)
+    sintoma_entero = bool(caso.sintoma) and all(afirma.get(c.hecho) for c in caso.sintoma)
+    if media_causa or sintoma_entero:
+        return "parcial", faltan_causa, []
+    faltan_sintoma = [c.hecho for c in caso.sintoma if not afirma.get(c.hecho)]
+    return "falla", faltan_causa + faltan_sintoma, []
 
-    faltan_sintoma = [c.hecho for c in caso.sintoma if not c.se_cumple(texto)]
-    if caso.sintoma and not faltan_sintoma:
-        return Calificacion(resultado="parcial", faltan=faltan_causa, **base)
 
-    return Calificacion(resultado="falla", faltan=faltan_causa + faltan_sintoma, **base)
+def calificar(caso: Caso, veredicto: Veredicto, calificador=None) -> Calificacion:
+    """Un veredicto contra la etiqueta de un caso.
+
+    `calificador` decide si el texto afirma cada criterio (`calificador.py`).
+    Sin el, palabras clave.
+    """
+    texto = _lo_que_anade(veredicto.root_cause or "", caso)
+    afirma = {
+        c.hecho: (calificador.afirma(texto, c) if calificador else c.se_cumple(texto)) if veredicto.root_cause else False
+        for c in (*caso.causa, *caso.sintoma, *caso.prohibido)
+    }
+    resultado, faltan, prohibidos = componer(caso, veredicto.root_cause, afirma)
+    return Calificacion(
+        caso=caso.id,
+        resultado=resultado,
+        confianza=veredicto.confidence,
+        origen=veredicto.origen,
+        diseno=caso.usado_para_disenar,
+        faltan=faltan,
+        prohibidos=prohibidos,
+        causa_dicha=veredicto.root_cause,
+    )
 
 
 def cargar(directorio: Path = DIRECTORIO) -> list[Caso]:
@@ -170,8 +215,8 @@ def cargar(directorio: Path = DIRECTORIO) -> list[Caso]:
     ]
 
 
-def evaluar(juez: Juez, casos: list[Caso]) -> list[Calificacion]:
-    return [calificar(c, juez.juzgar(c.expediente)) for c in casos]
+def evaluar(juez: Juez, casos: list[Caso], calificador=None) -> list[Calificacion]:
+    return [calificar(c, juez.juzgar(c.expediente), calificador) for c in casos]
 
 
 def resumen(calificaciones: list[Calificacion]) -> dict[str, dict[str, int]]:
@@ -260,11 +305,23 @@ def capturar(incidente: dict, *, almacen, registro: list[dict], historico: list[
     La recurrencia en trazas ya se cuenta hasta el incidente y no hasta hoy:
     lo hace `recolectar` con su `hasta`.
     """
+    from .expediente import VENTANA_HERMANOS_S
     from .recoleccion import _fecha, recolectar
 
     limpio = {k: v for k, v in incidente.items() if k not in CAMPOS_DE_L3}
     abierto = str(incidente.get("opened_at") or "")
     anterior = [d for d in historico if str(d.get("opened_at") or "") < abierto]
+    # Los hermanos de B-40 pueden abrir en el mismo segundo o poco DESPUES, y
+    # en el momento del diagnostico ya estaban: se incluyen los de la ventana,
+    # sin lo que L3 les escribio despues.
+    inicio = _fecha(incidente.get("opened_at"))
+    if inicio is not None:
+        for d in historico:
+            cuando = _fecha(d.get("opened_at"))
+            if (cuando is not None and str(d.get("opened_at") or "") >= abierto
+                    and (cuando - inicio).total_seconds() <= VENTANA_HERMANOS_S
+                    and d.get("component") != incidente.get("component")):
+                anterior.append({k: v for k, v in d.items() if k not in CAMPOS_DE_L3})
     # «Ahora», para un incidente capturado, es su ultima señal. Con el reloj de
     # hoy, el primer borrador del caso de aeon decia «16 señales en 2.181.680 s»
     # —25 dias— para un fallo que duro minutos.
@@ -288,8 +345,11 @@ def _main(argv: list[str] | None = None) -> int:
     cap.add_argument("--caso", required=True, help="id del caso, p. ej. veritium-tenant")
     cap.add_argument("--bus", default="http://127.0.0.1:8080")
     ev = sub.add_parser("evaluar", help="pasa un juez sobre el banco")
-    ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo"))
-    ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "gpt-oss-20b-mxfp4"))
+    ev.add_argument("--juez", default="reglas", choices=("reglas", "modelo", "reglas+modelo"))
+    ev.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "qwen3-30b-a3b-q4-k-m-local"))
+    ev.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
+    ev.add_argument("--calificador", default="palabras", choices=("palabras", "modelo"),
+                    help="quien decide si el veredicto afirma cada criterio (B-41)")
     rec = sub.add_parser("recapturar", help="rehace el expediente de un caso sin tocar su etiqueta")
     rec.add_argument("caso")
     rec.add_argument("--bus", default="http://127.0.0.1:8080")
@@ -297,16 +357,23 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.orden == "evaluar":
         casos = cargar()
-        if args.juez == "modelo":
-            if not os.environ.get("AXONIUM_CLIENT_ID"):
-                print("el juez con modelo necesita AXONIUM_CLIENT_ID y AXONIUM_CLIENT_SECRET en el entorno")
-                return 2
+        if ("modelo" in args.juez or args.calificador == "modelo") and not os.environ.get("AXONIUM_CLIENT_ID"):
+            print("el modelo necesita AXONIUM_CLIENT_ID y AXONIUM_CLIENT_SECRET en el entorno")
+            return 2
+        if args.juez in ("modelo", "reglas+modelo"):
             from .juez_modelo import JuezConModelo, gateway_axonium
 
-            juez = JuezConModelo(gateway_axonium, modelo=args.modelo)
+            juez = JuezConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento,
+                                 completa_a=JuezDeReglas() if args.juez == "reglas+modelo" else None)
         else:
             juez = JuezDeReglas()
-        print(informe(evaluar(juez, casos), casos))
+        calificador = None
+        if args.calificador == "modelo":
+            from .calificador import ConModelo
+            from .juez_modelo import gateway_axonium
+
+            calificador = ConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento)
+        print(informe(evaluar(juez, casos, calificador), casos))
         return 0
 
     historico = httpx.get(f"{args.bus}/incidents/history?dias=30", timeout=30).json()

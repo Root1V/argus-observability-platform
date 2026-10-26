@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 
 from .almacen import Almacen, ErrorDeAlmacen
 from .expediente import (
+    MAX_MEMORIA,
+    VENTANA_HERMANOS_S,
     Alcance,
     Arbol,
     Cambios,
@@ -34,9 +36,12 @@ from .expediente import (
     Contraparte,
     Emision,
     Expediente,
+    Hermano,
     Historia,
     Instancia,
+    LineaBase,
     Plataforma,
+    Precedente,
     arbol_desde_filas,
 )
 
@@ -118,6 +123,8 @@ def recolectar(
         exp.lagunas.append("historia: no pude leer el historico de incidentes")
     else:
         exp.historia = _historia(exp, historico)
+        exp.hermanos = _hermanos(exp, historico, abierto)
+        exp.memoria = _memoria(exp, historico, abierto)
 
     if almacen is None:
         exp.lagunas.append("trazas: sin almacen de telemetria configurado")
@@ -333,11 +340,111 @@ def _historia(exp: Expediente, historico: list[dict[str, Any]]) -> Historia:
     # tres.
     vistas: set[str] = set()
     for d in sorted(propios, key=lambda d: str(d.get("opened_at") or ""), reverse=True):
-        causa = d.get("root_cause")
+        causa = causa_original(d.get("root_cause"))
         if causa and causa not in vistas and d.get("id") != exp.incidente_id:
-            vistas.add(str(causa))
-            h.causas_anteriores.append(str(causa))
+            vistas.add(causa)
+            h.causas_anteriores.append(causa)
     return h
+
+
+def causa_original(causa: Any) -> str | None:
+    """La causa anotada, sin los «Ya paso: … se anoto «…»» que la envuelven.
+
+    La regla `_ya_paso_y_alguien_anoto_la_causa` cita la causa del incidente
+    anterior, y si ESA tambien era un «Ya paso», la cita se anida: el 26/10 el
+    `ReadTimeout` del gateway llevaba tres niveles de «Ya paso» antes de llegar
+    a lo que de verdad se diagnostico. Se desenvuelve hasta la original.
+    """
+    if not causa:
+        return None
+    texto = str(causa)
+    while texto.startswith(PREFIJO_YA_PASO) and "«" in texto and "»" in texto:
+        texto = texto[texto.index("«") + 1 : texto.rindex("»")]
+    return texto or None
+
+
+PREFIJO_YA_PASO = "Ya paso:"
+
+
+# Clases que no dicen nada por si solas: tres componentes con `error` a la vez
+# no comparten una causa, comparten un SDK que no supo nombrar la excepcion.
+CLASES_SIN_NOMBRE = {"", "error", "exception"}
+
+
+def _hermanos(exp: Expediente, historico: list[dict[str, Any]], abierto: datetime) -> list[Hermano]:
+    """Otros componentes de esta app que abrieron la misma clase a la vez (B-40).
+
+    Misma clase por el ultimo segmento: `redis.exceptions.TimeoutError` y
+    `TimeoutError` son la misma (B-33). Uno por componente, el mas cercano.
+    """
+    from .juicio import _clase_de, _ultimo_segmento
+
+    clase = _ultimo_segmento(_clase_de(exp.firma))
+    if clase.lower() in CLASES_SIN_NOMBRE:
+        return []
+    cercanos: dict[str, Hermano] = {}
+    for d in historico:
+        componente = str(d.get("component") or "")
+        if d.get("app") != exp.app or not componente or componente == exp.componente:
+            continue
+        if _ultimo_segmento(_clase_de(str(d.get("signature") or ""))) != clase:
+            continue
+        cuando = _fecha(d.get("opened_at"))
+        if cuando is None:
+            continue
+        segundos = (cuando - abierto).total_seconds()
+        if abs(segundos) > VENTANA_HERMANOS_S:
+            continue
+        previo = cercanos.get(componente)
+        if previo is None or abs(segundos) < abs(previo.segundos):
+            cercanos[componente] = Hermano(componente=componente, firma=str(d.get("signature") or ""), segundos=segundos)
+    return sorted(cercanos.values(), key=lambda h: (abs(h.segundos), h.componente))
+
+
+def _memoria(exp: Expediente, historico: list[dict[str, Any]], abierto: datetime) -> list[Precedente]:
+    """Los episodios anteriores de esta clase en esta app, los que tienen causa primero (F3-06).
+
+    Lo que B-32 pedia antes de poder hacer memoria: agrupar. Sobre el historico
+    del 26/10, 853 incidentes son 151 clases y 203 episodios. Sin agrupar, un
+    «top 3 de parecidos» habrian sido tres copias del mismo `NOT NULL`.
+
+    Solo lo abierto ANTES de este incidente: la memoria es lo que se sabia.
+    Busqueda por clase, no por parecido de texto: eso es F3-05, con vectores.
+    """
+    from .juicio import _clase_de, _ultimo_segmento
+
+    clase = _ultimo_segmento(_clase_de(exp.firma))
+    if clase.lower() in CLASES_SIN_NOMBRE:
+        return []
+    episodios: dict[tuple[str, str], dict[str, Any]] = {}
+    for d in historico:
+        if d.get("app") != exp.app or str(d.get("id") or "") == exp.incidente_id:
+            continue
+        if _ultimo_segmento(_clase_de(str(d.get("signature") or ""))) != clase:
+            continue
+        cuando = _fecha(d.get("opened_at"))
+        if cuando is None or cuando >= abierto:
+            continue
+        clave = (str(d.get("component") or ""), f"{cuando:%Y-%m-%d}")
+        e = episodios.setdefault(clave, {"n": 0, "causa": None, "cuando_causa": None, "abiertos": 0})
+        e["n"] += 1
+        if d.get("state") != "resolved":
+            e["abiertos"] += 1
+        if (causa := causa_original(d.get("root_cause"))) and (e["cuando_causa"] is None or cuando > e["cuando_causa"]):
+            e["causa"], e["cuando_causa"] = causa, cuando
+    precedentes = [
+        Precedente(componente=c, clase=clase, dia=dia, incidentes=e["n"], causa=e["causa"], resuelto=not e["abiertos"])
+        for (c, dia), e in episodios.items()
+    ]
+    # Con causa primero —es lo que alguien puede usar—, y dentro de eso lo
+    # mas reciente y el mismo componente antes que sus vecinos.
+    precedentes.sort(key=lambda p: (p.causa is None, p.componente != exp.componente, _invertir(p.dia)))
+    return precedentes[:MAX_MEMORIA]
+
+
+def _invertir(dia: str) -> str:
+    """Para ordenar fechas `AAAA-MM-DD` de la mas reciente a la mas antigua."""
+    return "".join(chr(ord("9") - ord(ch) + ord("0")) if ch.isdigit() else ch for ch in dia)
 
 
 def _alcance(filas: list[dict[str, Any]], *, ventana_min: int) -> Alcance:
@@ -411,7 +518,7 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         return c
 
     try:
-        filas = almacen.contraparte(ruta=ruta, momento=llamada.momento)
+        filas = almacen.contraparte(ruta=ruta, momento=llamada.momento, excluir=llamada.servicio or "")
     except ErrorDeAlmacen as exc:
         lagunas.append(f"contraparte: {exc}")
         return c
@@ -433,6 +540,8 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         acaba = empieza + timedelta(milliseconds=float(fila.get("Duration") or 0) / 1e6)
         if acaba < inicio or empieza > fin:
             continue
+        if llamada.servicio and fila.get("servicio") == llamada.servicio:
+            continue  # el que llama no es su propia contraparte (D-145)
         c.encontrada = True
         c.servicio = str(fila.get("servicio") or "")
         c.codigo = str(fila.get("codigo") or "") or None
@@ -440,4 +549,46 @@ def _contraparte(arbol: Arbol, almacen: Almacen, lagunas: list[str]) -> Contrapa
         c.ms = float(fila.get("Duration") or 0) / 1e6
         c.discrepa = llamada.error and c.estado != "Error"
         break
+    # La linea base mide cuanto tarda el destino contra el plazo de quien
+    # llama, y eso solo tiene sentido si quien llama SE RINDIO esperando: con un
+    # 4xx o un `ConnectError`, la «espera» fueron 2 ms y salia «el 98,5% tarda
+    # mas de 0,0 s» (D-145).
+    if c.encontrada and c.servicio and "timeout" in f"{llamada.clase or ''} {llamada.excepcion or ''}".lower():
+        c.linea_base = _linea_base(almacen, servicio=c.servicio, ruta=ruta, hasta=inicio, plazo_ms=llamada.ms,
+                                   lagunas=lagunas)
     return c
+
+
+# Por debajo de esto la linea base no dice nada: veinte peticiones estimadas
+# son dos guardadas si todas fueron rapidas.
+MIN_LINEA_BASE = 20
+
+
+def _linea_base(almacen: Almacen, *, servicio: str, ruta: str, hasta: datetime, plazo_ms: float,
+                lagunas: list[str]) -> LineaBase | None:
+    try:
+        filas = almacen.linea_base(servicio=servicio, ruta=ruta, hasta=hasta, plazo_ms=plazo_ms)
+    except ErrorDeAlmacen as exc:
+        lagunas.append(f"linea base: {exc}")
+        return None
+    f = filas[0] if filas else {}
+    lb = LineaBase(
+        guardadas=int(f.get("guardadas") or 0),
+        estimadas=int(f.get("estimadas") or 0),
+        p50_ms=_numero(f.get("p50_ms")),
+        p95_ms=_numero(f.get("p95_ms")),
+        plazo_ms=plazo_ms,
+        sobre_plazo=int(f.get("sobre_plazo") or 0),
+    )
+    if lb.estimadas < MIN_LINEA_BASE:
+        lagunas.append(f"linea base: solo ~{lb.estimadas} peticiones de {servicio} en esa ruta en {lb.dias} dias")
+        return None
+    return lb
+
+
+def _numero(valor: Any) -> float | None:
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return n if n == n else None  # NaN: ClickHouse devuelve nan para un cuantil sin filas

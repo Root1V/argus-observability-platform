@@ -20,8 +20,10 @@ from diagnose.expediente import (
     Contraparte,
     Emision,
     Expediente,
+    Hermano,
     Historia,
     Instancia,
+    LineaBase,
     Plataforma,
     Span,
 )
@@ -499,3 +501,98 @@ def test_una_plataforma_despierta_no_dispara_la_regla_de_las_rafagas() -> None:
     exp = _exp(firma="canary-silencio", tipo_senal="burn_rate",
                plataforma=Plataforma(consultada=True, minutos_con_datos=58))
     assert "No es" not in (JuezDeReglas().juzgar(exp).root_cause or "")
+
+
+# --- B-40 ---------------------------------------------------------------------
+
+
+def _hermanos(*componentes: str) -> list[Hermano]:
+    return [Hermano(componente=c, firma="redis.exceptions.TimeoutError", segundos=i) for i, c in enumerate(componentes)]
+
+
+def test_tres_componentes_con_el_mismo_fallo_a_la_vez_son_una_causa_compartida() -> None:
+    exp = _exp(app="centinela", componente="centinela-notifier", firma="redis.exceptions.TimeoutError",
+               hermanos=_hermanos("centinela-celery", "centinela-camera-manager"))
+
+    v = JuezDeReglas().juzgar(exp)
+    assert v.confidence == "media"
+    assert "3 componentes de centinela" in v.root_cause
+    assert "Redis/Valkey" in v.root_cause
+    assert any("a la vez en centinela" in e for e in v.evidence)
+
+
+def test_un_solo_hermano_no_basta_para_dejar_de_mirar_el_componente() -> None:
+    exp = _exp(app="centinela", componente="centinela-notifier", firma="redis.exceptions.TimeoutError",
+               hermanos=_hermanos("centinela-celery"))
+
+    v = JuezDeReglas().juzgar(exp)
+    assert v.root_cause is None or "componentes de centinela" not in v.root_cause
+
+
+# --- B-35 ---------------------------------------------------------------------
+
+
+def _lento(linea_base: LineaBase | None) -> Expediente:
+    """El ReadTimeout del gateway contra /v1/backends: 75 s esperando, 81 s tardo manager-api."""
+    arbol = Arbol(trace_id="t", spans=[Span(span_id="s", nombre="GET", servicio="gateway", tipo="Client",
+                                            ms=75_236.0, error=True, clase="httpx.ReadTimeout",
+                                            ruta="http://127.0.0.1:8091/v1/backends")])
+    contraparte = Contraparte(llamada="GET (ReadTimeout)", destino="http://127.0.0.1:8091/v1/backends",
+                              encontrada=True, servicio="manager-api", codigo="200", estado="Unset",
+                              ms=81_471.0, discrepa=True, linea_base=linea_base)
+    return _exp(firma="ReadTimeout", arbol=arbol, contraparte=contraparte)
+
+
+def test_un_plazo_metido_en_lo_normal_del_destino_no_es_una_anomalia() -> None:
+    lb = LineaBase(guardadas=7298, estimadas=7298, p50_ms=60_200, p95_ms=71_600, plazo_ms=75_236, sobre_plazo=190)
+    v = JuezDeReglas().juzgar(_lento(lb))
+
+    assert v.confidence == "alta"
+    assert "no es una anomalia" in v.root_cause
+    assert "p50 60.2 s" in v.root_cause
+
+
+def test_un_destino_que_casi_nunca_pasa_del_plazo_fue_una_excepcion() -> None:
+    lb = LineaBase(guardadas=500, estimadas=4000, p50_ms=900, p95_ms=2_500, plazo_ms=75_236, sobre_plazo=2)
+    v = JuezDeReglas().juzgar(_lento(lb))
+
+    assert "fue una excepcion" in v.root_cause
+
+
+def test_sin_linea_base_se_dicen_las_dos_posibilidades() -> None:
+    v = JuezDeReglas().juzgar(_lento(None))
+
+    assert "o un plazo de espera mas corto" in v.root_cause
+
+
+# --- D-145 ---------------------------------------------------------------------
+
+
+def _sin_conexion(contraparte: Contraparte | None = None) -> Expediente:
+    """El 503 del gateway del 26/10: tres `ConnectError` contra :8087."""
+    llamadas = [Span(span_id=f"c{i}", nombre="POST", servicio="gateway", tipo="Client", ms=2.0, error=True,
+                     clase="httpx.ConnectError", mensaje="All connection attempts failed",
+                     ruta="http://127.0.0.1:8087/v1/chat/completions", profundidad=2) for i in range(3)]
+    arbol = Arbol(trace_id="t", spans=[
+        Span(span_id="s", nombre="POST /v1/chat/completions", servicio="gateway", tipo="Server", ms=539.0,
+             error=True, clase="503"),
+        *llamadas,
+    ])
+    return _exp(firma="503", arbol=arbol, contraparte=contraparte)
+
+
+def test_nadie_escuchando_es_lo_que_se_diagnostica_y_no_lentitud() -> None:
+    v = JuezDeReglas().juzgar(_sin_conexion())
+
+    assert v.confidence == "alta"
+    assert "no pudo abrir conexion con http://127.0.0.1:8087" in v.root_cause
+    assert "3 intentos" in v.root_cause
+
+
+def test_con_un_connect_error_el_destino_no_pudo_tardar() -> None:
+    """Aunque el puente encuentre «otro lado», con ConnectError no es el destino tardando (D-145)."""
+    falsa = Contraparte(llamada="POST (ConnectError)", destino="http://127.0.0.1:8087/v1/chat/completions",
+                        encontrada=True, servicio="otro", codigo="503", estado="Error", ms=539.0, discrepa=False)
+    v = JuezDeReglas().juzgar(_sin_conexion(falsa))
+
+    assert "tardo" not in v.root_cause

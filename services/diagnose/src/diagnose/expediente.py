@@ -45,6 +45,12 @@ MAX_SPANS = 40
 MAX_HISTORIA = 5
 MAX_CONCURRENTES = 8
 MAX_MENSAJE = 400
+MAX_HERMANOS = 8
+# Cuanto pueden separarse dos aperturas para contar como «a la vez». Cinco
+# minutos y no uno: los procesos de una app no arrancan ni reintentan en el
+# mismo segundo, y el emisor sella la hora con su reloj (B-34).
+VENTANA_HERMANOS_S = 300
+MAX_MEMORIA = 3
 
 
 class Span(BaseModel):
@@ -204,6 +210,22 @@ class Alcance(BaseModel):
         return self.totales > 0 and self.fallidas >= self.totales
 
 
+class LineaBase(BaseModel):
+    """Lo normal del destino en esa ruta, en los dias anteriores (B-35). Estimado, ver `Almacen.linea_base`."""
+
+    dias: int = 7
+    guardadas: int = 0
+    estimadas: int = 0
+    p50_ms: float | None = None
+    p95_ms: float | None = None
+    plazo_ms: float = 0.0
+    sobre_plazo: int = 0
+
+    @property
+    def fraccion_sobre_plazo(self) -> float | None:
+        return self.sobre_plazo / self.estimadas if self.estimadas else None
+
+
 class Contraparte(BaseModel):
     """El otro lado de la llamada saliente que fallo.
 
@@ -231,6 +253,7 @@ class Contraparte(BaseModel):
     codigo: str | None = None        # su propio codigo de respuesta
     estado: str | None = None        # su propio StatusCode de span
     ms: float | None = None
+    linea_base: LineaBase | None = None
     # Discrepancia: el que llama lo cuenta como error y el que atiende no.
     # Es un hallazgo en si mismo y casi siempre el mismo: un 4xx es error para
     # el cliente —pidio mal— y NO lo es para el servidor, que hizo su trabajo
@@ -339,6 +362,48 @@ class Concurrente(BaseModel):
     aguas_arriba: bool = False
 
 
+class Hermano(BaseModel):
+    """Otro componente de la MISMA app que abrio incidente con la misma clase, a la vez (B-40).
+
+    `concurrentes` mira otros servicios en las trazas; esto mira INCIDENTES de
+    la propia app. Son preguntas distintas: cinco componentes de Centinela con
+    `redis.exceptions.TimeoutError` en el mismo segundo no son cinco fallos,
+    son uno visto cinco veces.
+    """
+
+    componente: str
+    firma: str
+    # Respecto a la apertura de este incidente; negativo si abrio antes.
+    segundos: float = 0.0
+
+
+class Precedente(BaseModel):
+    """Un EPISODIO anterior de la misma clase de fallo en la misma app (F3-06).
+
+    Episodio y no incidente, que es lo que B-32 pedia resolver: los 454
+    `NotNullViolationError` de `veritium-api` del 14/10 son UN precedente con
+    454 incidentes, no 454 precedentes. Se agrupa por componente y dia, y la
+    clase se normaliza al ultimo segmento de lo que hay antes de los dos
+    puntos, que es lo que funde las firmas-mensaje de antes de D-118.
+    """
+
+    componente: str
+    clase: str
+    dia: str
+    incidentes: int = 1
+    # La causa anotada mas reciente del episodio, la escribiera quien la
+    # escribiera. Puede ser de L3: «esto ya paso y entonces se dijo X» es
+    # memoria aunque X lo dijera una regla, y quien lo lea sabe de donde sale.
+    causa: str | None = None
+    resuelto: bool = True
+
+    def resumen(self) -> str:
+        linea = f"{self.dia} · {self.componente} · {self.incidentes} incidente(s) de {self.clase}"
+        if self.causa:
+            linea += f" — L3 anoto, sin confirmar: {self.causa[:160]}"
+        return linea
+
+
 class Expediente(BaseModel):
     """El contexto completo de un incidente, acotado y sin opinion."""
 
@@ -364,6 +429,8 @@ class Expediente(BaseModel):
     historia: Historia = Field(default_factory=Historia)
     alcance: Alcance = Field(default_factory=Alcance)
     concurrentes: list[Concurrente] = Field(default_factory=list)
+    hermanos: list[Hermano] = Field(default_factory=list)
+    memoria: list[Precedente] = Field(default_factory=list)
     aguas_arriba: list[str] = Field(default_factory=list)
     aguas_abajo: list[str] = Field(default_factory=list)
 
@@ -415,6 +482,16 @@ class Expediente(BaseModel):
                     f"  atendida : {c.servicio}, codigo {c.codigo or '?'}, estado de span {c.estado or '?'}"
                     + (f", {c.ms:.0f}ms" if c.ms is not None else ""),
                 ]
+                if (lb := c.linea_base) is not None and lb.estimadas and lb.p50_ms is not None:
+                    lineas.append(
+                        f"  normalmente: p50 {lb.p50_ms / 1000:.1f} s, p95 {(lb.p95_ms or 0) / 1000:.1f} s en "
+                        f"~{lb.estimadas} peticiones de los {lb.dias} dias anteriores ({lb.guardadas} guardadas;"
+                        " las rapidas se guardan al 10% y cuentan x10)"
+                    )
+                    lineas.append(
+                        f"  el {(lb.fraccion_sobre_plazo or 0) * 100:.1f}% tarda mas de lo que espero quien llama"
+                        f" ({lb.plazo_ms / 1000:.1f} s)"
+                    )
                 if c.discrepa:
                     lineas.append(
                         "  DISCREPAN : quien llama lo cuenta como error y quien atiende no."
@@ -440,7 +517,11 @@ class Expediente(BaseModel):
                 linea += f", el ultimo el {h.ultima_vez:%Y-%m-%d %H:%M}Z"
             partes = [linea]
             for causa in h.causas_anteriores[:MAX_HISTORIA]:
-                partes.append(f"  causa anotada antes: {causa}")
+                # Hoy toda causa guardada la escribio L3: ninguna persona anota
+                # causas. Dicho asi para que nadie —ni un modelo— lea un
+                # diagnostico anterior como un hecho. El 26/10 L4 repitio una
+                # causa equivocada que L3 habia anotado con el defecto de D-145.
+                partes.append(f"  L3 anoto antes, sin confirmar: {causa}")
             bloques.append("HISTORIA\n" + "\n".join(partes))
 
         a = self.alcance
@@ -494,6 +575,25 @@ class Expediente(BaseModel):
                 for c in self.concurrentes[:MAX_CONCURRENTES]
             ]
             bloques.append("OTROS SERVICIOS CON ERRORES EN LA MISMA VENTANA\n" + "\n".join(lineas))
+
+        if self.hermanos:
+            lineas = [
+                f"  {h.componente}: {h.firma[:120]}  ({round(h.segundos) or 0:+d} s)"
+                for h in self.hermanos[:MAX_HERMANOS]
+            ]
+            lejos = max(abs(h.segundos) for h in self.hermanos)
+            lineas.append(
+                f"  {len(self.hermanos) + 1} componentes de {self.app} con la misma clase en {lejos:.0f} s"
+            )
+            bloques.append(
+                f"OTROS COMPONENTES DE {self.app.upper()} CON LA MISMA CLASE A LA VEZ\n" + "\n".join(lineas)
+            )
+
+        if self.memoria:
+            bloques.append(
+                "VISTO ANTES (misma app y misma clase; un episodio = un componente en un dia)\n"
+                + "\n".join(f"  {p.resumen()}" for p in self.memoria[:MAX_MEMORIA])
+            )
 
         if self.aguas_arriba or self.aguas_abajo:
             bloques.append(

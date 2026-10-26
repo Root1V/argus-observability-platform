@@ -25,7 +25,8 @@ LLAMADA_DESDE = datetime(2026, 10, 25, 8, 2, 47, 796142, tzinfo=UTC)
 class AlmacenFalso:
     """Devuelve lo que se le diga y anota lo que se le pregunto."""
 
-    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None, emision=None, instancias=None, minutos=60) -> None:
+    def __init__(self, *, spans=None, alcance=None, concurrentes=None, contraparte=None, recurrencia=None, emision=None, instancias=None, minutos=60, linea_base=None) -> None:
+        self._linea_base = linea_base or []
         self._spans = spans if spans is not None else TRAZA_DEL_502
         self._recurrencia = recurrencia or []
         self._emision = emision or []
@@ -63,6 +64,10 @@ class AlmacenFalso:
     def instancias(self, **kw):
         self.preguntas.append(("instancias", kw))
         return self._instancias
+
+    def linea_base(self, **kw):
+        self.preguntas.append(("linea_base", kw))
+        return self._linea_base
 
     def minutos_con_datos(self, **kw):
         self.preguntas.append(("minutos_con_datos", kw))
@@ -443,3 +448,151 @@ def test_la_plataforma_se_mide_hasta_la_apertura_y_no_despues() -> None:
 
     assert dict(almacen.preguntas)["minutos_con_datos"]["hasta"] == datetime(2026, 10, 25, 8, 2, 47, 784727, tzinfo=UTC)
     assert exp.plataforma.a_rafagas
+
+
+# --- B-40: los hermanos ---------------------------------------------------------
+
+
+def _centinela(componente: str, segundos: float, firma: str = "redis.exceptions.TimeoutError") -> dict[str, Any]:
+    cuando = datetime.fromisoformat(ABIERTO) + timedelta(seconds=segundos)
+    return {"id": componente, "app": "centinela", "component": componente, "signature": firma,
+            "opened_at": cuando.isoformat(), "root_cause": "lo que escribio L3"}
+
+
+def test_los_componentes_de_la_misma_app_con_la_misma_clase_a_la_vez_son_hermanos() -> None:
+    """Centinela el 25/10: cuatro componentes, `redis.exceptions.TimeoutError`, el mismo segundo."""
+    historico = [
+        _centinela("centinela-camera-manager", 0),
+        _centinela("centinela-celery", 0),
+        _centinela("centinela-enrich-worker", 2),
+        _centinela("centinela-api", -1143),                                   # 19 min antes: no
+        _centinela("centinela-camera-manager", 1, firma="GET"),              # otra clase: no
+        {**_centinela("veritium-worker", 0), "app": "veritium"},             # otra app: no
+        _centinela("centinela-notifier", 30),                                # el propio componente: no
+    ]
+    exp = recolectar(_incidente(app="centinela", component="centinela-notifier",
+                                signature="TimeoutError", trace_ids=[]), historico=historico)
+
+    assert [h.componente for h in exp.hermanos] == [
+        "centinela-camera-manager", "centinela-celery", "centinela-enrich-worker",
+    ]
+    assert "4 componentes de centinela con la misma clase" in exp.texto()
+
+
+def test_una_clase_sin_nombre_no_hace_hermanos() -> None:
+    """Tres `error` a la vez comparten un SDK que no supo nombrar la excepcion, no una causa."""
+    historico = [_centinela("a", 0, firma="error"), _centinela("b", 0, firma="error")]
+    exp = recolectar(_incidente(app="centinela", component="c", signature="error", trace_ids=[]), historico=historico)
+
+    assert exp.hermanos == []
+
+
+# --- B-35: la linea base del destino ------------------------------------------
+
+
+def _con_timeout(clase: str = "httpx.ReadTimeout") -> list[dict[str, Any]]:
+    """La traza del 502 con la llamada saliente convertida en otra clase de fallo."""
+    import copy
+
+    spans = copy.deepcopy(TRAZA_DEL_502)
+    for fila in spans:
+        if fila["SpanKind"] == "Client":
+            fila["SpanAttributes"]["error.type"] = clase
+    return spans
+
+
+def test_la_linea_base_se_pide_al_que_atendio_hasta_la_hora_de_la_llamada() -> None:
+    """Lo normal se mide ANTES del incidente: despues no lo sabia nadie."""
+    alm = AlmacenFalso(
+        spans=_con_timeout(),
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="200")],
+        linea_base=[{"guardadas": 40, "estimadas": 220, "p50_ms": 80.0, "p95_ms": 150.0, "sobre_plazo": 3}],
+    )
+    exp = recolectar(_incidente(), almacen=alm)
+
+    kw = next(kw for q, kw in alm.preguntas if q == "linea_base")
+    assert kw["servicio"] == "auth-service" and kw["ruta"] == "/oauth2/token"
+    assert kw["hasta"] == LLAMADA_DESDE
+    assert exp.contraparte.linea_base.p50_ms == 80.0
+    assert "normalmente: p50 0.1 s" in exp.texto()
+
+
+def test_sin_timeout_no_hay_linea_base_que_pedir() -> None:
+    """Con un 400 o un ConnectError la «espera» fueron milisegundos: salia «el 98,5% tarda mas de 0,0 s» (D-145)."""
+    for spans in (TRAZA_DEL_502, _con_timeout("httpx.ConnectError")):
+        alm = AlmacenFalso(spans=spans,
+                           contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="400")])
+        recolectar(_incidente(), almacen=alm)
+        assert not any(q == "linea_base" for q, _ in alm.preguntas)
+
+
+def test_el_que_llama_no_es_su_propia_contraparte() -> None:
+    """El gateway sirve la misma ruta que llama: se empalmaba consigo mismo (D-145)."""
+    propia = {**_fila_contraparte(empieza=LLAMADA_DESDE, ms=500, estado="Error", codigo="503"), "servicio": "gateway"}
+    alm = AlmacenFalso(spans=_con_timeout("httpx.ConnectError"), contraparte=[propia])
+    exp = recolectar(_incidente(), almacen=alm)
+
+    assert exp.contraparte.encontrada is False
+    _, kw = next(p for p in alm.preguntas if p[0] == "contraparte")
+    assert kw["excluir"] == "gateway"
+
+
+def test_una_linea_base_con_pocas_peticiones_es_una_laguna_y_no_un_dato() -> None:
+    alm = AlmacenFalso(
+        spans=_con_timeout(),
+        contraparte=[_fila_contraparte(empieza=LLAMADA_DESDE, ms=100, estado="Unset", codigo="200")],
+        linea_base=[{"guardadas": 1, "estimadas": 10, "p50_ms": 80.0, "p95_ms": 80.0, "sobre_plazo": 0}],
+    )
+    exp = recolectar(_incidente(), almacen=alm)
+
+    assert exp.contraparte.linea_base is None
+    assert any(x.startswith("linea base: solo ~10") for x in exp.lagunas)
+
+
+# --- F3-06: la memoria, por episodios -------------------------------------------
+
+
+def _pasado(componente: str, dia: str, firma: str, causa: str | None = None, estado: str = "resolved",
+            ident: str | None = None) -> dict[str, Any]:
+    return {"id": ident or f"{componente}-{dia}-{len(firma)}-{causa}", "app": "veritium", "component": componente,
+            "signature": firma, "opened_at": f"{dia}T10:00:00+00:00", "root_cause": causa, "state": estado}
+
+
+def test_cientos_de_incidentes_de_un_dia_son_un_solo_precedente() -> None:
+    """B-32: 454 `NotNullViolation` del 14/10 bajo firmas-mensaje distintas no son 454 precedentes."""
+    historico = [
+        _pasado("veritium-api", "2026-10-14", f"NotNullViolationError: null value in column \"tenant\" fila {i}",
+                ident=f"x{i}")
+        for i in range(454)
+    ]
+    historico.append(_pasado("veritium-api", "2026-10-20", "asyncpg.exceptions.NotNullViolationError",
+                             causa="una migracion con el proceso viejo vivo"))
+    historico.append(_pasado("veritium-api", "2026-10-21", "TypeError: otra clase"))
+    historico.append(_pasado("veritium-api", "2026-10-26", "NotNullViolationError"))        # despues: no
+    exp = recolectar(_incidente(app="veritium", component="veritium-api", signature="NotNullViolationError",
+                                trace_ids=[]), historico=historico)
+
+    assert [(p.dia, p.incidentes) for p in exp.memoria] == [("2026-10-20", 1), ("2026-10-14", 454)]
+    assert exp.memoria[0].causa == "una migracion con el proceso viejo vivo"
+    assert "VISTO ANTES" in exp.texto()
+
+
+def test_la_memoria_va_en_el_enriquecimiento_la_diga_quien_la_diga() -> None:
+    from diagnose.expediente import Precedente
+    from diagnose.juicio import Veredicto
+
+    v = Veredicto(root_cause=None, similar_incidents=[Precedente(componente="a", clase="X", dia="2026-10-20").resumen()])
+    assert v.como_enriquecimiento()["similar_incidents"] == ["2026-10-20 · a · 1 incidente(s) de X"]
+
+
+def test_la_causa_anotada_se_desenvuelve_hasta_la_original() -> None:
+    """El 26/10 el `ReadTimeout` del gateway llevaba tres «Ya paso» anidados."""
+    from diagnose.recoleccion import causa_original
+
+    original = "`TypeError` en «RunActivity:x» (aeon-worker): mensaje"
+    una = f"Ya paso: esta firma ha abierto 2 incidentes y en uno anterior se anoto «{original}». Confianza media."
+    dos = f"Ya paso: esta firma ha abierto 3 incidentes y en uno anterior se anoto «{una}». Confianza media."
+
+    assert causa_original(dos) == original
+    assert causa_original(original) == original
+    assert causa_original(None) is None

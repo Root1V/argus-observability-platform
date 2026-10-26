@@ -64,6 +64,10 @@ class Veredicto(BaseModel):
     # escribio una regla o un modelo?» sin mirar la hora del despliegue.
     origen: str = "reglas"
 
+    # F3-06: episodios anteriores de la misma clase, ya redactados. Es el
+    # `similar_incidents` del esquema, que el aviso enseña como «VISTO ANTES».
+    similar_incidents: list[str] = Field(default_factory=list)
+
     @property
     def tiene_causa(self) -> bool:
         return bool(self.root_cause)
@@ -76,6 +80,8 @@ class Veredicto(BaseModel):
         }
         if self.root_cause:
             cuerpo["root_cause"] = self.root_cause
+        if self.similar_incidents:
+            cuerpo["similar_incidents"] = self.similar_incidents
         return cuerpo
 
 
@@ -108,7 +114,9 @@ class JuezDeReglas:
             _el_destino_tardo_mas_de_lo_que_se_espero,
             _la_contraparte_lo_dio_por_bueno,
             _el_destino_respondio_un_error,
+            _nadie_acepto_la_conexion,
             _la_llamada_no_obtuvo_respuesta,
+            _varios_componentes_el_mismo_fallo,
             _empezo_a_mitad_de_un_proceso,
             _la_firma_nombra_el_sintoma,
             _hay_una_excepcion_con_nombre,
@@ -145,6 +153,21 @@ SIN_RESPUESTA = ("timeout", "connect", "protocol", "ssl", "closed", "refused", "
 def _no_hubo_respuesta(clase: str | None, excepcion: str | None) -> bool:
     texto = f"{clase or ''} {excepcion or ''}".lower()
     return any(marca in texto for marca in SIN_RESPUESTA)
+
+
+def _es_timeout(clase: str | None, excepcion: str | None) -> bool:
+    """Quien llama se rindio ESPERANDO. Un `ConnectError` no es eso: no llego a haber a quien esperar."""
+    texto = f"{clase or ''} {excepcion or ''}".lower()
+    return "timeout" in texto and "connecttimeout" not in texto
+
+
+SIN_CONEXION = ("connecterror", "connectionrefused", "connecttimeout", "connection refused",
+                "all connection attempts failed")
+
+
+def _sin_conexion(eslabon) -> bool:
+    texto = f"{eslabon.clase or ''} {eslabon.excepcion or ''} {eslabon.mensaje or ''}".lower()
+    return any(marca in texto for marca in SIN_CONEXION)
 
 
 # --- Las reglas, de mas fuerte a mas debil -----------------------------------
@@ -229,18 +252,51 @@ def _el_destino_tardo_mas_de_lo_que_se_espero(exp: Expediente) -> tuple[str, Con
     eslabon = exp.arbol.eslabon_mas_profundo
     if c is None or not c.encontrada or c.ms is None or eslabon is None:
         return None
-    if not _no_hubo_respuesta(eslabon.clase, eslabon.excepcion):
+    # Solo un TIMEOUT: con un `ConnectError` el destino no acepto la conexion,
+    # asi que no pudo tardar, y un «otro lado» encontrado es otro (D-145).
+    if not _es_timeout(eslabon.clase, eslabon.excepcion):
         return None
     if c.ms < eslabon.ms:
         return None
-    return (
+    hecho = (
         f"{c.servicio} atendio la llamada a {c.destino} y la contesto bien "
         f"(codigo {c.codigo or '?'}), pero tardo {c.ms / 1000:.0f} s, y "
         f"{exp.app}/{exp.componente} se rindio a los {eslabon.ms / 1000:.0f} s. "
-        f"La peticion no tiene nada de malo: la causa es la latencia de {c.servicio}, "
-        "o un plazo de espera mas corto que su tiempo de respuesta normal.",
+    )
+    # B-35: con la linea base, «tardo mucho» se separa en dos diagnosticos con
+    # dos arreglos distintos. Sin ella, se dicen los dos y se deja elegir.
+    lb = c.linea_base
+    fraccion = lb.fraccion_sobre_plazo if lb is not None else None
+    if lb is None or fraccion is None or lb.p50_ms is None:
+        return (
+            hecho + f"La peticion no tiene nada de malo: la causa es la latencia de {c.servicio}, "
+            "o un plazo de espera mas corto que su tiempo de respuesta normal.",
+            "alta",
+        )
+    normal = (
+        f"p50 {lb.p50_ms / 1000:.1f} s, p95 {(lb.p95_ms or 0) / 1000:.1f} s "
+        f"en ~{lb.estimadas} peticiones de {lb.dias} dias"
+    )
+    if fraccion >= PASA_DEL_PLAZO_HABITUALMENTE:
+        return (
+            hecho + f"Y no es una anomalia: {c.servicio} tarda esto normalmente en esa ruta —{normal}— "
+            f"y el {fraccion * 100:.1f}% de sus respuestas llega despues de los {eslabon.ms / 1000:.0f} s "
+            f"que espera {exp.componente}. La causa es la latencia habitual de {c.servicio} contra un "
+            "plazo metido dentro de su tiempo de respuesta normal: seguira fallando mientras no cambie "
+            "uno de los dos.",
+            "alta",
+        )
+    return (
+        hecho + f"Y fue una excepcion: normalmente {normal}, y solo el {fraccion * 100:.1f}% pasa del "
+        f"plazo. La causa es la latencia de {c.servicio} en ese momento, no el plazo.",
         "alta",
     )
+
+
+# Desde que fraccion de respuestas tardias un plazo deja de ser «casi nunca»
+# para ser «parte de lo normal». Un 1 % de un servicio con trafico es un fallo
+# cada pocos minutos.
+PASA_DEL_PLAZO_HABITUALMENTE = 0.01
 
 
 def _la_contraparte_lo_dio_por_bueno(exp: Expediente) -> tuple[str, Confianza] | None:
@@ -308,6 +364,33 @@ def _el_destino_respondio_un_error(exp: Expediente) -> tuple[str, Confianza] | N
     )
 
 
+def _nadie_acepto_la_conexion(exp: Expediente) -> tuple[str, Confianza] | None:
+    """La llamada saliente no llego a abrir conexion: en ese destino no escuchaba nadie.
+
+    Es el caso mas concreto de «sin respuesta» y el que mas se presta a
+    malinterpretarse: no es lentitud, no es la peticion, no es la logica del
+    destino. Es que el proceso destino no esta levantado, o no en ese puerto. El
+    26/10 el gateway devolvia `503` porque `:8087` rechazaba conexiones, y L3
+    decia con confianza alta que «el destino tardo» (D-145).
+
+    Confianza alta: lo dice la clase del error, que es una medicion del propio
+    cliente HTTP — no una inferencia.
+    """
+    eslabon = exp.arbol.eslabon_mas_profundo
+    if eslabon is None or eslabon.tipo != "Client" or not _sin_conexion(eslabon):
+        return None
+    destino = eslabon.ruta or (exp.contraparte.destino if exp.contraparte else None) or "su destino"
+    reintentos = sum(1 for s in exp.arbol.cadena_del_fallo if s.tipo == "Client" and _sin_conexion(s))
+    veces = f" ({reintentos} intentos en la misma peticion)" if reintentos > 1 else ""
+    return (
+        f"{exp.app}/{exp.componente} no pudo abrir conexion con {destino}{veces}: "
+        f"`{eslabon.clase or eslabon.excepcion}`. En esa direccion no escuchaba nadie —el servicio "
+        "destino no esta levantado, se reinicio, o escucha en otro puerto—. No es lentitud ni una "
+        "peticion mal formada: la peticion no llego a salir.",
+        "alta",
+    )
+
+
 def _la_llamada_no_obtuvo_respuesta(exp: Expediente) -> tuple[str, Confianza] | None:
     """La llamada saliente no llego a recibir respuesta, y nadie registro atenderla.
 
@@ -358,6 +441,48 @@ DE_ESQUEMA = ("notnullviolation", "undefinedcolumn", "undefinedtable", "integrit
 # Un proceso que lleva al menos esto vivo antes de su primer error no fallo por
 # arrancar: fallo porque algo cambio debajo.
 MINUTOS_SIN_FALLAR = 60
+
+
+# Lo que suelen compartir varios procesos de una app, por la clase del error.
+# Solo orienta la mirada: el registro casi nunca declara estos recursos
+# —Centinela «usa su propio Postgres y Valkey»— y por eso no se pueden nombrar.
+COMPARTIDO_POR_CLASE = (
+    (("redis", "valkey"), "su Redis/Valkey"),
+    (("psycopg", "asyncpg", "sqlalchemy", "operationalerror", "postgres"), "su base de datos"),
+    (("kafka", "amqp", "pika", "celery"), "su cola de mensajes"),
+)
+
+
+def _varios_componentes_el_mismo_fallo(exp: Expediente) -> tuple[str, Confianza] | None:
+    """Tres o mas componentes de la misma app abren la misma clase a la vez (B-40).
+
+    Procesos distintos no se equivocan igual y en el mismo minuto por su
+    cuenta: lo que falla es algo que comparten. Va antes que las reglas que
+    leen la excepcion porque esas dicen lo mismo cinco veces —«Timeout reading
+    from socket»— y ninguna de las cinco dice lo unico que importa, que es UNA
+    causa.
+
+    Con un hermano solo no: dos coincidencias son demasiado poco para dejar de
+    mirar el componente. Confianza media: no se ve el recurso compartido, se
+    deduce de que todos fallen igual.
+    """
+    if len(exp.hermanos) < 2:
+        return None
+    clase = _clase_de(exp.firma)
+    componentes = [exp.componente, *(h.componente for h in exp.hermanos)]
+    lejos = max(abs(h.segundos) for h in exp.hermanos)
+    minuscula = clase.lower()
+    compartido = next(
+        (que for marcas, que in COMPARTIDO_POR_CLASE if any(m in minuscula for m in marcas)),
+        "una dependencia, la configuracion o el host que comparten",
+    )
+    return (
+        f"No es de {exp.componente}: {len(componentes)} componentes de {exp.app} "
+        f"({', '.join(componentes)}) abrieron `{clase}` en {lejos:.0f} s. Procesos distintos "
+        f"fallando igual y a la vez apuntan a algo que COMPARTEN —lo mas probable, {compartido}— "
+        f"y no a ninguno de ellos: es un fallo visto {len(componentes)} veces.",
+        "media",
+    )
 
 
 def _empezo_a_mitad_de_un_proceso(exp: Expediente) -> tuple[str, Confianza] | None:
@@ -590,6 +715,10 @@ def _evidencia(exp: Expediente) -> list[str]:
     for c in exp.concurrentes[:2]:
         marca = " (dependencia declarada)" if c.aguas_arriba else ""
         hechos.append(f"a la vez: {c.servicio} con {c.errores} error(es) `{c.clase or '?'}`{marca}")
+
+    if exp.hermanos:
+        otros = ", ".join(h.componente for h in exp.hermanos[:5])
+        hechos.append(f"a la vez en {exp.app}: {len(exp.hermanos)} componente(s) mas con la misma clase ({otros})")
 
     if exp.arbol.trace_id:
         hechos.append(f"traza de ejemplo: {exp.arbol.trace_id}")

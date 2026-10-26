@@ -46,11 +46,15 @@ class Diagnosticador:
         juez: Juez | None = None,
         cliente: httpx.Client | None = None,
         sombra: Juez | None = None,
+        investigacion: Any | None = None,
     ) -> None:
         self.settings = settings
         self.juez: Juez = juez or JuezDeReglas()
         # El juez en sombra: juzga, se registra, y no toca el aviso.
         self.sombra = sombra
+        # L4 en sombra (`SombraL4`): lo que el triage deja pasar se investiga
+        # en segundo plano. Tampoco toca el aviso.
+        self.investigacion = investigacion
         self._almacen = almacen
         self._http = cliente or httpx.Client(timeout=settings.timeout_s())
         # Huella -> cuando se juzgo por ultima vez y con cuantas senales. Las
@@ -67,6 +71,8 @@ class Diagnosticador:
             "saltados_por_espera": 0,
             "sombra_juzgados": 0,
             "sombra_fallidos": 0,
+            "triage_investigar": 0,
+            "triage_no": 0,
         }
 
     # --- Un ciclo ------------------------------------------------------------
@@ -114,6 +120,9 @@ class Diagnosticador:
             historico=historico,
         )
         veredicto = self.juez.juzgar(expediente)
+        # La memoria va con el veredicto la diga quien la diga: es un hecho del
+        # historico, no una opinion del juez (F3-06).
+        veredicto.similar_incidents = [p.resumen() for p in expediente.memoria]
 
         self.stats["diagnosticados"] += 1
         self.stats["con_causa" if veredicto.tiene_causa else "sin_causa"] += 1
@@ -121,6 +130,7 @@ class Diagnosticador:
 
         self._devolver(expediente.huella, veredicto)
         self._en_sombra(expediente, veredicto)
+        self._triage(expediente, veredicto)
         log.info(
             "diagnose.done",
             extra={
@@ -180,6 +190,18 @@ class Diagnosticador:
                     f.write(json.dumps(registro, ensure_ascii=False) + "\n")
             except Exception as exc:  # noqa: BLE001
                 log.warning("sombra.write_failed", extra={"error": str(exc)[:200]})
+
+    def _triage(self, expediente: Expediente, veredicto: Veredicto) -> None:
+        """F3-03: si L4 esta encendido, decide si este incidente se investiga, y lo dice."""
+        if self.investigacion is None:
+            return
+        from .triage import merece_investigacion
+
+        si, motivo = merece_investigacion(expediente, veredicto)
+        self.stats["triage_investigar" if si else "triage_no"] += 1
+        log.info("triage.done", extra={"huella": expediente.huella, "investigar": si, "motivo": motivo})
+        if si:
+            self.investigacion.encolar(expediente, veredicto, motivo)
 
     # --- A quien se le pregunta y a quien se le contesta ---------------------
 

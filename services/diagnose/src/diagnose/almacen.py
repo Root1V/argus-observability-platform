@@ -213,6 +213,7 @@ class Almacen:
         ruta: str,
         momento: datetime,
         margen_s: float = 3.0,
+        excluir: str = "",
     ) -> list[dict[str, Any]]:
         """Quien ATENDIO la llamada saliente que fallo. El puente.
 
@@ -241,6 +242,12 @@ class Almacen:
         la PLANTILLA (`/users/{id}`) y el cliente con el valor resuelto, asi que
         ahi el empalme falla. Es el mismo borde que D-117.
 
+        **El que llama no puede ser su propia contraparte** (`excluir`). El
+        gateway SIRVE `/v1/chat/completions` y tambien lo LLAMA en sus
+        backends: buscando solo por ruta, su llamada fallida a `:8087` —con
+        `ConnectError`, nadie escuchando— se empalmaba con su propio span de
+        servidor, y L3 concluia con confianza alta que «el destino tardo» (D-145).
+
         **Que no encuentre nada tambien es un hallazgo**, y de los buenos: si
         nadie registro haber atendido la llamada que fallo, el fallo ocurrio
         antes de llegar a la aplicacion —proxy, validacion de transporte,
@@ -257,14 +264,68 @@ class Almacen:
             WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
               AND SpanKind = 'Server'
               AND position(SpanName, {{ruta:String}}) > 0
+              AND ServiceName != {{excluir:String}}
             ORDER BY Timestamp
             LIMIT {LIMITE_FILAS}
             """,
             desde=momento - timedelta(seconds=margen_s),
             hasta=momento + timedelta(seconds=margen_s),
             ruta=ruta,
+            excluir=excluir,
         )
 
+
+    def linea_base(
+        self,
+        *,
+        servicio: str,
+        ruta: str,
+        hasta: datetime,
+        plazo_ms: float,
+        dias: int = 7,
+    ) -> list[dict[str, Any]]:
+        """Cuanto tarda NORMALMENTE el destino en esta ruta, y cuantas veces pasa del plazo (B-35).
+
+        La regla del destino lento comparaba dos duraciones de una sola
+        peticion. Con esto puede decir si «tardo mucho» es una anomalia o es lo
+        de siempre: `manager-api` tardo 81 s en `/v1/backends`, que parece un
+        incidente hasta que se ve que su p50 es de un minuto.
+
+        **Ponderado por el muestreo de cola.** El colector guarda TODA traza
+        lenta (>= 3 s) o con error, y un 10 % del resto. Sin corregirlo, las
+        rapidas estarian infrarrepresentadas diez veces y los percentiles de
+        una ruta rapida saldrian inflados. Cada span rapido y sin error cuenta
+        por diez. Es una aproximacion: la politica mira la duracion de la TRAZA
+        y no la del span, y hay politicas menores (GenAI, `marked-hot`) que
+        aqui no se distinguen. Para rutas lentas, como la que motivo esto, no
+        cambia nada: todas sus peticiones pasan de 3 s y se guardan todas.
+
+        Hasta `hasta`, que es la hora de la llamada que fallo: la linea base es
+        lo que se sabia ANTES del incidente.
+        """
+        return self.consulta(
+            f"""
+            SELECT count() AS guardadas,
+                   sum(peso) AS estimadas,
+                   quantileExactWeighted(0.5)(Duration, peso) / 1e6 AS p50_ms,
+                   quantileExactWeighted(0.95)(Duration, peso) / 1e6 AS p95_ms,
+                   sumIf(peso, Duration > {{plazo_ns:UInt64}}) AS sobre_plazo
+            FROM (
+                SELECT Duration,
+                       if(Duration >= 3000000000 OR StatusCode = 'Error', 1, 10) AS peso
+                FROM {self.base}.otel_traces
+                WHERE Timestamp BETWEEN {{desde:DateTime64(9)}} AND {{hasta:DateTime64(9)}}
+                  AND ServiceName = {{servicio:String}}
+                  AND SpanKind = 'Server'
+                  AND position(SpanName, {{ruta:String}}) > 0
+            )
+            """,
+            desde=hasta - timedelta(days=dias),
+            hasta=hasta,
+            servicio=servicio,
+            ruta=ruta,
+            plazo_ns=int(plazo_ms * 1e6),
+        )
 
     def recurrencia(
         self,

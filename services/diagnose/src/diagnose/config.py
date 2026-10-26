@@ -48,11 +48,20 @@ class Settings(BaseSettings):
     # `AxoniumModel` lee `AXONIUM_CLIENT_ID` / `AXONIUM_CLIENT_SECRET` del
     # entorno, y sin ella el juez en sombra no arranca y lo dice.
     juez_sombra: str = ""
-    modelo: str = "gpt-oss-20b-mxfp4"
+    modelo: str = "qwen3-30b-a3b-q4-k-m-local"
+    # `off`, `low`, `medium` o `high`; vacio deja el del modelo. Se traduce a
+    # la clave de cada familia en `juez_modelo.opciones_de_plantilla`.
+    razonamiento: str = ""
     # Donde se guarda cada pareja reglas/modelo, una linea JSON por juicio.
     # Es lo que permite comparar los dos sobre incidentes REALES y no solo
     # sobre el banco. Vacio = solo al log.
     sombra_path: str = ""
+
+    # --- L4 en sombra (F4-01, F4-03) ------------------------------------------
+    # `modelo` para encenderlo: lo que el triage (F3-03) deja pasar se
+    # investiga en segundo plano con el mismo `modelo` y `razonamiento`.
+    investigador: str = ""
+    sombra_l4_path: str = ""
 
     def timeout_s(self) -> float:
         return 10.0

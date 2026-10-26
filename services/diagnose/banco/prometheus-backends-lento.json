@@ -116,6 +116,15 @@
       "codigo": "200",
       "estado": "Unset",
       "ms": 81470.75,
+      "linea_base": {
+        "dias": 7,
+        "guardadas": 7294,
+        "estimadas": 8734,
+        "p50_ms": 60228.547,
+        "p95_ms": 60576.077,
+        "plazo_ms": 75236.084,
+        "sobre_plazo": 362
+      },
       "discrepa": true
     },
     "emision": {
@@ -220,6 +229,11 @@
       ],
       "sin_identidad": false
     },
+    "plataforma": {
+      "consultada": false,
+      "minutos_con_datos": 0,
+      "minutos_mirados": 60
+    },
     "historia": {
       "veces": 0,
       "primera_vez": null,
@@ -237,6 +251,7 @@
       "rutas": {}
     },
     "concurrentes": [],
+    "hermanos": [],
     "aguas_arriba": [
       "redis-main"
     ],

@@ -7316,3 +7316,427 @@ Y lo que el diseño tenía que garantizar, se cumple: esos avisos siguen diciend
   parte del expediente. Ya no competiría con ellas: las completaría donde se
   abstienen. Cambia la pregunta de «¿quién acierta más?» a «¿añade algo?»
   (`B-42`).
+
+---
+
+## D-139 · B-41: el calificador se mide antes de creerle, y D-138 exageraba
+
+**Estado**: 🚧 Calificador por palabras medido · el calificador con modelo, escrito y sin medir
+
+**Contexto**. D-138 dijo que tres «fallos» del modelo eran «respuestas correctas
+dichas con otras palabras» y pidió un calificador que entendiera paráfrasis
+(`B-41`). Al etiquetar esos veredictos criterio a criterio, la afirmación no se
+sostiene, y lo que sale es más útil que lo que se buscaba.
+
+### Lo que de verdad fallaba: la composición, no la paráfrasis
+
+| caso | lo que dijo el modelo | por qué salía `falla` |
+|---|---|---|
+| `canario-silencio` | «host o ingesta» | Media causa sin síntoma. `parcial` exigía el síntoma ENTERO |
+| `pendingrollback` | la excepción original | Da la excepción como causa, pero no dice que el `PendingRollbackError` sea su consecuencia. Media causa otra vez |
+| `tenant` | «sin valor para la columna tenant» | **Esta sí** es paráfrasis: la etiqueta esperaba «null value» |
+
+Dos de los tres eran **respuestas parciales** que la regla de composición
+hundía por debajo de no decir nada. Ninguno de los tres era un acierto, y el
+«falla con confianza alta» de D-138 es un **parcial** con confianza alta. La
+corrección de D-138 tenía razón en la dirección y se pasó en la cifra.
+
+### Qué cambia
+
+1. **Calificar son dos pasos, separados** (`banco.componer`): decidir criterio a
+   criterio si el texto afirma algo, y componer esas decisiones. Solo el primero
+   depende de cómo se dice algo.
+2. **Media causa es `parcial`**, no `falla`.
+3. **El eco casi literal también es eco.** Al etiquetar salió que las reglas
+   «acertaban» `aeon` diciendo *«GenAISpan.set() got an unexpected keyword
+   argument 'argus.run.id'»*: la firma del incidente sin su `TypeError: `. La
+   detección de D-134 solo quitaba la cita exacta. Ahora quita también el tramo
+   que repite el 80 % de la firma seguido. Citar una PARTE sigue contando, y a
+   propósito: sacar la excepción original de dentro del `PendingRollbackError`
+   es justo el diagnóstico que ese caso pide.
+   **Las reglas bajan en diseño de 7 a 6 aciertos** (`aeon` pasa a `parcial`).
+   Los no vistos siguen en 2 de 2.
+4. **Un corpus etiquetado** (`services/diagnose/banco/calificador/`): 21
+   veredictos reales (10 de las reglas, 10 del modelo y 1 con razonamiento alto)
+   y 11 escritos a mano. Las etiquetas se pusieron criterio a criterio **antes**
+   de pasar ningún calificador, sobre el texto ya sin eco. Las puso Claude y
+   están **pendientes de revisión por el dueño**: es el punto débil de la
+   medida y se dice.
+5. **Un calificador con modelo** (`calificador.ConModelo`, synaptum). Responde
+   «sí» o «no» con una cita, y **un «sí» cuya cita no está en el texto cuenta
+   como «no»**, con la misma desconfianza que `a_veredicto` aplica al juez. Si
+   no pudo decidir, tampoco aprueba.
+
+### La medida del calificador por palabras
+
+```
+real    pares 85/88 · falsos sí 1 · falsos no 2 · resultado igual 20/21 (inflado 0, desinflado 1)
+a-mano  pares 32/45 · falsos sí 6 · falsos no 7 · resultado igual 5/11  (inflado 1, desinflado 5)
+```
+
+**Con la composición corregida, las palabras clave aciertan el resultado en 20
+de los 21 veredictos reales y no inflan ninguno.** La que falla es `tenant`, la
+única paráfrasis de verdad. Los escritos a mano —negaciones, paráfrasis sin
+ninguna palabra clave, una frase en inglés— muestran que **puede** fallar: en 6
+de 11. Pero los escribió quien conocía las palabras clave, así que dicen que
+falla, no con qué frecuencia. La cifra que cuenta es la real.
+
+### Lo que falta
+
+**Medir el calificador con modelo contra el mismo corpus.** El 26/10 a las
+19:00 UTC, a mitad de la medida con razonamiento alto, Prometheus dejó de servir
+`gpt-oss-20b-mxfp4`: `UnknownModelError` y después «circuit half-open». El
+modelo sigue en `/v1/models`. El dueño está gestionando el cambio de modelo con
+ellos. La orden queda lista:
+
+```
+python -m diagnose.calificador medir --calificador modelo
+```
+
+**Criterio para adoptarlo**: cero inflados en el corpus real, y menos
+desinflados que las palabras clave. Mientras no lo cumpla, el banco sigue
+calificando por palabras, que hoy no inflan.
+
+**El razonamiento alto, a medio medir.** Contestó 3 casos antes del corte. En
+`aeon` tardó **74 s** (15 s sin fijarlo) y respondió reescribiendo el mensaje
+del propio incidente: lo afirma, pero es un eco que la detección por texto no
+puede ver. No hay medida todavía. El juez lo acepta como
+`JuezConModelo(razonamiento=...)`: va dentro de `chat_template_kwargs`, porque en
+el nivel superior de la petición Axonium midió que no hace nada.
+
+
+### Addendum (26/10, noche): el calificador con modelo, medido, no se adopta
+
+Con `qwen3-30b-a3b-q4-k-m-local` (`gpt-oss` dejó de estar disponible), en tres
+pasadas:
+
+| pasada | resultados reales iguales | inflados | desinflados | citas rechazadas |
+|---|---|---|---|---|
+| sin razonamiento, campo `cita` | 9/21 | 1 | 11 | 14 |
+| sin razonamiento, cita antes que el veredicto | 9/21 | 1 | 11 | 15 |
+| con razonamiento, el HECHO antes del TEXTO y `fragmento_del_texto` | **14/21** | **0** | 7 | 1 |
+| *(palabras clave)* | *20/21* | *0* | *1* | — |
+
+**La comprobación de citas hizo su trabajo.** En las dos primeras pasadas Qwen
+decidía bien y copiaba **el hecho** como cita. Las 14 y 15 citas rechazadas eran
+decisiones correctas con la cita inventada, y por eso salían como «no». Cambiar
+el nombre del campo y el orden de la pregunta lo arregló: una cita rechazada en
+toda la pasada.
+
+**No cumple el criterio.** No infla nada, que era lo importante, pero desinfla
+siete veces más que las palabras clave. El banco sigue calificando por palabras.
+
+**La discrepancia que más se repite es de etiqueta, no del calificador.** En 3
+de los 8 falsos «no», Qwen no acepta que *«la plataforma ENTERA recibió datos
+solo en 13 de 60 minutos»* afirme *«todos los servicios callaron a la vez»*. Yo
+lo etiqueté como sí, y es discutible: lo implica, pero no lo dice. Queda para la
+revisión del dueño.
+---
+
+## D-140 · B-40: los hermanos de un incidente, y por qué agrupar con el reloj del emisor
+
+**Estado**: ✅ En producción · sin caso en el banco
+
+**Contexto**. El 25/10 varios componentes de Centinela abrieron
+`redis.exceptions.TimeoutError` a la vez y L3 los diagnosticó uno por uno:
+«Timeout reading from socket». El bloque `concurrentes` mira OTROS servicios en
+las trazas y la correlación del motor depende de dependencias declaradas, y el
+registro no modela el Valkey de Centinela.
+
+### Qué se hizo
+
+- **Bloque nuevo, `hermanos`**: otros componentes de la MISMA app que abrieron
+  incidente con la misma clase (último segmento, B-33) a 5 min o menos. Sale
+  del histórico de incidentes, que ya se consultaba: no añade ninguna consulta.
+  Las clases sin nombre (`error`, `Exception`) no cuentan, porque tres `error` a
+  la vez comparten un SDK, no una causa.
+- **Regla `_varios_componentes_el_mismo_fallo`**: con tres o más componentes
+  dice «es un fallo visto N veces» y apunta a lo que comparten (Redis/Valkey,
+  base de datos, cola o «una dependencia, la configuración o el host»), con
+  confianza **media**: el recurso compartido no se ve, se deduce. Con un solo
+  hermano no salta. Va antes de las reglas que leen la excepción, que dirían lo
+  mismo cinco veces.
+- **Captura del banco**: los hermanos pueden abrir en el mismo segundo o poco
+  después. Se incluyen los de la ventana, sin lo que L3 les escribió después.
+
+### El reloj
+
+Lo anotado en `B-40` («entre las 08:48:54 y las 08:49:00») no es lo que hay en el
+histórico. Los cuatro hermanos tienen `opened_at` **09:07:57**, el mismo segundo
+los cuatro, y su fila en el almacén se creó a las **08:49:00** (`abierto_en`).
+Son 19 minutos entre el reloj del emisor y el del bus en el mismo incidente:
+es `B-34`. Se agrupa con `opened_at` porque es lo que el histórico expone y es
+coherente entre los hermanos. El precio es que `centinela-api`, que abrió a las
+08:48:54 según su emisor, queda fuera del grupo.
+
+### Verificado en vivo
+
+Con el histórico y ClickHouse reales, el incidente de `centinela-notifier` de
+las 09:07:57 pasa de «Timeout reading from socket» a *«No es de
+centinela-notifier: 4 componentes de centinela (…) abrieron
+`redis.exceptions.TimeoutError` en 0 s. Procesos distintos fallando igual y a
+la vez apuntan a algo que COMPARTEN —lo más probable, su Redis/Valkey— …»*.
+
+**No hay caso en el banco** porque la causa no está establecida fuera de L3:
+que fuera el Valkey es una deducción, y Centinela no lo ha confirmado. La regla
+dice «lo más probable» con confianza media y no afirma más.
+
+---
+
+## D-141 · B-35: la línea base del destino, ponderada por el muestreo
+
+**Estado**: ✅ En producción
+
+**Contexto**. La regla del destino lento comparaba dos duraciones de una sola
+petición («tardó 81 s, el gateway esperó 75 s») y terminaba con un «o… o…»: la
+latencia del destino, o un plazo más corto que su tiempo de respuesta normal.
+Son dos diagnósticos con dos arreglos distintos, y el expediente no tenía con
+qué elegir.
+
+### Qué se hizo
+
+- **Consulta nueva, `Almacen.linea_base`**: p50, p95 y cuántas peticiones
+  pasaron del plazo de quien llama, para el servicio que atendió y esa ruta,
+  en los 7 días **anteriores a la llamada** que falló. Tarda unos 20 ms.
+- **Ponderada por el muestreo de cola.** El colector guarda toda traza de 3 s o
+  más o con error, y un 10 % del resto. Sin corregirlo, en una ruta rápida las
+  peticiones rápidas estarían diez veces infrarrepresentadas. Cada span rápido
+  y sin error cuenta por 10. Es aproximado: la política mira la duración de la
+  traza y no la del span. En `/oauth2/token` (rápida) la corrección importa:
+  317 spans guardados representan ~2.774 peticiones. En `/v1/backends` (lenta)
+  casi no cambia nada.
+- **El bloque `contraparte` lo enseña**, y con menos de 20 peticiones estimadas
+  se anota como laguna en vez de como dato.
+- **La regla elige**: si el 1 % o más de las respuestas habituales pasa del
+  plazo, dice *«no es una anomalía… plazo metido dentro de su tiempo de
+  respuesta normal»*. Si no, dice *«fue una excepción»*. Sin línea base, sigue
+  diciendo las dos posibilidades.
+
+### Lo que dice el caso del banco
+
+`prometheus-backends-lento`, recapturado con su etiqueta intacta: p50 60,2 s,
+p95 60,6 s sobre ~8.734 peticiones, y **el 4,1 % pasa de los 75 s**. Sigue en
+`acierta`, ahora con el diagnóstico que pedía B-35. El p95 de 71,6 s que citaba
+B-35 venía de otra ventana y sin ponderar, así que no es comparable con este. La
+forma sí coincide: la mayoría en torno a un minuto, con una cola que cruza el
+plazo.
+
+---
+
+## D-142 · F3-06: la memoria agrupa por episodios, y la regla «ya pasó» se citaba a sí misma
+
+**Estado**: ✅ En producción · por clase, sin vectores (F3-05 sigue pendiente)
+
+**Contexto**. B-32 bloqueaba F3-06: sobre el histórico, un «top-N de
+parecidos» habría devuelto 454 copias del mismo `NOT NULL` como 454
+precedentes, de cuando la firma era el mensaje entero.
+
+### Qué se hizo
+
+- **Clase normalizada**: el último segmento de lo que va antes de los dos
+  puntos (`_ultimo_segmento(_clase_de(firma))`), lo mismo que ya usaban las
+  reglas para B-33.
+- **Episodio = componente + día.** Medido sobre el histórico del 26/10: **853
+  incidentes, 151 clases, 203 episodios**. Los 454 `NotNullViolationError` de
+  `veritium-api` del 14/10 son **un** precedente con 453 incidentes.
+- **Bloque `memoria`** del expediente: hasta 3 episodios anteriores de la misma
+  clase en la misma app. Primero los que tienen causa anotada, después el mismo
+  componente y después los más recientes. Solo lo abierto **antes** del
+  incidente.
+- **Va al aviso**: el veredicto lleva `similar_incidents`, que el alert-bus ya
+  sabía pintar como «VISTO ANTES». Lo añade el bucle, sea cual sea el juez,
+  porque es un hecho del histórico y no una opinión.
+
+### El defecto que destapó
+
+Al probarlo con el `ReadTimeout` real del gateway, la causa anotada del
+episodio era *«Ya pasó: … se anotó «Ya pasó: … se anotó «manager-api…»»»*. La
+regla `_ya_paso_y_alguien_anoto_la_causa` cita la causa del incidente anterior,
+y cuando esa causa era a su vez un «ya pasó», cada reapertura añadía un nivel.
+Estaba **en producción**, en los avisos. Ahora `causa_original` desenvuelve
+hasta la causa que de verdad se diagnosticó, tanto en la historia como en la
+memoria.
+
+**Límite**: la búsqueda es por clase EXACTA dentro de la app. No encuentra «lo
+mismo con otra clase» ni «lo mismo en otra app»: eso es F3-05, con vectores, y
+necesita un modelo de embeddings servido por Prometheus.
+
+---
+
+## D-143 · F3-07: `mcp-obs`, consultas fijas como herramientas MCP de solo lectura
+
+**Estado**: ✅ Verificado de punta a punta · todavía no lo usa nadie (lo usará L4, F4-01)
+
+**Qué es**. `python -m diagnose.mcp_obs`: un servidor MCP por stdio con nueve
+herramientas: `incidentes_abiertos`, `incidente`, `expediente`, `traza`,
+`alcance`, `recurrencia`, `linea_base`, `concurrentes` y `registro`. Vive dentro
+de `diagnose` para reutilizar el almacén y la recolección de L3: el
+`expediente` que devuelve es **el mismo texto** que lee el juez.
+
+**Decisiones**:
+
+- **Consultas fijas, no SQL libre.** Un agente con SQL contra ClickHouse puede
+  leer cualquier fila de cualquier equipo y tumbar el almacén con una consulta
+  sin `WHERE`. Es la misma razón de D-013.
+- **Solo lectura, declarado y garantizado.** Cada herramienta lleva
+  `readOnlyHint=true` y `destructiveHint=false`, y synaptum las clasifica como
+  `READ`. Lo verificado por el cliente: 9 de 9. Que no escriban lo garantiza el
+  código, no la pista: `Almacen.consulta` rechaza todo lo que no sea `SELECT` y
+  del alert-bus solo se hacen `GET`.
+- **Sin volcados de filas**, línea a línea. El primer test lo cazó: `sanear`
+  sobre el expediente entero cortaba en el primer `DETAIL:` y se llevaba todo lo
+  que venía detrás.
+- **Ventanas acotadas**: un modelo puede pedir 3.650 días de recurrencia, y el
+  almacén guarda 30.
+- **`mcp` 2.3.** Es la versión que resolvió uv. `FastMCP` pasa a llamarse
+  `MCPServer`, y el cliente de synaptum (`ClientSession`, `stdio_client`) sigue
+  funcionando con ella.
+
+**Verificado** con `synaptum.mcp.MCPTools.stdio` contra el stack real: los
+incidentes abiertos, la línea base de `/v1/backends` (p50 60,2 s, 352 de ~9.664
+por encima de 75 s) y el expediente de un incidente abierto, con su bloque
+«VISTO ANTES».
+
+---
+
+## D-144 · L4 existe: investigador con synaptum, triage sin modelo y sombra en segundo plano
+
+**Estado**: 🚧 Escrito y probado con dobles · apagado en producción hasta medirlo
+
+**Las piezas**:
+
+- **El investigador** (`investigador.py`, F4-01) es un `Agent` de synaptum con
+  las herramientas de `mcp-obs` (D-143) y salida tipada: causa, confianza,
+  evidencia citando la herramienta de la que sale y **alternativas
+  descartadas** (F4-05). Empieza siempre por el `expediente`, que es lo que ya
+  leyó L3.
+- **Presupuesto duro** (F4-02): 40 llamadas a herramientas, 300.000 tokens y 15
+  minutos. Al agotarse uno, el run se corta y sale un informe **parcial sin
+  causa**: cortar no es fallar, y fingir una conclusión sería peor. Un detalle
+  que costó un test: synaptum cede cada paso de herramienta dos veces
+  (intención y resultado), y contarlas las dos habría agotado el presupuesto a
+  la mitad.
+- **No arranca con una herramienta que escriba.** La pista la da el servidor y
+  synaptum no se la cree; si alguna llega con un riesgo distinto de `READ`, el
+  investigador se niega a construirse.
+- **El triage** (`triage.py`, F3-03) es **determinista, sin modelo**. Las
+  razones para no investigar son hechos que el expediente ya mide: no es
+  `page`, la plataforma entera callaba, el componente nunca emitió, las reglas
+  ya tienen causa con confianza alta, o es un hermano (B-40) de otro que ya se
+  investiga (de cada grupo se queda el primero por nombre, la misma elección
+  desde cualquiera de ellos). Pagar un modelo para que adivine eso sería pagar
+  por lo que ya se sabe. Siempre devuelve el motivo, también cuando dice que no.
+- **La sombra de L4** (`sombra_l4.py`, F4-03) corre en un hilo con una cola de
+  5: una investigación tarda minutos y L3 diagnostica cada 10 s. Lo que no cabe
+  se cuenta y se tira, porque si el triage deja pasar más de lo que la GPU puede
+  investigar, lo que hay que afinar es el triage. La misma huella no se vuelve a
+  investigar en 6 h. Escribe en `sombra-l4.jsonl` y nunca notifica.
+
+**Apagado** (`DIAGNOSE_INVESTIGADOR` vacío) hasta tener una medida. El banco de
+F3-08 mide jueces de un solo paso, y L4 necesita su propia medida.
+
+---
+
+## D-145 · L3 se tomaba a sí mismo por el otro lado de la llamada, con confianza alta
+
+**Estado**: ✅ Corregido y desplegado
+
+**Cómo se vio**. Al probar L4 en vivo (D-146) sobre un `page` real (`503` del
+gateway, 26/10), lo que había que contrastar era el expediente, y el expediente
+destapó el fallo:
+
+- **Lo que pasaba**: el gateway llamaba a `127.0.0.1:8087/v1/chat/completions` y
+  recibía `ConnectError: All connection attempts failed`, tres veces en la misma
+  petición. En ese puerto no escuchaba nadie.
+- **Lo que decía L3, con confianza alta**: «gateway atendió la llamada… pero tardó
+  1 s, y gateway se rindió a los 0 s. Y no es una anomalía: el 98,5 % de sus
+  respuestas llega después de los 0 s…».
+
+**Dos defectos encadenados**:
+
+1. **El puente se empalmaba con el que llama.** `Almacen.contraparte` buscaba
+   spans `Server` por RUTA, y el gateway **sirve** `/v1/chat/completions` además
+   de **llamarlo**. Su llamada fallida se emparejaba con su propio span de
+   servidor. No era nuevo: la causa anotada el 25/10 («tardó 23 s y el gateway
+   se rindió a los 19 s») salió del mismo emparejamiento.
+2. **La regla del destino lento aceptaba cualquier «sin respuesta»**, incluido el
+   `ConnectError`. Con un error de conexión el destino no aceptó nada, así que
+   no pudo tardar. La línea base de D-141 heredó el error: un plazo de 2 ms daba
+   «el 98,5 % tarda más de 0,0 s».
+
+**Arreglo**:
+
+- La contraparte **excluye el servicio que llama**, en la consulta y en el
+  emparejamiento.
+- «El destino tardó» y la línea base son **solo para timeouts**.
+- **Regla nueva, `_nadie_acepto_la_conexion`**, con confianza alta: la clase del
+  error es la propia medición del cliente HTTP. Ahora el mismo incidente dice
+  *«no pudo abrir conexión con http://127.0.0.1:8087/… (3 intentos en la misma
+  petición): `ConnectError`. En esa dirección no escuchaba nadie…»*.
+- **Las causas guardadas se etiquetan como «L3 anotó, sin confirmar»**, en
+  HISTORIA y en VISTO ANTES. Hoy ninguna persona anota causas, así que toda
+  causa guardada es de L3, y algunas son de este defecto. L4 repitió una de ellas
+  como si fuera un hecho.
+
+El banco no cambia: 2 de 2 en no vistos y 6 aciertos en diseño. Ningún caso
+tenía un `ConnectError`, y ese es justo el hueco por el que entró esto. **Hace
+falta un caso de banco con un destino caído.** El incidente de hoy lo es, pero su
+causa la ha establecido L3, no una fuente independiente.
+
+---
+
+## D-146 · Qwen3 medido como juez y como investigador: se queda en sombra, L4 apagado
+
+**Estado**: ✅ Medido · sombra de L3 con Qwen en modo «completa» · L4 apagado
+
+`gpt-oss-20b-mxfp4` dejó de estar disponible el 26/10. El dueño gestionó
+`qwen3-30b-a3b-q4-k-m-local` con Prometheus y el permiso para nuestro cliente.
+
+### El juez, en el banco
+
+| juez | no vistos (aciertos) | diseño | fallos con confianza alta |
+|---|---|---|---|
+| **reglas** | **2/2** | **6 aciertos**, 2 parciales | 0 |
+| Qwen compite, sin razonamiento | 0/2 (se abstiene) | 0 aciertos, 4 parciales, 2 fallos | **2** |
+| Qwen compite, con razonamiento | 1/2 | 2 aciertos, 3 fallos | 1 |
+| Qwen completa a las reglas, sin razonamiento | 2/2 | 4 aciertos, 4 parciales | 0 |
+| Qwen completa a las reglas, con razonamiento | 2/2 | 3 aciertos, 5 parciales | 0 |
+
+**B-42 respondido: completar no añade nada y quita algo.** Donde las reglas
+aciertan a medias (`aeon`, `clients-names`), el modelo tampoco llega. Donde
+aciertan, a veces reescribe y pierde lo que hacía buena la causa: en `tenant` se
+cae «proceso con el código anterior», y en `pendingrollback`, «consecuencia de
+una excepción anterior». Sin razonamiento, el modelo tarda unos 3 s.
+
+**En producción** la sombra pasa a Qwen en modo «completa». Es lo único que el
+banco no puede medir: el banco no tiene casos donde las reglas se abstengan, y
+en producción sí los hay. La primera comparación real es justo uno de esos, y el
+modelo devolvió el síntoma como causa: *«no reporta métricas durante 5
+minutos»*, con confianza media. Escribe en español, que `gpt-oss` no hacía.
+
+### L4, en vivo
+
+Sobre el `503` del gateway (D-145):
+
+1. **Sin `submit_tool`, el agente no investigaba.** synaptum pedía
+   `response_format: json_schema` y la gramática del servidor obligaba a
+   contestar el JSON a la primera. Resultado: «no hay información suficiente» en 3
+   s y sin una sola herramienta. Con el informe entregado como herramienta, sí
+   investiga: `incidente`, `expediente`, `linea_base` y `concurrentes`, en 8 s y
+   ~35.000 tokens sin razonamiento, o 40 s con él.
+2. **Lo que concluyó, en las tres pasadas, fue falso**: «latencia alta, el
+   gateway se rinde». Antes de D-145 lo copiaba del diagnóstico erróneo de L3.
+   Después, de las causas antiguas guardadas, que eran de ese mismo defecto.
+3. **Atribuye evidencia a herramientas que no llamó**: cita `[traza]`,
+   `[alcance]` y `[linea_base]` habiendo llamado solo a `expediente`. Y dice que
+   no hubo errores concurrentes cuando el expediente los listaba.
+
+**L4 se queda apagado.** En sombra no avisaría a nadie, pero cada investigación
+gasta GPU de la misma plataforma que usan Centinela y Veritium, y hoy produciría
+conclusiones falsas. Lo que falta antes de encenderlo:
+
+- comprobar con código que cada `[herramienta]` citada se llamó de verdad, igual
+  que se comprueban las citas del calificador;
+- un banco para L4;
+- y un modelo que razone mejor sobre el expediente. Ninguno de los dos
+  disponibles lo hace hoy.
