@@ -7569,3 +7569,41 @@ de `diagnose` para reutilizar el almacén y la recolección de L3: el
 incidentes abiertos, la línea base de `/v1/backends` (p50 60,2 s, 352 de ~9.664
 por encima de 75 s) y el expediente de un incidente abierto, con su bloque
 «VISTO ANTES».
+
+---
+
+## D-144 · L4 existe: investigador con synaptum, triage sin modelo y sombra en segundo plano
+
+**Estado**: 🚧 Escrito y probado con dobles · apagado en producción hasta medirlo
+
+**Las piezas**:
+
+- **El investigador** (`investigador.py`, F4-01) es un `Agent` de synaptum con
+  las herramientas de `mcp-obs` (D-143) y salida tipada: causa, confianza,
+  evidencia citando la herramienta de la que sale y **alternativas
+  descartadas** (F4-05). Empieza siempre por el `expediente`, que es lo que ya
+  leyó L3.
+- **Presupuesto duro** (F4-02): 40 llamadas a herramientas, 300.000 tokens y 15
+  minutos. Al agotarse uno, el run se corta y sale un informe **parcial sin
+  causa**: cortar no es fallar, y fingir una conclusión sería peor. Un detalle
+  que costó un test: synaptum cede cada paso de herramienta dos veces
+  (intención y resultado), y contarlas las dos habría agotado el presupuesto a
+  la mitad.
+- **No arranca con una herramienta que escriba.** La pista la da el servidor y
+  synaptum no se la cree; si alguna llega con un riesgo distinto de `READ`, el
+  investigador se niega a construirse.
+- **El triage** (`triage.py`, F3-03) es **determinista, sin modelo**. Las
+  razones para no investigar son hechos que el expediente ya mide: no es
+  `page`, la plataforma entera callaba, el componente nunca emitió, las reglas
+  ya tienen causa con confianza alta, o es un hermano (B-40) de otro que ya se
+  investiga (de cada grupo se queda el primero por nombre, la misma elección
+  desde cualquiera de ellos). Pagar un modelo para que adivine eso sería pagar
+  por lo que ya se sabe. Siempre devuelve el motivo, también cuando dice que no.
+- **La sombra de L4** (`sombra_l4.py`, F4-03) corre en un hilo con una cola de
+  5: una investigación tarda minutos y L3 diagnostica cada 10 s. Lo que no cabe
+  se cuenta y se tira, porque si el triage deja pasar más de lo que la GPU puede
+  investigar, lo que hay que afinar es el triage. La misma huella no se vuelve a
+  investigar en 6 h. Escribe en `sombra-l4.jsonl` y nunca notifica.
+
+**Apagado** (`DIAGNOSE_INVESTIGADOR` vacío) hasta tener una medida. El banco de
+F3-08 mide jueces de un solo paso, y L4 necesita su propia medida.
