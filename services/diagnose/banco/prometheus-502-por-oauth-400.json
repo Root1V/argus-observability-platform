@@ -216,7 +216,7 @@
       "horas": 24,
       "instancias": [
         {
-          "instancia": "5ec1ae40-4446-41b6-8138-56e66d40723c",
+          "instancia": "proceso-1",
           "version": "2.0.0",
           "desde": "2026-10-24T08:06:57.343436Z",
           "hasta": "2026-10-24T12:06:54.783674Z",
@@ -224,7 +224,7 @@
           "primer_error": "2026-10-24T10:44:56.979336Z"
         },
         {
-          "instancia": "83109e74-dc28-4fce-bd7f-55a95fd563b3",
+          "instancia": "proceso-2",
           "version": "2.0.0",
           "desde": "2026-10-24T08:07:15.493806Z",
           "hasta": "2026-10-24T12:04:27.135671Z",
@@ -232,7 +232,7 @@
           "primer_error": "2026-10-24T08:07:15.493806Z"
         },
         {
-          "instancia": "fa3ebf42-71dc-49a5-b266-3c42627783cd",
+          "instancia": "proceso-3",
           "version": "2.0.0",
           "desde": "2026-10-24T12:05:47.680066Z",
           "hasta": "2026-10-24T16:27:47.395496Z",
@@ -240,7 +240,7 @@
           "primer_error": "2026-10-24T12:07:27.495692Z"
         },
         {
-          "instancia": "b0a923fa-268e-47b8-87e5-9cd88b6ee32f",
+          "instancia": "proceso-4",
           "version": "2.0.0",
           "desde": "2026-10-24T16:28:27.498980Z",
           "hasta": "2026-10-24T17:13:24.581231Z",
@@ -248,7 +248,7 @@
           "primer_error": null
         },
         {
-          "instancia": "b5d6a07d-457a-49da-ae8d-31b57c543c1f",
+          "instancia": "proceso-5",
           "version": "2.0.0",
           "desde": "2026-10-24T17:12:36.869307Z",
           "hasta": "2026-10-25T08:06:47.688898Z",
@@ -256,7 +256,7 @@
           "primer_error": "2026-10-24T20:38:07.454672Z"
         },
         {
-          "instancia": "0dbd57b1-12f7-416a-bd71-8e4e142ec71f",
+          "instancia": "proceso-6",
           "version": "2.0.0",
           "desde": "2026-10-25T08:02:16.838843Z",
           "hasta": "2026-10-25T08:02:18.350045Z",
@@ -264,7 +264,7 @@
           "primer_error": null
         },
         {
-          "instancia": "5a3a0e36-b669-4105-a23f-9a7e5a0b7cb6",
+          "instancia": "proceso-7",
           "version": "2.0.0",
           "desde": "2026-10-25T08:02:46.517525Z",
           "hasta": "2026-10-25T08:02:47.987534Z",
@@ -272,7 +272,7 @@
           "primer_error": "2026-10-25T08:02:47.784727Z"
         },
         {
-          "instancia": "83d5ad7d-7995-4d65-a3d2-2cdd7a473aa7",
+          "instancia": "proceso-8",
           "version": "2.0.0",
           "desde": "2026-10-25T08:03:44.862369Z",
           "hasta": "2026-10-25T08:06:14.794918Z",

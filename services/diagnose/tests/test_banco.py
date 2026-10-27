@@ -22,8 +22,8 @@ CASOS = cargar()
 
 
 def test_el_banco_tiene_lo_que_pide_f3_08() -> None:
-    """Entre 5 y 10 casos con causa conocida."""
-    assert 5 <= len(CASOS) <= 10
+    """Al menos los 5 casos con causa conocida que pedia F3-08. Sin techo: el banco crece con lo que falla."""
+    assert len(CASOS) >= 5
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=lambda c: c.id)
@@ -121,6 +121,10 @@ def test_ningun_caso_lleva_el_volcado_de_una_fila(caso: Caso) -> None:
     texto = caso.model_dump_json()
     for marca in ("Failing row contains", "[parameters:", "[SQL:"):
         assert marca not in texto, f"{caso.id} lleva `{marca}`"
+    # Ningun UUID: ni de filas (Veritium) ni de procesos (`service.instance.id`).
+    import re
+
+    assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", texto), f"{caso.id} lleva un UUID"
 
 
 def test_media_causa_es_parcial_y_no_falla() -> None:

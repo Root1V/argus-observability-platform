@@ -7683,6 +7683,45 @@ tenía un `ConnectError`, y ese es justo el hueco por el que entró esto. **Hace
 falta un caso de banco con un destino caído.** El incidente de hoy lo es, pero su
 causa la ha establecido L3, no una fuente independiente.
 
+
+### Addendum (26/10): el caso del banco, con la causa medida fuera de L3
+
+`prometheus-503-backend-caido` entra en el banco con nivel **`medida`** y como
+caso de **diseño**: la regla nueva se escribió mirando este incidente. La causa
+sale de tres fuentes que no son L3:
+
+- **El sistema operativo.** El `llama-server` de `gpt-oss-20b-mxfp4` que escucha
+  hoy en `:8087` arrancó a las 14:28:18 hora local, 19:28:18 UTC (`ps -o
+  lstart`).
+- **Las llamadas del gateway a `:8087` por minuto**: correctas hasta las 19:22,
+  tres `ConnectError` a las 19:27 (los tres intentos de la petición de ejemplo) y
+  correctas otra vez desde las 19:29.
+- **Lo que Axonium nos respondió en esa ventana**: `UnknownModelError` y después
+  `BackendUnavailableError` con «circuit half-open».
+
+**Lo que no se pudo establecer**: los `503` de 19:30 a 20:07 no llegan a llamar
+al backend (el gateway responde en 2 ms), lo que encaja con su disyuntor
+recuperándose. Todos vienen de `127.0.0.1`, y con Docker Desktop eso no distingue
+a `diagnose` —cuya sombra siguió apuntando a `gpt-oss` y reintentando hasta las
+20:07— de cualquier otro cliente nativo. Que parte de esa carga fuera nuestra es
+**posible y no está demostrado**, y la etiqueta no lo afirma.
+
+**El criterio prohibido es exactamente el defecto de D-145**: «dice que el
+destino tardó o que es latencia o plazo». Las reglas, después de D-145, aciertan
+con confianza alta. Qwen compitiendo da un parcial: nombra el error de conexión
+sin decir que el destino estaba caído. Completando, mantiene a las reglas y
+acierta. Ninguno de los dos repitió las causas antiguas equivocadas que trae la
+HISTORIA congelada.
+
+**Procesos anonimizados.** Al capturar salieron 8 `service.instance.id`, que ya
+estaban en otros 6 casos. No son filas de nadie (son UUID que el SDK genera al
+arrancar cada proceso), pero son identificadores de otros equipos, y el juez solo
+necesita cuántos procesos hubo, de qué versión y desde cuándo. Ahora se guardan
+como `proceso-1…N` y un test impide que entre cualquier UUID. Los que se subieron
+antes siguen en el historial de git.
+
+**El banco**: 11 casos. No vistos, 2 de 2. Diseño, 7 aciertos y 2 parciales.
+Sigue faltando un caso no visto de un tipo distinto a los silencios del host.
 ---
 
 ## D-146 · Qwen3 medido como juez y como investigador: se queda en sombra, L4 apagado
