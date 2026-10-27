@@ -25,3 +25,12 @@ def test_cuenta_y_señala_donde_una_sombra_tiene_causa_y_las_reglas_no() -> None
 
 def test_sin_registros_no_revienta() -> None:
     assert "0 juicios" in informe([], []) and "0 investigaciones" in informe([], [])
+
+
+def test_cuando_el_modelo_no_respondio_no_se_cuenta_como_juicio_suyo() -> None:
+    l3 = [{"app": "a", "componente": "c", "reglas": {"root_cause": "r"},
+           "modelo": {"root_cause": "r", "origen": "reglas"}}]
+    texto = informe(l3, [])
+
+    assert "1 sin modelo disponible" in texto
+    assert "solo el modelo" not in texto

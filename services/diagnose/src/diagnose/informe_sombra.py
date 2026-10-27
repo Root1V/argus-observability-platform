@@ -39,6 +39,12 @@ def informe(l3: list[dict[str, Any]], l4: list[dict[str, Any]]) -> str:
     lineas: list[str] = []
 
     lineas.append(f"JUEZ CON MODELO EN SOMBRA (L3) · {len(l3)} juicios")
+    # En modo «completa», si el modelo falla queda el veredicto de las reglas
+    # con `origen = reglas`. Eso no es un juicio del modelo: se cuenta aparte.
+    sin_modelo = [f for f in l3 if (f.get("modelo") or {}).get("origen") == "reglas"]
+    l3 = [f for f in l3 if f not in sin_modelo]
+    if sin_modelo:
+        lineas.append(f"  {len(sin_modelo)} sin modelo disponible (quedo el veredicto de las reglas): no cuentan")
     if l3:
         reglas = sum(1 for f in l3 if (f.get("reglas") or {}).get("root_cause"))
         modelo = sum(1 for f in l3 if (f.get("modelo") or {}).get("root_cause"))
