@@ -109,14 +109,21 @@ def _investigador_en_sombra(settings: Settings, log: logging.Logger):
     if not os.environ.get("AXONIUM_CLIENT_ID"):
         log.warning("l4.sin_credencial", extra={"falta": "AXONIUM_CLIENT_ID / AXONIUM_CLIENT_SECRET"})
         return None
-    from .investigador import investigar_con_mcp
+    from .investigador import id_de_investigacion, investigar_con_mcp
     from .sombra_l4 import SombraL4
 
-    def investigar(huella: str):
-        return asyncio.run(investigar_con_mcp(huella, modelo=settings.modelo,
-                                              razonamiento=settings.razonamiento or None))
+    razonamiento = settings.razonamiento or None
 
-    return SombraL4(investigar, ruta=settings.sombra_l4_path)
+    def investigar(huella: str, run_id: str):
+        return asyncio.run(investigar_con_mcp(huella, modelo=settings.modelo, razonamiento=razonamiento,
+                                              run_id=run_id, diario=settings.l4_diario_path))
+
+    return SombraL4(
+        investigar,
+        ruta=settings.sombra_l4_path,
+        pendientes=settings.l4_diario_path,
+        nuevo_run_id=lambda huella, epoca: id_de_investigacion(settings.modelo, razonamiento, huella, epoca),
+    )
 
 
 if __name__ == "__main__":

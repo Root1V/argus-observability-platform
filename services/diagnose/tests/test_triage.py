@@ -49,7 +49,7 @@ def test_la_sombra_de_l4_investiga_registra_y_no_repite(tmp_path) -> None:
     ruta = tmp_path / "l4.jsonl"
     vistas: list[str] = []
 
-    def investigar(huella: str) -> Resultado:
+    def investigar(huella: str, run_id: str) -> Resultado:
         vistas.append(huella)
         return Resultado(huella=huella, causa="el Valkey compartido", confianza="media", origen="l4:doble")
 
@@ -70,7 +70,7 @@ def test_lo_que_no_cabe_en_la_cola_se_cuenta_y_se_tira() -> None:
 
     bloqueo = threading.Event()
 
-    def lenta(huella: str) -> Resultado:
+    def lenta(huella: str, run_id: str) -> Resultado:
         bloqueo.wait(5)
         return Resultado(huella=huella)
 
@@ -81,3 +81,33 @@ def test_lo_que_no_cabe_en_la_cola_se_cuenta_y_se_tira() -> None:
 
     assert resultados.count(True) <= 2
     assert sombra.stats["descartadas_cola_llena"] >= 2
+
+
+def test_lo_pendiente_sobrevive_a_un_reinicio_y_se_retoma_con_su_run_id(tmp_path) -> None:
+    """F4-01: si el proceso muere con algo en cola, al arrancar se retoma con el MISMO run_id."""
+    import threading
+
+    pendientes = str(tmp_path / "l4.sqlite")
+    nunca = threading.Event()
+
+    def colgada(huella: str, run_id: str) -> Resultado:
+        nunca.wait(0.5)
+        raise SystemExit  # el proceso «muere» sin terminarla: no se marca
+
+    primera = SombraL4(colgada, pendientes=pendientes, nuevo_run_id=lambda h, e: f"run-{h}")
+    primera.encolar(_exp(huella="h7"), SIN_CAUSA, "m")
+
+    retomadas: list[tuple[str, str]] = []
+
+    def investigar(huella: str, run_id: str) -> Resultado:
+        retomadas.append((huella, run_id))
+        return Resultado(huella=huella)
+
+    segunda = SombraL4(investigar, pendientes=pendientes)
+    segunda.esperar(timeout=5)
+
+    assert retomadas == [("h7", "run-h7")]
+    assert segunda.stats["retomadas"] == 1
+    tercera = SombraL4(investigar, pendientes=pendientes)               # ya terminada: no se repite
+    tercera.esperar(timeout=5)
+    assert len(retomadas) == 1

@@ -32,7 +32,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F1** | Librerías y primeras apps | 🚧 | 12/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
-| **F4** | Investigación agéntica L4 | 🚧 | 1/7 |
+| **F4** | Investigación agéntica L4 | 🚧 | 2/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
@@ -155,7 +155,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F4-01` | 🚧 | Investigación multi-paso con **synaptum** | Escrito (D-144) y **medido en su propio banco** (D-147, herramientas congeladas servidas por el mismo `mcp-obs`): con Qwen3 no supera a L3 en ningún caso y tiene un fallo con confianza alta en cada modo. Apagado; el banco queda para el próximo modelo |
+| `F4-01` | ✅ | Investigación multi-paso con **synaptum**: cada paso, un checkpoint | **Hecho (D-144, D-149)**: diario `SqliteCheckpointer`, `run_id` determinista y pendientes en disco; verificado con `kill -9` contra el stack: al retomar, 3 pasos reproducidos y ninguno repagado. **Apagado por calidad** (D-147): con Qwen3 no supera a L3 |
 | `F4-02` | ✅ | Presupuesto duro: 40 tool calls, 300k tokens, 15 min | Informe parcial al agotarse **Hecho (D-144)**: informe parcial sin causa al agotarse |
 | `F4-03` | 🚧 | **Shadow mode**: investiga y registra, no notifica | Hecho para el juez de L3 (`sombra.jsonl`, D-137). Falta para L4, que todavía no existe |
 | `F4-04` | ⏳ | Trazar el propio agente en Langfuse | Es una app LLM más |

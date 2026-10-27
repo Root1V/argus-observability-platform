@@ -101,3 +101,40 @@ def test_citar_un_bloque_del_expediente_leido_es_citar_el_expediente() -> None:
 
     assert r.evidencia == ["[alcance] 23,2% de fallos"]
     assert r.citas_inventadas == ["[otra_cosa] inventado"]
+
+
+# --- F4-01: durable -------------------------------------------------------------
+
+
+def test_reanudar_con_el_mismo_run_id_no_repite_inferencias_ni_herramientas(tmp_path) -> None:
+    """D-135: lo pagado se reproduce desde el diario; solo se llama al modelo para lo que faltaba."""
+    from synaptum.run.sqlite import SqliteCheckpointer
+
+    diario = tmp_path / "l4.sqlite"
+    gateways: list[FakeGateway] = []
+
+    def investigador(*guion) -> Investigador:
+        def fabrica(hs):
+            gateways.append(FakeGateway(*guion, tools=hs))
+            return gateways[-1]
+        return Investigador(fabrica, [expediente], modelo="doble", checkpointer=SqliteCheckpointer(diario))
+
+    with pytest.raises(RuntimeError):     # el proceso «muere» a mitad: nada lo atrapa, como en la realidad
+        investigador(calls("expediente", huella="h1"), RuntimeError("el proceso murio")).investigar(
+            "h1", run_id="l4-x")
+    assert gateways[-1].tool_calls == 1
+
+    segundo = investigador(entrega(**INFORME)).investigar("h1", run_id="l4-x")
+    assert segundo.final == "informe" and segundo.causa
+    assert gateways[-1].model_calls == 1, "solo la llamada que faltaba"
+    assert gateways[-1].tool_calls == 0, "el expediente se reprodujo, no se volvio a pedir"
+    assert segundo.pasos_reproducidos >= 2
+
+
+def test_el_run_id_es_el_mismo_para_la_misma_peticion_y_otro_para_otra() -> None:
+    from diagnose.investigador import id_de_investigacion
+
+    a = id_de_investigacion("m", "off", "h1", "2026-10-27T10:00")
+    assert a == id_de_investigacion("m", "off", "h1", "2026-10-27T10:00")
+    assert a != id_de_investigacion("m", "off", "h1", "2026-10-27T16:00")
+    assert a != id_de_investigacion("m", "high", "h1", "2026-10-27T10:00")

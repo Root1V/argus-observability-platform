@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     embeddings: str = ""
     memoria_path: str = "/var/lib/argus/memoria.sqlite"
     sombra_l4_path: str = ""
+    # El diario de synaptum y las investigaciones pendientes: lo que permite
+    # retomar tras un reinicio sin repetir inferencias (F4-01).
+    l4_diario_path: str = "/var/lib/argus/l4.sqlite"
 
     def timeout_s(self) -> float:
         return 10.0
