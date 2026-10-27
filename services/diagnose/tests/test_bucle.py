@@ -245,3 +245,32 @@ def test_una_sombra_que_revienta_no_le_cuesta_nada_al_diagnostico() -> None:
     assert len(resultados) == 1
     assert enriquecidos and enriquecidos[0][1]["root_cause"] == "porque si"
     assert d.stats["sombra_fallidos"] == 1
+
+
+def test_l4_en_sombra_investiga_pero_el_aviso_solo_lleva_las_reglas(tmp_path) -> None:
+    """F4-03 para L4: lo que el triage deja pasar se investiga, y el aviso no se entera."""
+    import json
+
+    from diagnose.investigador import Resultado
+    from diagnose.sombra_l4 import SombraL4
+
+    enriquecidos: list[tuple[str, dict]] = []
+    ruta = tmp_path / "sombra-l4.jsonl"
+    investigadas: list[str] = []
+
+    def investigar(huella: str, run_id: str) -> Resultado:
+        investigadas.append(huella)
+        return Resultado(huella=huella, causa="dijo L4", confianza="alta", origen="l4:x")
+
+    l4 = SombraL4(investigar, ruta=str(ruta), por_hora=10)
+    d = Diagnosticador(
+        Settings(alertbus_url="http://bus"), almacen=None,
+        juez=JuezQuieto(Veredicto(root_cause=None)), investigacion=l4, cliente=_bus([_inc()], enriquecidos),
+    )
+    d.ciclo()
+    l4.esperar(timeout=5)
+
+    assert investigadas == ["h1"]
+    assert len(enriquecidos) == 1 and "root_cause" not in enriquecidos[0][1]
+    assert json.loads(ruta.read_text().splitlines()[0])["l4"]["causa"] == "dijo L4"
+    assert d.stats["triage_investigar"] == 1

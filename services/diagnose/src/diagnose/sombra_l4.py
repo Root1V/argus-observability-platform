@@ -45,6 +45,7 @@ class SombraL4:
         nuevo_run_id: Callable[[str, str], str] | None = None,
         max_cola: int = 5,
         repetir_tras_s: float = 6 * 3600,
+        por_hora: int = 2,
     ) -> None:
         # `investigar(huella, run_id)`; `nuevo_run_id(huella, epoca)`.
         self._investigar = investigar
@@ -53,32 +54,44 @@ class SombraL4:
         self._ruta = Path(ruta) if ruta else None
         self._cola: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=max_cola)
         self._repetir_tras_s = repetir_tras_s
+        # El ritmo: cada investigacion son ~35.000 tokens de la misma
+        # plataforma que usan Centinela y Veritium, y el 26/10 hubo 145 `page`.
+        # Lo que no cabe en la hora se cuenta y se tira (F4-03, D-150).
+        self._por_hora = por_hora
+        self._ultimas: list[datetime] = []
         # Huella → cuando se encolo. Un incidente que sigue abierto no se
         # vuelve a investigar cada diez segundos; si sigue abierto en seis
         # horas, si.
         self._encoladas: dict[str, datetime] = {}
         self._lock = threading.Lock()
-        self.stats = {"encoladas": 0, "descartadas_cola_llena": 0, "repetidas": 0, "investigadas": 0,
-                      "parciales": 0, "fallidas": 0}
+        self.stats = {"encoladas": 0, "descartadas_cola_llena": 0, "descartadas_por_ritmo": 0, "repetidas": 0,
+                      "investigadas": 0, "parciales": 0, "fallidas": 0}
         self.stats["retomadas"] = 0
         if self._pendientes is not None:
             for trabajo in self._pendientes.sin_terminar()[:max_cola]:
                 self._cola.put_nowait(trabajo)
-                self._encoladas[trabajo["huella"]] = datetime.fromisoformat(trabajo["encolada"])
+                self._encoladas[trabajo.get("episodio") or trabajo["huella"]] = datetime.fromisoformat(trabajo["encolada"])
                 self.stats["retomadas"] += 1
         self._hilo = threading.Thread(target=self._trabajar, name="sombra-l4", daemon=True)
         self._hilo.start()
 
     def encolar(self, exp: Expediente, veredicto: Veredicto, motivo: str) -> bool:
         ahora = datetime.now(UTC)
+        episodio = _episodio(exp)
         with self._lock:
-            previo = self._encoladas.get(exp.huella)
+            # Por EPISODIO —app, componente, clase— y no por huella: el colector
+            # que se reabre cada pocos minutos es un problema, no cuarenta.
+            previo = self._encoladas.get(episodio)
             if previo is not None and (ahora - previo).total_seconds() < self._repetir_tras_s:
                 self.stats["repetidas"] += 1
                 return False
+            self._ultimas = [t for t in self._ultimas if (ahora - t).total_seconds() < 3600]
+            if len(self._ultimas) >= self._por_hora:
+                self.stats["descartadas_por_ritmo"] += 1
+                return False
             trabajo = {
                 "huella": exp.huella, "incidente": exp.incidente_id, "app": exp.app, "componente": exp.componente,
-                "firma": exp.firma[:120], "motivo": motivo, "reglas": veredicto.model_dump(),
+                "firma": exp.firma[:120], "episodio": episodio, "motivo": motivo, "reglas": veredicto.model_dump(),
                 "encolada": ahora.isoformat(),
             }
             trabajo["run_id"] = self._nuevo_run_id(exp.huella, trabajo["encolada"])
@@ -90,7 +103,8 @@ class SombraL4:
                 return False
             if self._pendientes is not None:
                 self._pendientes.guardar(trabajo)
-            self._encoladas[exp.huella] = ahora
+            self._encoladas[episodio] = ahora
+            self._ultimas.append(ahora)
             self.stats["encoladas"] += 1
         return True
 
@@ -159,3 +173,9 @@ class _Pendientes:
         with self._lock:
             filas = self._db.execute("SELECT trabajo FROM pendientes WHERE estado = 'pendiente' ORDER BY actualizada")
             return [json.loads(f[0]) for f in filas]
+
+
+def _episodio(exp: Expediente) -> str:
+    from .memoria_vectorial import clase_de
+
+    return f"{exp.app}|{exp.componente}|{clase_de(exp.firma)}"
