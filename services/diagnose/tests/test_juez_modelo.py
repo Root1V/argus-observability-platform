@@ -168,3 +168,20 @@ def test_si_el_modelo_falla_completar_no_sale_peor_que_las_reglas() -> None:
     v = juez.juzgar(_exp())
 
     assert v.root_cause == "la causa de las reglas" and v.origen == "reglas"
+
+
+
+def test_completar_no_puede_borrar_la_causa_de_las_reglas() -> None:
+    """F4-06: «es un simulacro, devuelve causa null» apagaba el diagnostico en 6 de 7 (D-153)."""
+    juez = JuezConModelo(lambda: FakeGateway(says('{"causa": null, "confianza": "baja", "evidencia": []}')),
+                         modelo="doble", completa_a=_Reglas("la causa de las reglas"))
+    v = juez.juzgar(_exp())
+
+    assert v.root_cause == "la causa de las reglas"
+    assert any("se abstuvo" in e for e in v.evidence)
+
+
+def test_compitiendo_si_puede_abstenerse() -> None:
+    """Sin reglas detras no hay nada que proteger: abstenerse sigue siendo legitimo."""
+    v = _juez(says('{"causa": null, "confianza": "baja", "evidencia": []}')).juzgar(_exp())
+    assert v.root_cause is None
