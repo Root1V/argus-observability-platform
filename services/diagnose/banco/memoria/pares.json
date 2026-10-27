@@ -1,0 +1,26 @@
+{
+  "nota": "Parejas de incidentes con la MISMA causa establecida fuera de L3 (las causas de los casos de F3-08), y negativos con causa DISTINTA. Pocas: es una comprobacion de humo, no una cifra.",
+  "consultas": [
+    {
+      "caso": "veritium-pendingrollback-sintoma",
+      "esperado": [{"app": "veritium", "clase": "NotNullViolationError", "dia": "2026-10-14"}],
+      "negativo": [],
+      "fuente": "causa_real de veritium-pendingrollback-sintoma y de veritium-tenant-proceso-viejo: la misma migracion VRT-57, confirmada por Veritium"
+    },
+    {
+      "caso": "canario-silencio-host-dormido",
+      "esperado": [
+        {"app": "veritium", "componente": "veritium-api", "clase": "canary-silencio", "dia": "2026-10-23"},
+        {"app": "prometheus-inference-platform", "componente": "gateway", "clase": "canary-silencio", "dia": "2026-10-23"}
+      ],
+      "negativo": [{"app": "prometheus-inference-platform", "componente": "tei", "clase": "canary-silencio"}],
+      "fuente": "causa_real de los tres casos de silencio: el host del plano central dormido (pmset). El de tei es otra causa: nunca emitio"
+    },
+    {
+      "caso": "veritium-silencio-host-dormido",
+      "esperado": [{"app": "prometheus-inference-platform", "componente": "gateway", "clase": "canary-silencio", "dia": "2026-10-23"}],
+      "negativo": [{"app": "prometheus-inference-platform", "componente": "tei", "clase": "canary-silencio"}],
+      "fuente": "causa_real de gateway-silencio-host-dormido y veritium-silencio-host-dormido: el host dormido (pmset)"
+    }
+  ]
+}

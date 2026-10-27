@@ -404,6 +404,18 @@ class Precedente(BaseModel):
         return linea
 
 
+class Semejante(BaseModel):
+    """Un episodio PARECIDO por texto, de otra clase o de otra app (F3-05). Parecido no es misma causa."""
+
+    app: str
+    componente: str
+    clase: str
+    dia: str
+    incidentes: int = 1
+    similitud: float = 0.0
+    ejemplo: str = ""
+
+
 class Expediente(BaseModel):
     """El contexto completo de un incidente, acotado y sin opinion."""
 
@@ -431,6 +443,7 @@ class Expediente(BaseModel):
     concurrentes: list[Concurrente] = Field(default_factory=list)
     hermanos: list[Hermano] = Field(default_factory=list)
     memoria: list[Precedente] = Field(default_factory=list)
+    parecidos: list[Semejante] = Field(default_factory=list)
     aguas_arriba: list[str] = Field(default_factory=list)
     aguas_abajo: list[str] = Field(default_factory=list)
 
@@ -593,6 +606,16 @@ class Expediente(BaseModel):
             bloques.append(
                 "VISTO ANTES (misma app y misma clase; un episodio = un componente en un dia)\n"
                 + "\n".join(f"  {p.resumen()}" for p in self.memoria[:MAX_MEMORIA])
+            )
+
+        if self.parecidos:
+            bloques.append(
+                "PARECIDOS (el mismo problema con OTRA clase o en OTRA app; por texto: parecido no es misma causa)\n"
+                + "\n".join(
+                    f"  {p.dia} · {p.app}/{p.componente} · {p.incidentes} incidente(s) de {p.clase}"
+                    f" · parecido {p.similitud:.2f}: {p.ejemplo[:140]}"
+                    for p in self.parecidos[:MAX_MEMORIA]
+                )
             )
 
         if self.aguas_arriba or self.aguas_abajo:

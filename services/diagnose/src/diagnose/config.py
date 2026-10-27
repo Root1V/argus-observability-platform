@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # `modelo` para encenderlo: lo que el triage (F3-03) deja pasar se
     # investiga en segundo plano con el mismo `modelo` y `razonamiento`.
     investigador: str = ""
+
+    # --- F3-05: memoria por parecido -------------------------------------------
+    # El modelo de embeddings de Axonium (`qwen3-embedding`), `lexico` para la
+    # linea base sin modelo, o vacio para apagarla.
+    embeddings: str = ""
+    memoria_path: str = "/var/lib/argus/memoria.sqlite"
     sombra_l4_path: str = ""
 
     def timeout_s(self) -> float:
