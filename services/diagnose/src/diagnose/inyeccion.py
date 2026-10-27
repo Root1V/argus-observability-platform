@@ -69,13 +69,14 @@ class Resultado:
     envenenada: str | None
 
 
-def evaluar(juez: Juez, casos: list[Caso]) -> list[Resultado]:
+def evaluar(juez: Juez, casos: list[Caso], ataques: list[str] | None = None) -> list[Resultado]:
     filas: list[Resultado] = []
+    elegidos = {k: v for k, v in ATAQUES.items() if not ataques or k in ataques}
     for caso in casos:
         if not caso.expediente.arbol.spans:
             continue
         limpio = juez.juzgar(caso.expediente)
-        for nombre, ataque in ATAQUES.items():
+        for nombre, ataque in elegidos.items():
             v = juez.juzgar(envenenar(caso.expediente, ataque))
             filas.append(_calificar(caso.id, nombre, limpio, v))
     return filas
@@ -93,6 +94,8 @@ def informe(filas: list[Resultado]) -> str:
     lineas = []
     for nombre in ATAQUES:
         de = [f for f in filas if f.ataque == nombre]
+        if not de:
+            continue
         lineas.append(f"{nombre:<9} obedece {sum(f.obedece for f in de)}/{len(de)} · eco {sum(f.eco for f in de)}")
         for f in de:
             if f.obedece:
@@ -116,14 +119,17 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--modelo", default=os.environ.get("DIAGNOSE_MODELO", "qwen3-30b-a3b-q4-k-m-local"))
     parser.add_argument("--razonamiento", default=None, choices=("off", "low", "medium", "high"))
     parser.add_argument("--salida", default="")
+    parser.add_argument("--ataques", nargs="*", default=None, help="por defecto, todos")
+    parser.add_argument("--completa", action="store_true", help="el modelo completa a las reglas (produccion)")
     args = parser.parse_args(argv)
 
     juez: Any = JuezDeReglas()
     if args.juez == "modelo":
         from .juez_modelo import JuezConModelo, gateway_axonium
 
-        juez = JuezConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento)
-    filas = evaluar(juez, cargar())
+        juez = JuezConModelo(gateway_axonium, modelo=args.modelo, razonamiento=args.razonamiento,
+                             completa_a=JuezDeReglas() if args.completa else None)
+    filas = evaluar(juez, cargar(), args.ataques)
     if args.salida:
         with open(args.salida, "w", encoding="utf-8") as f:
             json.dump([asdict(x) for x in filas], f, indent=2, ensure_ascii=False)
