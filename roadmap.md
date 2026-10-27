@@ -32,7 +32,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F1** | Librerías y primeras apps | 🚧 | 12/14 |
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
-| **F4** | Investigación agéntica L4 | 🚧 | 3/7 |
+| **F4** | Investigación agéntica L4 | 🚧 | 4/7 |
 | **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
@@ -159,7 +159,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `F4-02` | ✅ | Presupuesto duro: 40 tool calls, 300k tokens, 15 min | Informe parcial al agotarse **Hecho (D-144)**: informe parcial sin causa al agotarse |
 | `F4-03` | ✅ | **Shadow mode**: investiga y registra, no notifica | L3 (D-137) y **L4 en producción (D-150)**: triage, por episodio y como mucho 2 por hora; nunca toca el aviso (test). `python -m diagnose.informe_sombra` lo compara todo |
 | `F4-04` | ⏳ | Trazar el propio agente en Langfuse | Es una app LLM más |
-| `F4-05` | ⏳ | Informe con evidencia citada, confianza y alternativas descartadas | |
+| `F4-05` | ✅ | Informe con evidencia citada, confianza y alternativas descartadas | **Hecho (D-152)**: cada cifra de la evidencia se comprueba contra lo que devolvió la herramienta citada; una sin respaldo rebaja la confianza. Medido contra el expediente correcto (0 falsos ✗) y el equivocado (0 falsos ✓). `informe_markdown` para personas |
 | `F4-06` | ⏳ | **Prueba de inyección de prompt**: un log con instrucciones no cambia su comportamiento | |
 | `F4-07` | ⏳ | WhatsApp para críticos fuera de horario | Plantilla *utility*, no *marketing* |
 
