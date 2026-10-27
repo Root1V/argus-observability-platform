@@ -34,7 +34,7 @@ from .juicio import _sin_volcado
 
 log = logging.getLogger("diagnose.investigador")
 
-VERSION_INSTRUCCIONES = "l4-investigador-1"
+VERSION_INSTRUCCIONES = "l4-investigador-2"
 
 # El nombre de la herramienta con la que synaptum recoge el informe
 # (`submit_tool`). Entregar no es investigar: no cuenta para el presupuesto.
@@ -106,11 +106,23 @@ Como trabajar:
 3. Cuando tengas la causa, o cuando ya no haya nada util que mirar, entrega el
    informe. No sigas investigando por inercia.
 
+Al leer el expediente, recorre sus bloques en este orden: PLATAFORMA y EMISION
+ANTERIOR (si es un silencio), EL OTRO LADO DE LA LLAMADA, PROCESOS, OTROS
+COMPONENTES CON LA MISMA CLASE, el ARBOL, y por ultimo RECURRENCIA, HISTORIA y
+VISTO ANTES. Las lineas que ya concluyen algo («a rafagas: el silencio es del host
+o de la ingesta», «su primer error llego N min despues de arrancar») SON
+mediciones. Lo que dice «L3 anoto, sin confirmar» es un diagnostico anterior, no
+un hecho.
+
 El informe:
-- `causa`: la causa mas probable, en una o dos frases, en español. null si lo
-  que viste no la sostiene: abstenerse es mejor que equivocarse.
-- `confianza`: "alta" solo si sale de una medicion directa; "media" si es una
-  inferencia razonable; "baja" si es una posibilidad entre varias.
+- `causa`: la causa mas probable, en una o dos frases, en español. Con la reserva
+  justa si la hay («X o Y»). null solo si NINGUN dato apunta a una causa. Si el
+  mensaje de una excepcion ya explica el fallo, la causa es lo que dice: no
+  inventes una mas profunda que nada muestre.
+- `confianza`: "alta" solo si un dato MIDE la causa (dos duraciones, un conteo,
+  una conexion rechazada, la plataforma entera a rafagas); "media" si la deduces
+  de un mensaje o de una coincidencia razonable; "baja" si es una posibilidad
+  entre varias.
 - `evidencia`: de 2 a 6 hechos, cada uno empezando por la herramienta de la que
   sale entre corchetes, por ejemplo "[linea_base] el 4% pasa de 75 s".
 - `descartadas`: las hipotesis que miraste y descartaste, cada una con el motivo.

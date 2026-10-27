@@ -7988,3 +7988,76 @@ después, con el backend de `:8087` levantado desde esa hora. Parece un
 disyuntor atascado. Es de Prometheus y se le dice a través del dueño. La sombra
 hizo lo que tenía que hacer: dos informes parciales sin causa, registrados, y
 ningún aviso tocado.
+
+---
+
+## D-151 · `qwen3-8-27b` y el prompt del juez revisado: deja de abstenerse, pero no es para producción
+
+**Estado**: ✅ Medido · prompt `l3-juez-2` y `l4-investigador-2` · L4 en sombra apagado
+
+El dueño consiguió `qwen3-8-27b-ud-iq4-xs-local` y apuntó que quizá el problema era
+el prompt y no el modelo. Las dos cosas se midieron por separado.
+
+### El modelo, con el prompt de antes (`l3-juez-1`), sin razonamiento
+
+No vistos 0/2 (se abstiene en los dos). Diseño 1 acierto, 4 parciales, 2
+abstenciones y 2 fallos, **los dos con confianza alta**. Razona mejor de lo que
+dice la cifra: en el destino caído dice «no está disponible o no está escuchando
+en ese puerto», y en `/v1/backends`, «el plazo del gateway es inferior al tiempo
+de respuesta habitual». Las dos causas son correctas y el calificador por
+palabras no las reconoce. Pero se abstiene en **los cuatro** silencios aunque el
+expediente traiga escrita la conclusión.
+
+### El prompt revisado
+
+Cada cambio sale de un fallo en un caso de **diseño** y está escrito como
+principio general. Los dos no vistos no se miraron para escribirlo:
+
+- **`veritium-silencio`**: se abstenía con «a ráfagas: es del host o de la
+  ingesta» delante. → Las líneas del expediente que concluyen algo son
+  mediciones, una causa con reserva se dice con esa reserva, y solo se abstiene
+  si **ningún** bloque apunta a una causa.
+- **`tenant`**: no leía PROCESOS. → Se recorren los bloques en un orden fijo.
+- **`aeon`**: inventaba «incompatibilidad de versión» con confianza alta. → Si el
+  mensaje explica el fallo, la causa es lo que dice. La confianza es «alta» solo
+  si un bloque **mide** la causa.
+
+### El resultado (sin razonamiento)
+
+| | no vistos | diseño | fallos con confianza alta |
+|---|---|---|---|
+| reglas | **2/2** | **7 aciertos** | 0 |
+| 27B, prompt 1 | 0/2 (se abstiene) | 1 acierto, 2 fallos | 2 |
+| 27B, prompt 2 | **1 acierto + 1 parcial** | 2 aciertos, 6 parciales, 1 fallo | **1** |
+
+- **Deja de abstenerse**: 0 abstenciones, frente a 4. Los dos no vistos pasan a
+  «es del host o de la ingesta». El parcial de `canario` es la composición: no
+  dice «todos los servicios a la vez».
+- **Pero el principio se pasa de frenada en `tei`**: ahora dice «host o
+  ingesta», cuando la causa es que nunca emitió. Ese expediente también traía la
+  plataforma a ráfagas, y EMISIÓN ANTERIOR («NADA en 30 días») debería pesar más.
+  Las reglas lo resuelven por orden: `_nunca_ha_emitido` va antes que
+  `_calla_toda_la_plataforma`.
+- **Queda un fallo con confianza alta**, `tenant`: sigue sin ver el proceso viejo.
+- **Advertencia sobre la mejora en los no vistos**: son silencios del mismo tipo
+  que `veritium-silencio`, el caso de diseño que inspiró el cambio. Que el
+  principio generalice a silencios de otras apps es poco: demuestra que no se
+  escribió para un caso, no que valga para otros tipos de fallo.
+
+### Lo que lo descarta para producción: el tiempo
+
+- **Sin razonamiento**: 15–54 s por juicio. El juez en sombra corre en línea,
+  después de devolver el veredicto de las reglas, así que retrasaría a los demás
+  incidentes del ciclo.
+- **Con razonamiento**: de 2 a 49 minutos por caso, y a partir del quinto caso
+  `ProviderError`. Solo valen 4 casos de esa pasada.
+- **L4**: con expedientes de ~35.000 tokens llevaba hora y media y seguía en el
+  segundo caso. Se paró para no ocupar durante horas la GPU que comparten
+  Centinela y Veritium.
+
+**Decisiones**: el prompt revisado se queda, porque mejora a los dos modelos
+medidos en lo que importaba (abstenerse con la respuesta delante). **L4 en
+sombra se apaga**: `qwen3-30b` ya no se sirve y con el 27B no cabe. El juez en
+sombra apunta todavía a `qwen3-30b`; falla al instante y deja el veredicto de
+las reglas. Si se pasa al 27B, lo decide el dueño, porque le cuesta GPU y
+retrasa el ciclo.
