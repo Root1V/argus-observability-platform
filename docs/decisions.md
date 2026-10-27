@@ -8061,3 +8061,51 @@ sombra se apaga**: `qwen3-30b` ya no se sirve y con el 27B no cabe. El juez en
 sombra apunta todavía a `qwen3-30b`; falla al instante y deja el veredicto de
 las reglas. Si se pasa al 27B, lo decide el dueño, porque le cuesta GPU y
 retrasa el ciclo.
+
+---
+
+## D-152 · F4-05: la evidencia de L4 se comprueba contra lo que devolvió la herramienta
+
+**Estado**: ✅ Hecho y medido sobre informes reales
+
+**Lo que ya había** (D-144, D-146, D-147): el informe de L4 trae causa,
+confianza, evidencia que cita la herramienta de la que sale, y alternativas
+descartadas. Las citas a herramientas que no se llamaron se quitan.
+
+**Lo que faltaba**: que «evidencia citada» significara algo. Que la herramienta
+se llamara no impide que el modelo ponga junto a `[alcance]` una cifra que el
+alcance no dice. Las cifras son lo que más fácil se inventa y lo que más fácil se
+comprueba con código.
+
+**Qué se hizo**:
+
+- Durante el run se guarda lo que devolvió cada herramienta, en memoria y nunca en
+  el resultado, porque son datos de otras aplicaciones. Cada evidencia acaba como
+  `verificada`, `cifras sin respaldo` o `sin cifras`.
+- **Con una sola cifra sin respaldo, la confianza no puede ser alta**: se rebaja
+  a media y se dice por qué (`confianza_rebajada`).
+- **`informe_markdown`**: el informe para una persona. Causa, evidencia con ✓/✗/·,
+  lo quitado por citar herramientas no llamadas, alternativas descartadas, coste y
+  `run_id`. `INFORME_FORMATO=markdown python -m diagnose.investigador <huella>`.
+
+**Cómo se midió la comprobación, y cómo se corrigió dos veces**. Sobre los
+informes reales de Qwen3-30B en el banco de L4, en los casos donde solo llamó a
+`expediente` (cuyo texto congelado es exactamente lo que recibió), se verificó
+cada evidencia contra **su** expediente y contra el de **otro** caso. Una
+comprobación que aprueba contra el expediente equivocado no comprueba nada.
+
+| versión | contra el correcto | contra el equivocado |
+|---|---|---|
+| tolerancia del 5 % | 22 verificadas, 0 sin respaldo | **6 de 22 aprobadas por error** |
+| redondeo exacto; fuera cifras ≤ 31 | 13 verificadas, 0 sin respaldo | 3 de 13 aprobadas por error |
+| y fuera fechas, horas y las ventanas fijas (60 min, 24 h) | **8 verificadas, 0 sin respaldo** | **0 aprobadas por error**, con tres desplazamientos |
+
+Las aprobaciones erróneas eran cifras del FORMATO del expediente, no del
+incidente: «30 días», «1 error», el año de una fecha, el «60» de «en los 60
+minutos anteriores».
+
+**El precio**: 23 de las 31 evidencias no tienen ninguna cifra que distinga algo
+y quedan como «sin cifras», sin comprobar. Se prefiere una comprobación precisa
+con poca cobertura a una que aprueba lo que no debe. Y la medida dice algo de
+Qwen3-30B: **en estos informes no inventó ninguna cifra**. Su problema era la
+conclusión, no los datos.

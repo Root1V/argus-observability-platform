@@ -24,7 +24,8 @@ def entrega(**informe):
 @tool
 def expediente(huella: str) -> str:
     """El expediente del incidente."""
-    return f"INCIDENTE {huella}\n  firma: ReadTimeout"
+    return (f"INCIDENTE {huella}\n  firma: ReadTimeout\n"
+            "EL OTRO LADO\n  atendida : manager-api, 81471ms\n  el 4.1% tarda mas de lo que espero quien llama (75.2 s)")
 
 
 @tool(risk=Risk.DESTRUCTIVE)
@@ -138,3 +139,53 @@ def test_el_run_id_es_el_mismo_para_la_misma_peticion_y_otro_para_otra() -> None
     assert a == id_de_investigacion("m", "off", "h1", "2026-10-27T10:00")
     assert a != id_de_investigacion("m", "off", "h1", "2026-10-27T16:00")
     assert a != id_de_investigacion("m", "high", "h1", "2026-10-27T10:00")
+
+
+
+# --- F4-05: la evidencia, verificada contra lo que devolvio la herramienta ------
+
+
+def test_una_cifra_que_ninguna_herramienta_devolvio_se_señala_y_baja_la_confianza() -> None:
+    r = _inv(calls("expediente", huella="h1"),
+             entrega(causa="manager-api es lento", confianza="alta", descartadas=["la red: hubo respuesta"],
+                     evidencia=["[expediente] tardo 81 s y el gateway espero 75 s",
+                                "[expediente] el 63% de las peticiones fallaron"])).investigar("h1")
+
+    estados = [v["estado"] for v in r.verificacion]
+    assert estados == ["verificada", "cifras sin respaldo"]
+    assert r.verificacion[1]["sin_respaldo"] == ["63"]
+    assert r.confianza == "media" and "alta → media" in r.confianza_rebajada
+
+
+def test_los_redondeos_y_los_milisegundos_cuentan_como_respaldo() -> None:
+    from diagnose.investigador import _respaldada
+
+    assert _respaldada("81", ["81471"])         # 81471 ms → «81 s»
+    assert _respaldada("4.1", ["4.13"])         # redondeo a sus decimales
+    assert not _respaldada("26.7", ["26.3"])    # cercano no es lo mismo
+    assert not _respaldada("63", ["4.1", "75.2", "81471"])
+
+
+def test_las_cifras_pequeñas_no_cuentan_porque_estan_en_cualquier_expediente() -> None:
+    """Contra el expediente equivocado, «30 dias» o «1 error» aprobaban cualquier cosa (D-152)."""
+    from diagnose.investigador import _cifras
+
+    assert _cifras("errores en 4 de los ultimos 30 dias, 0 minutos, 1 error") == []
+    assert _cifras("ultimo dato el 2026-10-25 03:07Z, en 11 de los 60 minutos") == []
+    assert _cifras("tardo 81471ms, el 4.1% y 75 s") == ["81471", "4.1", "75"]
+
+
+def test_el_informe_para_una_persona_dice_que_se_comprobo_y_que_no() -> None:
+    from diagnose.investigador import informe_markdown
+
+    r = _inv(calls("expediente", huella="h1"),
+             entrega(causa="manager-api es lento", confianza="alta", descartadas=["la red: hubo respuesta 200"],
+                     evidencia=["[expediente] tardo 81 s", "[expediente] el 63% fallo", "[traza] inventado"])
+             ).investigar("h1")
+    texto = informe_markdown(r)
+
+    assert "✓ [expediente] tardo 81 s" in texto
+    assert "✗ [expediente] el 63% fallo — no aparece: 63" in texto
+    assert "Quitado del informe" in texto and "[traza] inventado" in texto
+    assert "Alternativas descartadas" in texto and "la red: hubo respuesta 200" in texto
+    assert "Confianza rebajada" in texto

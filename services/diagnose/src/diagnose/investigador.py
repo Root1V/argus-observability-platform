@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -87,6 +88,10 @@ class Resultado:
     # Pasos que synaptum sacó del diario en vez de pagarlos: la prueba de que
     # reanudar no repitio inferencias (F4-01).
     pasos_reproducidos: int = 0
+    # F4-05: cada evidencia contra lo que de verdad devolvio la herramienta que
+    # cita. `estado`: `verificada`, `cifras sin respaldo` o `sin cifras`.
+    verificacion: list[dict[str, Any]] = field(default_factory=list)
+    confianza_rebajada: str = ""
 
     @property
     def parcial(self) -> bool:
@@ -190,6 +195,9 @@ class Investigador:
         from synaptum import Agent, FinalStep, Limits, ModelStep, Session, SynaptumError, ToolStep
 
         r = Resultado(huella=huella, origen=self.nombre)
+        # Lo que devolvio cada herramienta, para verificar la evidencia. No se
+        # guarda en el resultado: son datos de otras aplicaciones.
+        salidas: dict[str, list[str]] = {}
         p = self.presupuesto
         agente = Agent(
             "l4-investigador",
@@ -220,11 +228,14 @@ class Investigador:
                 if (isinstance(paso, ToolStep) and paso.call is not None and paso.result is not None
                         and paso.call.name != ENTREGAR):
                     r.herramientas_usadas.append(paso.call.name)
+                    salidas.setdefault(paso.call.name, []).append(
+                        "\n".join(str(getattr(c, "text", "")) for c in paso.result.content))
                 if isinstance(paso, (ModelStep, FinalStep)):
                     r.tokens += _tokens(paso.usage)
                 if isinstance(paso, FinalStep):
                     r.pasos_reproducidos = int((paso.meta or {}).get("replayed_steps") or 0)
                     _volcar(paso.output, r)
+                    _verificar(r, salidas)
                     break
                 if (tope := _tope(r, p, time.monotonic() - inicio)) is not None:
                     r.final = tope
@@ -275,6 +286,108 @@ def _volcar(informe: Any, r: Resultado) -> None:
     if r.causa and not r.evidencia:
         # Una causa cuya evidencia entera era inventada no tiene evidencia.
         r.confianza = "baja"
+
+
+_CIFRA = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?")
+
+
+# Por debajo de esto una cifra no distingue nada: «30 dias», «0 minutos», «1
+# error» o «4 de los ultimos 30» estan en cualquier expediente. Contra el
+# expediente EQUIVOCADO, la primera version aprobaba 6 de 22 evidencias por
+# cifras asi (D-152).
+CIFRA_MINIMA = 31
+
+
+# Las ventanas fijas de las consultas del expediente: «en los 60 minutos
+# anteriores», «en 24 h». Estan en todos los expedientes de su tipo, asi que
+# tampoco distinguen (D-152).
+CONSTANTES = {"60", "24"}
+_FECHA_U_HORA = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?|\b\d{2}:\d{2}(?::\d{2})?\b")
+
+
+def _numeros(texto: str) -> list[str]:
+    """Todas las cifras, sin las que forman parte de una fecha o una hora."""
+    return [c.replace(",", ".") for c in _CIFRA.findall(_FECHA_U_HORA.sub(" ", texto))]
+
+
+def _cifras(texto: str) -> list[str]:
+    """Las cifras que distinguen algo, como texto: el numero de decimales importa para redondear."""
+    return [c for c in _numeros(texto)
+            if c not in CONSTANTES and ("." in c or float(c) > CIFRA_MINIMA)]
+
+
+def _respaldada(cifra: str | float, fuente: list[str] | list[float]) -> bool:
+    """La cifra esta en la fuente tal cual, redondeada a sus decimales, o pasada de ms a s.
+
+    Redondeo y no cercania: «81» vale para `81471ms` y «4.1» para `4.13`, pero
+    «26.7» no vale para un 26,3 que este por ahi.
+    """
+    texto = str(cifra)
+    decimales = len(texto.split(".")[1]) if "." in texto else 0
+    objetivo = round(float(texto), decimales)
+    for f in fuente:
+        valor = float(f)
+        for candidata in (valor, valor / 1000):
+            if round(candidata, decimales) == objetivo or (decimales == 0 and int(candidata) == objetivo):
+                return True
+    return False
+
+
+def _verificar(r: Resultado, salidas: dict[str, list[str]]) -> None:
+    """F4-05: cada evidencia contra lo que DEVOLVIO la herramienta que cita.
+
+    Que la herramienta se llamara (`_cita_valida`) no basta: el modelo puede
+    citar `[alcance]` y poner una cifra que el alcance no dice. Las cifras son lo
+    que mas facil se inventa y lo que mas facil se comprueba con codigo. Si
+    alguna no tiene respaldo, la confianza no puede ser alta: una medicion que no
+    esta en ninguna parte no es una medicion.
+    """
+    for e in r.evidencia:
+        m = re.match(r"\s*\[([a-z_]+)\]\s*(.*)", e, re.DOTALL)
+        fuente_nombre = m.group(1) if m else ""
+        cuerpo = m.group(2) if m else e
+        herramienta = fuente_nombre if fuente_nombre in salidas else ("expediente" if "expediente" in salidas else "")
+        cifras = _cifras(cuerpo)
+        if not cifras:
+            estado, sin = "sin cifras", []
+        else:
+            fuente = _numeros("\n".join(salidas.get(herramienta, [])))
+            sin = [c for c in cifras if not _respaldada(c, fuente)]
+            estado = "cifras sin respaldo" if sin else "verificada"
+        r.verificacion.append({"evidencia": e, "fuente": herramienta or "?", "estado": estado,
+                               "sin_respaldo": list(sin)})
+    if r.confianza == "alta" and any(v["estado"] == "cifras sin respaldo" for v in r.verificacion):
+        r.confianza = "media"
+        r.confianza_rebajada = "alta → media: hay cifras en la evidencia que ninguna herramienta devolvio"
+
+
+def informe_markdown(r: Resultado) -> str:
+    """El informe para una persona: causa, evidencia verificada, lo descartado y lo que costo."""
+    marca = {"verificada": "✓", "cifras sin respaldo": "✗", "sin cifras": "·"}
+    lineas = [f"## Investigacion L4 · `{r.huella}`", ""]
+    if r.parcial:
+        lineas += [f"**Informe PARCIAL** ({r.final}): el run se corto antes de concluir.", ""]
+    lineas += [f"**Causa probable** ({r.confianza}): {r.causa or 'sin causa: lo visto no la sostiene'}", ""]
+    if r.confianza_rebajada:
+        lineas += [f"_Confianza rebajada: {r.confianza_rebajada}._", ""]
+    if r.verificacion:
+        lineas.append("**Evidencia** (✓ cifras comprobadas en la salida de la herramienta · ✗ sin respaldo · · sin cifras)")
+        for v in r.verificacion:
+            extra = f" — no aparece: {', '.join(v['sin_respaldo'])}" if v["sin_respaldo"] else ""
+            lineas.append(f"- {marca.get(v['estado'], '?')} {v['evidencia']}{extra}")
+        lineas.append("")
+    if r.citas_inventadas:
+        lineas.append("**Quitado del informe** (cita una herramienta que no se llamo)")
+        lineas += [f"- {c}" for c in r.citas_inventadas]
+        lineas.append("")
+    if r.descartadas:
+        lineas.append("**Alternativas descartadas**")
+        lineas += [f"- {d}" for d in r.descartadas]
+        lineas.append("")
+    lineas.append(f"_{len(r.herramientas_usadas)} herramienta(s): {', '.join(r.herramientas_usadas) or 'ninguna'} · "
+                  f"{r.tokens:,} tokens · {r.segundos:.0f} s · {r.origen} · run `{r.run_id}`"
+                  + (f" · {r.pasos_reproducidos} paso(s) retomados del diario" if r.pasos_reproducidos else "") + "_")
+    return "\n".join(lineas)
 
 
 def _cita_valida(evidencia: str, usadas: list[str]) -> bool:
@@ -357,9 +470,13 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--diario", default=None, help="SQLite del diario de synaptum")
     args = parser.parse_args(argv)
 
+    parser_formato = os.environ.get("INFORME_FORMATO", "json")
     r = asyncio.run(investigar_con_mcp(args.huella, modelo=args.modelo, razonamiento=args.razonamiento,
                                        run_id=args.run_id, diario=args.diario))
-    print(json.dumps({**asdict(r), "parcial": r.parcial}, indent=2, ensure_ascii=False))
+    if parser_formato == "markdown":
+        print(informe_markdown(r))
+    else:
+        print(json.dumps({**asdict(r), "parcial": r.parcial}, indent=2, ensure_ascii=False))
     return 0
 
 
