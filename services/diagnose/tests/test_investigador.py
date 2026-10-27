@@ -91,3 +91,13 @@ def test_si_toda_la_evidencia_era_inventada_la_confianza_baja() -> None:
     r = _inv(entrega(causa="x", confianza="alta", descartadas=[], evidencia=["[linea_base] el 4%"])).investigar("h1")
 
     assert r.evidencia == [] and r.confianza == "baja"
+
+
+def test_citar_un_bloque_del_expediente_leido_es_citar_el_expediente() -> None:
+    """Con razonamiento, el agente rotulaba los hechos con el bloque del expediente (D-147)."""
+    r = _inv(calls("expediente", huella="h1"),
+             entrega(causa="x", confianza="media", descartadas=[],
+                     evidencia=["[alcance] 23,2% de fallos", "[otra_cosa] inventado"])).investigar("h1")
+
+    assert r.evidencia == ["[alcance] 23,2% de fallos"]
+    assert r.citas_inventadas == ["[otra_cosa] inventado"]

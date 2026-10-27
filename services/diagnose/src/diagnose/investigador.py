@@ -249,7 +249,22 @@ def _cita_valida(evidencia: str, usadas: list[str]) -> bool:
     import re
 
     m = re.match(r"\s*\[([a-z_]+)\]", evidencia)
-    return m is None or m.group(1) in usadas
+    if m is None or m.group(1) in usadas:
+        return True
+    # Con el expediente leido, citar uno de SUS bloques es citar el expediente:
+    # en el banco, con razonamiento, el agente llamaba solo a `expediente` y
+    # etiquetaba cada hecho con su bloque (`[alcance]`, `[historia]`), y los
+    # datos eran los del bloque. Procedencia mal rotulada, no inventada (D-147).
+    return "expediente" in usadas and m.group(1) in BLOQUES_DEL_EXPEDIENTE
+
+
+# Los encabezados reales de `Expediente.texto()`. No `traza` ni `linea_base`:
+# son herramientas y no bloques, y el `[traza]` de la prueba en vivo de D-146
+# si era inventado.
+BLOQUES_DEL_EXPEDIENTE = {
+    "incidente", "arbol", "contraparte", "recurrencia", "historia", "alcance", "procesos", "plataforma",
+    "emision", "hermanos", "memoria", "visto_antes", "topologia",
+}
 
 
 def gateway_con_herramientas(herramientas: Sequence[Any]) -> Any:

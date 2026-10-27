@@ -7779,3 +7779,69 @@ conclusiones falsas. Lo que falta antes de encenderlo:
 - un banco para L4;
 - y un modelo que razone mejor sobre el expediente. Ninguno de los dos
   disponibles lo hace hoy.
+
+---
+
+## D-147 · El banco de L4: herramientas congeladas, y L4 con Qwen3 no supera a L3
+
+**Estado**: ✅ Banco construido y medido · L4 sigue apagado
+
+### El banco
+
+L4 no lee un expediente: pregunta. Y lo que una herramienta contesta hoy no es
+lo que habría contestado a la hora del incidente. Un banco contra el stack vivo
+mediría a la vez al agente y al día en que se pasa.
+
+`banco_l4.py` graba, para cada uno de los 11 casos de F3-08 y **a la hora del
+incidente**, lo que contestaría cada consulta razonable: la traza del ejemplo,
+el alcance, la recurrencia de sus clases, la línea base de la contraparte, los
+concurrentes y el registro. En la evaluación lo sirve **el mismo servidor
+`mcp-obs`** con un almacén congelado debajo, así que el agente no distingue el
+banco del sistema real. El expediente que sirve es el congelado del caso, el
+mismo que lee L3: los dos parten de la misma información, y lo que L4 añade es
+solo lo que va a buscar. Lo que el agente pregunte y no esté grabado se contesta
+vacío y **se cuenta**.
+
+**Lo que destapó al grabarlo**: el `StatusMessage` de un span de Veritium traía
+`case=<uuid> run=<uuid>`, identificadores de su negocio. `sanear` enmascara ya
+cualquier UUID, también en lo que `mcp-obs` le pasa a un modelo, y un test lo
+vigila en los dos bancos.
+
+### La medida
+
+| | no vistos | diseño | fallos con confianza alta | herramientas por caso |
+|---|---|---|---|---|
+| **reglas (L3)** | **2/2** | **7 aciertos**, 2 parciales | 0 | — |
+| L4 Qwen3, sin razonamiento | 2/2 (los dos con confianza baja) | 0 aciertos, 6 parciales, 3 fallos | **1** | 3–6 |
+| L4 Qwen3, con razonamiento | 1/2 | 2 aciertos, 4 parciales, 3 fallos | **1** | 1 (solo `expediente`) |
+
+- **Los dos fallos con confianza alta son los dos casos que mejor separan causa de
+  síntoma.** Sin razonamiento, en el destino caído vuelve a decir *«latencia
+  excesiva… tiempo límite»*, cuando el expediente dice que nadie aceptaba la
+  conexión. Con razonamiento, en `tenant` dice *«las solicitudes no incluyen
+  tenant en su payload»*, cuando la causa es una migración con el proceso viejo
+  vivo.
+- **Sin razonamiento investiga más y concluye peor.** Con razonamiento lee el
+  expediente y entrega, sin pedir nada más. En los dos modos el banco cubrió casi
+  todo lo que el agente preguntó: 5 de unas 45 consultas sin grabar sin
+  razonamiento, 2 con él.
+- **Citas**: con razonamiento, 15 marcadas como de una herramienta no llamada.
+  11 eran bloques del expediente rotulados con el nombre del bloque
+  (`[alcance]`), con los datos correctos. Ahora se aceptan si se leyó el
+  expediente. **4 nombran de verdad una herramienta que no llamó**, como
+  `[traza]` sin haber pedido la traza.
+
+### Qué se decide
+
+**L4 sigue apagado.** No acierta más que L3 en ningún caso, y rompe la única
+invariante que el banco no tolera: un fallo con confianza alta. Con este modelo,
+investigar no le da lo que le falta, que es razonar bien sobre lo que ya tiene
+delante.
+
+**Lo que se queda y es lo que vale**: el banco. Cualquier modelo que llegue
+—Prometheus está buscando uno— se mide con una orden y contra la misma vara que
+L3:
+
+```
+python -m diagnose.banco_l4 evaluar --modelo <id> [--razonamiento high]
+```
