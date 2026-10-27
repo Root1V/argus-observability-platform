@@ -294,6 +294,11 @@ services:
       # notifica. `modelo` para encenderlo.
       DIAGNOSE_INVESTIGADOR: ${DIAGNOSE_INVESTIGADOR:-}
       DIAGNOSE_SOMBRA_L4_PATH: /var/lib/argus/sombra-l4.jsonl
+      # F3-05, memoria por parecido: el modelo de embeddings de Axonium,
+      # `lexico` para la linea base sin modelo, o vacio para apagarla. Solo
+      # añade el bloque PARECIDOS al expediente: no cambia ningun aviso.
+      DIAGNOSE_EMBEDDINGS: ${DIAGNOSE_EMBEDDINGS:-qwen3-embedding}
+      DIAGNOSE_MEMORIA_PATH: /var/lib/argus/memoria.sqlite
       # La unica puerta a la inferencia local es Axonium (regla del dueño). La
       # credencial es un cliente OAuth de Prometheus para Argus: se pide a su
       # equipo y la pone el dueño en .env, no se crea desde aqui.

@@ -7845,3 +7845,59 @@ L3:
 ```
 python -m diagnose.banco_l4 evaluar --modelo <id> [--razonamiento high]
 ```
+
+---
+
+## D-148 · F3-05: memoria por parecido, SQLite y no pgvector, con `qwen3-embedding`
+
+**Estado**: ✅ En producción · solo añade contexto al expediente
+
+**Para qué.** F3-06 (D-142) encuentra episodios de la misma clase en la misma
+app. Lo que no puede encontrar es el mismo problema con otra clase o en otra
+app: el `PendingRollbackError` de `veritium-worker` y el `NotNullViolationError`
+de `veritium-api` del 14/10 son la misma migración (VRT-57).
+
+**Decisiones**:
+
+- **SQLite en el volumen de `diagnose` y fuerza bruta, no pgvector.** Son unos
+  850 incidentes al mes, y comparar contra miles de vectores en Python puro
+  cuesta milisegundos. Un Postgres serían un servicio, unas credenciales y unas
+  migraciones más para un problema que a esta escala no existe.
+- **Se indexa el PROBLEMA, no el diagnóstico ni el sitio.** Tipo, firma, título,
+  la descripción de la alerta y la cadena del fallo de la traza. Sin nombres de
+  app ni de componente: en la primera versión pesaban tanto que el `503` del
+  gateway se parecía 1,00 a un `409` del mismo gateway. Y nunca `root_cause`,
+  porque parte de lo guardado son diagnósticos equivocados (D-145).
+- **El embebedor es intercambiable.** El léxico, sin modelo, es la línea base.
+  `qwen3-embedding` (1.024 dimensiones) llegó el 26/10 por Axonium con un límite
+  de 40.000 tokens por minuto. El embebedor espera lo que dice el límite, el
+  bucle indexa 32 incidentes por ciclo y el histórico se llena solo en unos
+  minutos.
+
+**La medida** (`banco/memoria/pares.json`, parejas con la misma causa establecida
+fuera de L3):
+
+| embebedor | con lo esperado entre los 3 primeros | negativos entre los 3 primeros |
+|---|---|---|
+| léxico | 2/3 | 0 |
+| `qwen3-embedding` | 2/3 | 0 |
+
+Son tres consultas: es una comprobación de humo, no una cifra. **No separa los
+dos embebedores**, y se dice. Los dos encuentran la migración desde el
+`PendingRollbackError`, aunque con el léxico es casi trampa, porque la firma
+contiene literalmente `NotNullViolationError`. Los dos fallan el silencio de
+`veritium-api` del 23/10 por el mismo motivo: ponen primero un silencio del
+`alert-bus` del 15/10 con un texto idéntico. Si fue el host dormido, sería un
+acierto sin etiquetar, pero el registro de energía del Mac solo llega al 19/10 y
+no se puede comprobar.
+
+**Se elige Qwen** por lo que se ve al leer las listas, no por la cifra. Donde el
+léxico se iba a errores sin relación del mismo componente, Qwen pone otros
+silencios y otras caídas.
+
+**Riesgo bajo, por diseño.** Solo añade el bloque PARECIDOS al expediente, con el
+aviso de que parecido no es misma causa. Las reglas no lo leen, así que no
+cambia ningún aviso. Para el juez en sombra y para L4 es contexto.
+
+**Lo que falta** es un banco de memoria con más parejas. Cada caso nuevo de F3-08
+con una causa compartida debería añadir una.
