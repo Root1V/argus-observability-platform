@@ -169,8 +169,13 @@ def _resumen(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanear_texto(texto: str) -> str:
-    """`sanear` linea a linea: sobre un texto entero, el primer `DETAIL:` se llevaria todo lo que viene detras."""
-    return "\n".join(sanear(linea) for linea in texto.splitlines())
+    """`sanear` linea a linea: sobre un texto entero, el primer `DETAIL:` se llevaria todo lo que viene detras.
+
+    Y sin delimitadores: lo que devuelve una herramienta tambien es dato (F4-06).
+    """
+    from .juez_modelo import neutralizar
+
+    return neutralizar("\n".join(sanear(linea) for linea in texto.splitlines()))
 
 
 def _acotar(texto: str) -> str:

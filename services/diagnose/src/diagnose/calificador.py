@@ -123,10 +123,12 @@ class Decision:
 
 
 def _pregunta(texto: str, hecho: str) -> str:
+    from .juez_modelo import neutralizar
+
     return (
         f"HECHO A COMPROBAR: {hecho}\n\n"
         "TEXTO DONDE BUSCARLO (copia de aqui el fragmento):\n"
-        f"<<<TEXTO\n{texto}\nTEXTO>>>\n\n"
+        f"<<<TEXTO\n{neutralizar(texto)}\nTEXTO>>>\n\n"
         "¿El TEXTO afirma el HECHO? Copia en fragmento_del_texto las palabras EXACTAS del TEXTO, no las del HECHO."
     )
 
