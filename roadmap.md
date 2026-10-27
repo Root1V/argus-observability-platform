@@ -147,7 +147,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | `F3-05` | ⏳ | Almacén de incidentes con **búsqueda vectorial** | pgvector; arranca vacío y se llena solo |
 | `F3-06` | ✅ | Agente de **memoria**: top-N incidentes similares | El de mayor retorno después del de RCA **Hecho el 26/10 por clase y episodio, sin vectores (D-142)**: 853 incidentes → 203 episodios; va al aviso como «VISTO ANTES» |
 | `F3-07` | ✅ | `mcp-obs`: herramientas de solo lectura sobre telemetría | **Hecho el 26/10 (D-143)**: `python -m diagnose.mcp_obs`, 9 herramientas de consultas fijas, todas `READ` para synaptum; verificado de punta a punta contra el stack |
-| `F3-08` | ✅ | **Banco de pruebas de incidentes** (5–10 con causa conocida) | Cerrado con **7 casos reales**, expediente congelado y causa establecida fuera de L3. La primera medida honesta en lo no visto fue **cero aciertos**: los dos primeros «aciertos» eran eco de la firma, y uno de ellos daba el síntoma como causa. Hoy: no vistos 2 · parcial 1 · se abstiene 1 · falla 0; diseño 5 · acierta 4. **Dos no vistos es poco, y es el estado real** — D-134 |
+| `F3-08` | ✅ | **Banco de pruebas de incidentes** (5–10 con causa conocida) | Cerrado con **7 casos reales**, expediente congelado y causa establecida fuera de L3. La primera medida honesta en lo no visto fue **cero aciertos**: los dos primeros «aciertos» eran eco de la firma, y uno de ellos daba el síntoma como causa. Hoy: no vistos 2 · parcial 1 · se abstiene 1 · falla 0; diseño 5 · acierta 4. **Dos no vistos es poco, y es el estado real** — D-134 **26/10: 11 casos** — `prometheus-503-backend-caido` (D-145), el primer destino caído, con la causa medida por la hora de arranque del proceso. Procesos anonimizados y test contra UUID |
 
 ---
 

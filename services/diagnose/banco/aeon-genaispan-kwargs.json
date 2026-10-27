@@ -142,7 +142,7 @@
       "horas": 24,
       "instancias": [
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-3e6cd48b",
+          "instancia": "proceso-1",
           "version": "",
           "desde": "2026-09-29T12:54:32.326587Z",
           "hasta": "2026-09-29T12:54:32.326702Z",
@@ -150,7 +150,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-6a401b94",
+          "instancia": "proceso-2",
           "version": "",
           "desde": "2026-09-29T12:54:34.637442Z",
           "hasta": "2026-09-29T12:54:34.659951Z",
@@ -158,7 +158,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-6f5a7685",
+          "instancia": "proceso-3",
           "version": "",
           "desde": "2026-09-29T12:54:38.197148Z",
           "hasta": "2026-09-29T12:54:38.222537Z",
@@ -166,7 +166,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-05c9e66a",
+          "instancia": "proceso-4",
           "version": "",
           "desde": "2026-09-29T12:54:40.596657Z",
           "hasta": "2026-09-29T12:54:40.619147Z",
@@ -174,7 +174,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-fec6a838",
+          "instancia": "proceso-5",
           "version": "",
           "desde": "2026-09-29T12:54:43.165151Z",
           "hasta": "2026-09-29T12:54:43.170024Z",
@@ -182,7 +182,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-16c6ca9e",
+          "instancia": "proceso-6",
           "version": "",
           "desde": "2026-09-29T12:54:45.591187Z",
           "hasta": "2026-09-29T12:54:46.134313Z",
@@ -190,7 +190,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-eaae362c",
+          "instancia": "proceso-7",
           "version": "",
           "desde": "2026-09-30T02:54:51.479547Z",
           "hasta": "2026-09-30T02:54:54.502609Z",
@@ -198,7 +198,7 @@
           "primer_error": "2026-09-30T02:54:51.479547Z"
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-376ca84a",
+          "instancia": "proceso-8",
           "version": "",
           "desde": "2026-09-30T02:55:32.155647Z",
           "hasta": "2026-09-30T02:55:35.180205Z",
@@ -206,7 +206,7 @@
           "primer_error": "2026-09-30T02:55:32.155647Z"
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-0163709e",
+          "instancia": "proceso-9",
           "version": "",
           "desde": "2026-09-30T02:55:58.051667Z",
           "hasta": "2026-09-30T02:55:58.077711Z",
@@ -214,7 +214,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-12ae34de",
+          "instancia": "proceso-10",
           "version": "",
           "desde": "2026-09-30T02:56:11.444749Z",
           "hasta": "2026-09-30T02:56:11.467255Z",
@@ -222,7 +222,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-cd3cde39",
+          "instancia": "proceso-11",
           "version": "",
           "desde": "2026-09-30T02:56:45.837435Z",
           "hasta": "2026-09-30T02:56:45.857193Z",
@@ -230,7 +230,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-37a53c7c",
+          "instancia": "proceso-12",
           "version": "",
           "desde": "2026-09-30T02:56:47.996678Z",
           "hasta": "2026-09-30T02:56:48.017783Z",
@@ -238,7 +238,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-c5967161",
+          "instancia": "proceso-13",
           "version": "",
           "desde": "2026-09-30T02:56:50.191244Z",
           "hasta": "2026-09-30T02:56:50.216111Z",
@@ -246,7 +246,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-71e62f70",
+          "instancia": "proceso-14",
           "version": "",
           "desde": "2026-09-30T03:00:28.379589Z",
           "hasta": "2026-09-30T03:00:43.405531Z",
@@ -254,7 +254,7 @@
           "primer_error": "2026-09-30T03:00:28.379589Z"
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-a15bd884",
+          "instancia": "proceso-15",
           "version": "",
           "desde": "2026-09-30T03:00:58.746932Z",
           "hasta": "2026-09-30T03:00:58.763653Z",
@@ -262,7 +262,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-5d30578b",
+          "instancia": "proceso-16",
           "version": "",
           "desde": "2026-09-30T03:01:03.100726Z",
           "hasta": "2026-09-30T03:01:03.124533Z",
@@ -270,7 +270,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-d356df7b",
+          "instancia": "proceso-17",
           "version": "",
           "desde": "2026-09-30T03:01:05.440020Z",
           "hasta": "2026-09-30T03:01:05.464935Z",
@@ -278,7 +278,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-ff523e3d",
+          "instancia": "proceso-18",
           "version": "",
           "desde": "2026-09-30T03:01:07.762208Z",
           "hasta": "2026-09-30T03:01:07.786345Z",
@@ -286,7 +286,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-0f1c071c",
+          "instancia": "proceso-19",
           "version": "",
           "desde": "2026-09-30T03:01:10.262477Z",
           "hasta": "2026-09-30T03:01:10.265925Z",
@@ -294,7 +294,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-12a1282f",
+          "instancia": "proceso-20",
           "version": "",
           "desde": "2026-09-30T03:01:12.556329Z",
           "hasta": "2026-09-30T03:01:12.768880Z",
@@ -302,7 +302,7 @@
           "primer_error": null
         },
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-b37cafcb",
+          "instancia": "proceso-21",
           "version": "",
           "desde": "2026-09-30T03:01:30.152518Z",
           "hasta": "2026-09-30T03:01:45.178514Z",

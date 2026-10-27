@@ -127,7 +127,7 @@
       "horas": 24,
       "instancias": [
         {
-          "instancia": "MacBook-Pro-de-Emeric--Caren.local-7e6f05f3",
+          "instancia": "proceso-1",
           "version": "0.3.0",
           "desde": "2026-10-14T02:06:42.764009Z",
           "hasta": "2026-10-14T11:14:36.519183Z",

@@ -287,6 +287,20 @@ def sanear(valor):
     return valor
 
 
+def anonimizar_procesos(expediente: dict) -> dict:
+    """`service.instance.id` → `proceso-1…N`, en el orden en que aparecen.
+
+    No son filas de nadie —son UUID que el SDK genera al arrancar cada
+    proceso—, pero son identificadores de otro equipo, el banco vive en un
+    repositorio con remoto, y el juez no los necesita: le basta cuantos
+    procesos hubo, de que version y desde cuando (B-38).
+    """
+    cambios = expediente.get("cambios") or {}
+    for i, inst in enumerate(cambios.get("instancias") or [], start=1):
+        inst["instancia"] = f"proceso-{i}"
+    return expediente
+
+
 # Lo que el incidente lleva de vuelta de L3. Se quita al capturar: un caso cuyo
 # incidente ya trae la respuesta de L3 es un examen con las soluciones grapadas.
 CAMPOS_DE_L3 = ("root_cause", "confidence", "evidence", "similar_incidents", "enriched_at")
@@ -394,7 +408,7 @@ def _main(argv: list[str] | None = None) -> int:
         caso = json.loads(destino.read_text(encoding="utf-8"))
         incidente = caso["incidente"]
         expediente = capturar(incidente, almacen=almacen, registro=registro, historico=historico)
-        caso["expediente"] = sanear(json.loads(expediente.model_dump_json()))
+        caso["expediente"] = anonimizar_procesos(sanear(json.loads(expediente.model_dump_json())))
         destino.write_text(json.dumps(caso, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"→ {destino}  ({len(expediente.lagunas)} lagunas)")
         return 0
@@ -414,7 +428,7 @@ def _main(argv: list[str] | None = None) -> int:
         "nivel": "medida",
         "capturado_en": datetime.now().astimezone().isoformat(),
         "incidente": sanear({k: v for k, v in incidente.items() if k not in CAMPOS_DE_L3}),
-        "expediente": sanear(json.loads(expediente.model_dump_json())),
+        "expediente": anonimizar_procesos(sanear(json.loads(expediente.model_dump_json()))),
     }
     destino.write_text(json.dumps(borrador, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(expediente.texto())

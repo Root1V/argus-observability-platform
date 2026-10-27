@@ -1,0 +1,444 @@
+{
+  "id": "prometheus-503-backend-caido",
+  "titulo": "El gateway devuelve 503 porque el backend de gpt-oss en :8087 no estaba levantado",
+  "causa_real": "El backend `llama-server` de gpt-oss-20b-mxfp4 en 127.0.0.1:8087 no estaba levantado: las llamadas del gateway a :8087 salian bien hasta las 19:22 UTC, la peticion del ejemplo (19:27) fallo con `ConnectError` en sus tres intentos, y el proceso que escucha hoy en :8087 arranco a las 19:28:18 UTC. Fue un reinicio del backend, coincidiendo con el cambio de modelo que el dueño gestionaba con Prometheus. Los 503 posteriores (19:30-20:07) no llegan a llamar al backend —el gateway responde en 2 ms—, lo que encaja con su disyuntor recuperandose tras el reinicio (`circuit half-open`).",
+  "fuente": "Medicion independiente de L3, 26/10: hora de arranque del proceso en :8087 segun el sistema operativo (`ps -o lstart`, 14:28:18 hora local = 19:28:18 UTC); llamadas `Client` del gateway a :8087 por minuto en ClickHouse (correctas hasta 19:22, tres `ConnectError` a las 19:27, correctas desde 19:29); y respuestas de Axonium a Argus en esa ventana (`UnknownModelError`, despues `BackendUnavailableError` con `circuit half-open`). Pendiente de que Prometheus confirme el reinicio.",
+  "nivel": "medida",
+  "capturado_en": "2026-10-26T20:00:14.018680-05:00",
+  "incidente": {
+    "id": "231b5944053c",
+    "fingerprint": "073e94dbb7c4772c",
+    "kind": "error",
+    "severity": "page",
+    "app": "prometheus-inference-platform",
+    "component": "gateway",
+    "environment": "development",
+    "title": "503 en gateway",
+    "signature": "503",
+    "state": "resolved",
+    "opened_at": "2026-10-26T19:27:48.189921Z",
+    "updated_at": "2026-10-26T20:07:48.707170Z",
+    "last_seen_at": "2026-10-26T20:07:48.706994Z",
+    "resolved_at": "2026-10-26T20:22:50.384690Z",
+    "count": 254,
+    "trace_ids": [
+      "af2be78850c9d6165f787fb0e168d970",
+      "bfab6c3015f5e59c61acc4601076f338",
+      "a900bf6ae3f60747b1a2c6c81a6ef692",
+      "cc31b63e78bb0e26fc989c1eecf52a71",
+      "33a7901fae05960d68b46026a76b83d0",
+      "9f1ac95bb263a3d8446b0548a1c0ad00",
+      "d4fb6cbc21cb6e32eb95ef6c651dee5a",
+      "4d894fe7f568f0ca54c57c35da93ebc7",
+      "44dbcfa17ceec806418a771a5c0b6336",
+      "e0d7a3507ca26eb76b69e64d12b7f391"
+    ],
+    "components_affected": [
+      "gateway"
+    ],
+    "suppressed_by": null,
+    "symptoms": [],
+    "thread_key": "argus-073e94dbb7c4772c",
+    "notified_at": "2026-10-26T19:27:50.340209Z",
+    "attributes": {
+      "http.response.status_code": 503,
+      "error.type": "503"
+    }
+  },
+  "expediente": {
+    "incidente_id": "231b5944053c",
+    "huella": "073e94dbb7c4772c",
+    "app": "prometheus-inference-platform",
+    "componente": "gateway",
+    "firma": "503",
+    "tipo_senal": "error",
+    "severidad": "page",
+    "titulo": "503 en gateway",
+    "senales": 254,
+    "edad_s": 2400.517073,
+    "entorno": "development",
+    "arbol": {
+      "trace_id": "af2be78850c9d6165f787fb0e168d970",
+      "spans": [
+        {
+          "span_id": "3b1557046e8e6d50",
+          "parent_span_id": "",
+          "nombre": "POST /v1/chat/completions",
+          "tipo": "Server",
+          "servicio": "gateway",
+          "ms": 539.151,
+          "error": true,
+          "clase": "503",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": "http://host.docker.internal:8020/v1/chat/completions",
+          "momento": "2026-10-26T19:27:47.651106Z",
+          "profundidad": 0
+        },
+        {
+          "span_id": "c3b92b3e68b119e0",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "auth.validate",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 1.138,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:47.651296Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "55def0102a9ff50f",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "POST /v1/chat/completions http receive",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.007,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:47.654369Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "e6c1575be7566be0",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "inference.request",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 529.307,
+          "error": true,
+          "clase": null,
+          "mensaje": "All connection attempts failed",
+          "excepcion": null,
+          "ruta": "/v1/chat/completions",
+          "momento": "2026-10-26T19:27:47.654612Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "2f0320a2fb4c6a70",
+          "parent_span_id": "e6c1575be7566be0",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 1.565,
+          "error": true,
+          "clase": "ConnectError",
+          "mensaje": "All connection attempts failed",
+          "excepcion": "httpx.ConnectError",
+          "ruta": "http://127.0.0.1:8087/v1/chat/completions",
+          "momento": "2026-10-26T19:27:47.656923Z",
+          "profundidad": 2
+        },
+        {
+          "span_id": "4223897829922352",
+          "parent_span_id": "e6c1575be7566be0",
+          "nombre": "POST /v1/chat/completions http receive",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 526.743,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:47.657240Z",
+          "profundidad": 2
+        },
+        {
+          "span_id": "3a571f37f0d127ea",
+          "parent_span_id": "e6c1575be7566be0",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 2.183,
+          "error": true,
+          "clase": "ConnectError",
+          "mensaje": "All connection attempts failed",
+          "excepcion": "httpx.ConnectError",
+          "ruta": "http://127.0.0.1:8087/v1/chat/completions",
+          "momento": "2026-10-26T19:27:47.849514Z",
+          "profundidad": 2
+        },
+        {
+          "span_id": "4bc75b12ddb0b949",
+          "parent_span_id": "e6c1575be7566be0",
+          "nombre": "POST",
+          "tipo": "Client",
+          "servicio": "gateway",
+          "ms": 4.221,
+          "error": true,
+          "clase": "ConnectError",
+          "mensaje": "All connection attempts failed",
+          "excepcion": "httpx.ConnectError",
+          "ruta": "http://127.0.0.1:8087/v1/chat/completions",
+          "momento": "2026-10-26T19:27:48.177144Z",
+          "profundidad": 2
+        },
+        {
+          "span_id": "f0fadf1ef07238e3",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "POST /v1/chat/completions http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.028,
+          "error": true,
+          "clase": "503",
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:48.189893Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "a20ea63ce8504c1b",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "POST /v1/chat/completions http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.009,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:48.190157Z",
+          "profundidad": 1
+        },
+        {
+          "span_id": "c89521d314bf4202",
+          "parent_span_id": "3b1557046e8e6d50",
+          "nombre": "POST /v1/chat/completions http send",
+          "tipo": "Internal",
+          "servicio": "gateway",
+          "ms": 0.006,
+          "error": false,
+          "clase": null,
+          "mensaje": null,
+          "excepcion": null,
+          "ruta": null,
+          "momento": "2026-10-26T19:27:48.190234Z",
+          "profundidad": 1
+        }
+      ],
+      "truncado": false
+    },
+    "contraparte": {
+      "llamada": "POST (ConnectError)",
+      "destino": "http://127.0.0.1:8087/v1/chat/completions",
+      "encontrada": false,
+      "servicio": null,
+      "codigo": null,
+      "estado": null,
+      "ms": null,
+      "linea_base": null,
+      "discrepa": false
+    },
+    "emision": {
+      "consultada": false,
+      "dias": 30,
+      "por_fuente": {},
+      "primera": null,
+      "ultima": null
+    },
+    "cambios": {
+      "consultada": true,
+      "horas": 24,
+      "instancias": [
+        {
+          "instancia": "proceso-1",
+          "version": "2.0.0",
+          "desde": "2026-10-25T20:08:24.905067Z",
+          "hasta": "2026-10-26T02:26:15.118562Z",
+          "errores": 45,
+          "primer_error": "2026-10-25T20:38:54.199749Z"
+        },
+        {
+          "instancia": "proceso-2",
+          "version": "2.0.0",
+          "desde": "2026-10-26T02:14:42.585384Z",
+          "hasta": "2026-10-26T02:15:09.583552Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "proceso-3",
+          "version": "2.0.0",
+          "desde": "2026-10-26T02:15:35.005368Z",
+          "hasta": "2026-10-26T02:17:05.357691Z",
+          "errores": 3,
+          "primer_error": "2026-10-26T02:15:56.351429Z"
+        },
+        {
+          "instancia": "proceso-4",
+          "version": "2.0.0",
+          "desde": "2026-10-26T02:25:26.720307Z",
+          "hasta": "2026-10-26T02:26:21.654656Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "proceso-5",
+          "version": "2.0.0",
+          "desde": "2026-10-26T02:27:16.746187Z",
+          "hasta": "2026-10-26T19:27:49.006565Z",
+          "errores": 212,
+          "primer_error": "2026-10-26T02:31:44.891042Z"
+        },
+        {
+          "instancia": "proceso-6",
+          "version": "2.0.0",
+          "desde": "2026-10-26T15:17:59.892810Z",
+          "hasta": "2026-10-26T15:24:40.459859Z",
+          "errores": 5,
+          "primer_error": "2026-10-26T15:18:30.021165Z"
+        },
+        {
+          "instancia": "proceso-7",
+          "version": "2.0.0",
+          "desde": "2026-10-26T19:24:13.191920Z",
+          "hasta": "2026-10-26T19:24:45.849650Z",
+          "errores": 0,
+          "primer_error": null
+        },
+        {
+          "instancia": "proceso-8",
+          "version": "2.0.0",
+          "desde": "2026-10-26T19:27:57.004486Z",
+          "hasta": "2026-10-26T20:07:47.915086Z",
+          "errores": 310,
+          "primer_error": "2026-10-26T19:30:32.785996Z"
+        }
+      ],
+      "sin_identidad": false
+    },
+    "plataforma": {
+      "consultada": false,
+      "minutos_con_datos": 0,
+      "minutos_mirados": 60
+    },
+    "historia": {
+      "veces": 7,
+      "primera_vez": "2026-10-25T09:22:40.446225Z",
+      "ultima_vez": "2026-10-26T16:21:07.981318Z",
+      "causas_anteriores": [
+        "gateway atendio la llamada a http://127.0.0.1:8111/v1/chat/completions y la contesto bien (codigo 503), pero tardo 23 s, y prometheus-inference-platform/gateway se rindio a los 19 s. La peticion no tiene nada de malo: la causa es la latencia de gateway, o un plazo de espera mas corto que su tiempo de respuesta normal.",
+        "La llamada saliente a http://127.0.0.1:8091/v1/models recibio un `503`. Un codigo de estado es una RESPUESTA, asi que el destino contesto: lo que falla es la peticion que prometheus-inference-platform/gateway esta haciendo —ruta inexistente, cuerpo invalido o credencial rechazada—, no la disponibilidad del destino. manager-api lo confirma desde su lado (codigo 503)."
+      ],
+      "dias_con_errores": 8,
+      "dias_mirados": 30,
+      "errores_en_trazas": 2057,
+      "primer_dia": "2026-10-03T00:00:00Z"
+    },
+    "alcance": {
+      "fallidas": 157,
+      "totales": 677,
+      "ventana_min": 41,
+      "rutas": {
+        "/v1/chat/completions": 157
+      }
+    },
+    "concurrentes": [],
+    "hermanos": [],
+    "memoria": [
+      {
+        "componente": "gateway",
+        "clase": "503",
+        "dia": "2026-10-25",
+        "incidentes": 3,
+        "causa": "gateway atendio la llamada a http://127.0.0.1:8111/v1/chat/completions y la contesto bien (codigo 503), pero tardo 23 s, y prometheus-inference-platform/gateway se rindio a los 19 s. La peticion no tiene nada de malo: la causa es la latencia de gateway, o un plazo de espera mas corto que su tiempo de respuesta normal.",
+        "resuelto": true
+      },
+      {
+        "componente": "gateway",
+        "clase": "503",
+        "dia": "2026-10-26",
+        "incidentes": 4,
+        "causa": null,
+        "resuelto": true
+      },
+      {
+        "componente": "manager-api",
+        "clase": "503",
+        "dia": "2026-10-26",
+        "incidentes": 1,
+        "causa": null,
+        "resuelto": true
+      }
+    ],
+    "aguas_arriba": [
+      "redis-main"
+    ],
+    "aguas_abajo": [
+      "centinela",
+      "veritium"
+    ],
+    "lagunas": []
+  },
+  "usado_para_disenar": true,
+  "abstenerse_es_correcto": false,
+  "causa": [
+    {
+      "hecho": "el destino no aceptaba conexiones: caido, sin levantar o reiniciandose",
+      "alguna_de": [
+        "no escuchaba",
+        "no pudo abrir conexion",
+        "no aceptaba",
+        "no acepto",
+        "caido",
+        "no esta levantado",
+        "no estaba levantado",
+        "reinici",
+        "nadie escuchaba",
+        "sin levantar",
+        "connection refused"
+      ]
+    },
+    {
+      "hecho": "nombra el destino :8087",
+      "alguna_de": [
+        "8087"
+      ]
+    }
+  ],
+  "sintoma": [
+    {
+      "hecho": "el gateway devuelve 503",
+      "alguna_de": [
+        "503"
+      ]
+    },
+    {
+      "hecho": "la llamada al backend falla al conectar",
+      "alguna_de": [
+        "ConnectError",
+        "connection attempts failed",
+        "conexion"
+      ]
+    }
+  ],
+  "prohibido": [
+    {
+      "hecho": "dice que el destino tardo o que es un problema de latencia o de plazo",
+      "alguna_de": [
+        "tardo",
+        "latencia",
+        "lento",
+        "se rindio",
+        "plazo de espera"
+      ]
+    },
+    {
+      "hecho": "culpa a la dependencia declarada en el registro",
+      "alguna_de": [
+        "redis"
+      ]
+    }
+  ],
+  "notas": "Caso de DISEÑO: la regla `_nadie_acepto_la_conexion` (D-145) se escribio mirando este incidente. Antes de D-145, L3 lo diagnosticaba con confianza alta como «el destino tardo» empalmando la llamada con el propio gateway, que es exactamente lo que el criterio prohibido recoge. La HISTORIA y el VISTO ANTES congelados traen causas antiguas de ese mismo defecto, etiquetadas como de L3 sin confirmar: un buen juez no debe repetirlas."
+}
