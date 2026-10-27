@@ -1,0 +1,452 @@
+{
+  "caso": "aeon-genaispan-kwargs",
+  "hasta": "2026-09-30T03:01:45.337446+00:00",
+  "almacen": {
+    "spans_de_traza|trace_id=6edfb4539a01cdfbd3b9de5faae907bb": [
+      {
+        "TraceId": "6edfb4539a01cdfbd3b9de5faae907bb",
+        "SpanId": "794980818e94f5c8",
+        "ParentSpanId": "",
+        "SpanName": "RunActivity:plan_research_activity",
+        "SpanKind": "Server",
+        "ServiceName": "aeon-worker",
+        "Duration": 4416000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:51.479547000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      },
+      {
+        "TraceId": "6edfb4539a01cdfbd3b9de5faae907bb",
+        "SpanId": "4e4600d788267360",
+        "ParentSpanId": "794980818e94f5c8",
+        "SpanName": "chat fake-model",
+        "SpanKind": "Client",
+        "ServiceName": "aeon-worker",
+        "Duration": 2576000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:51.479640000",
+        "SpanAttributes": {
+          "error.type": "TypeError"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      }
+    ],
+    "spans_de_traza|trace_id=54b5289b14bf3a6902660874ad0b5b80": [
+      {
+        "TraceId": "54b5289b14bf3a6902660874ad0b5b80",
+        "SpanId": "184247a32d38726b",
+        "ParentSpanId": "",
+        "SpanName": "RunActivity:plan_research_activity",
+        "SpanKind": "Server",
+        "ServiceName": "aeon-worker",
+        "Duration": 1462000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:52.492943000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      },
+      {
+        "TraceId": "54b5289b14bf3a6902660874ad0b5b80",
+        "SpanId": "74586db1c0da2775",
+        "ParentSpanId": "184247a32d38726b",
+        "SpanName": "chat fake-model",
+        "SpanKind": "Client",
+        "ServiceName": "aeon-worker",
+        "Duration": 593000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:52.493030000",
+        "SpanAttributes": {
+          "error.type": "TypeError"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      }
+    ],
+    "spans_de_traza|trace_id=214ad89ea032a28819c1cdb220f3bf98": [
+      {
+        "TraceId": "214ad89ea032a28819c1cdb220f3bf98",
+        "SpanId": "2119be739071da38",
+        "ParentSpanId": "",
+        "SpanName": "RunActivity:plan_research_activity",
+        "SpanKind": "Server",
+        "ServiceName": "aeon-worker",
+        "Duration": 1375000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:54.502535000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      },
+      {
+        "TraceId": "214ad89ea032a28819c1cdb220f3bf98",
+        "SpanId": "6c478abd6a8d98b4",
+        "ParentSpanId": "2119be739071da38",
+        "SpanName": "chat fake-model",
+        "SpanKind": "Client",
+        "ServiceName": "aeon-worker",
+        "Duration": 575000,
+        "StatusCode": "Error",
+        "StatusMessage": "TypeError: GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+        "Timestamp": "2026-09-30 02:54:54.502609000",
+        "SpanAttributes": {
+          "error.type": "TypeError"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "GenAISpan.set() got an unexpected keyword argument 'argus.run.id'",
+            "exception.type": "TypeError"
+          }
+        ]
+      }
+    ],
+    "alcance|app=aeon-worker|componente=aeon-worker": [
+      {
+        "ruta": "",
+        "fallidas": 16,
+        "totales": 60
+      }
+    ],
+    "concurrentes|componente=aeon-worker": [],
+    "recurrencia|app=aeon-worker|componente=aeon-worker|clase=typeerror": [
+      {
+        "dia": "2026-09-30",
+        "errores": 1
+      }
+    ]
+  },
+  "registro": [
+    {
+      "id": "argus",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "alert-bus",
+        "canary",
+        "collector-agent",
+        "collector-gateway"
+      ],
+      "depende_de": [
+        "clickhouse",
+        "victoriametrics"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "veritium",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "veritium-api",
+        "veritium-worker"
+      ],
+      "depende_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "postgres-main",
+        "minio-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prometheus-inference-platform",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "auth-service",
+        "gateway",
+        "manager-api",
+        "manager-tui",
+        "tei"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prosodia",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "prosodia-api",
+        "prosodia-worker"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai-prod",
+      "estado": "planificado",
+      "criticidad": "alta",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "llm-benchmark",
+      "estado": "planificado",
+      "criticidad": "baja",
+      "componentes": [
+        "bench-runner"
+      ],
+      "depende_de": [],
+      "canales": {}
+    },
+    {
+      "id": "centinela",
+      "estado": "planificado",
+      "criticidad": "media",
+      "componentes": [
+        "centinela-api",
+        "centinela-camera-manager",
+        "centinela-celery",
+        "centinela-enrich-worker",
+        "centinela-identity-worker",
+        "centinela-notifier",
+        "centinela-vision-worker"
+      ],
+      "depende_de": [
+        "prometheus-inference-platform"
+      ],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "postgres-main",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "postgres-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "redis-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "redis-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "minio-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "minio-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "clickhouse",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "clickhouse"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "victoriametrics",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "victoriametrics"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "temporal",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "temporal"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    }
+  ]
+}

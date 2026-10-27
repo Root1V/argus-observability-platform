@@ -1,0 +1,507 @@
+{
+  "caso": "prometheus-502-por-oauth-400",
+  "hasta": "2026-10-25T08:02:50.877356+00:00",
+  "almacen": {
+    "spans_de_traza|trace_id=78ddf2c0b68609390c8ecf0abda29f7c": [
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "17041c73a22079b0",
+        "ParentSpanId": "",
+        "SpanName": "POST /admin/api/assistant/chat",
+        "SpanKind": "Server",
+        "ServiceName": "gateway",
+        "Duration": 202820000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.784727000",
+        "SpanAttributes": {
+          "error.type": "502",
+          "http.route": "/admin/api/assistant/chat",
+          "http.url": "http://127.0.0.1:8031/admin/api/assistant/chat"
+        },
+        "Events.Name": [
+          "audit.admin_action"
+        ],
+        "Events.Attributes": [
+          {}
+        ]
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "1857921a59e9f481",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "auth.validate",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 7483000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.784992000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "4bff3c34f52326d2",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "POST /admin/api/assistant/chat http receive",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 12000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.795447000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "fedfb573982b9de5",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "POST",
+        "SpanKind": "Client",
+        "ServiceName": "gateway",
+        "Duration": 189165000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.796142000",
+        "SpanAttributes": {
+          "error.type": "400",
+          "http.url": "http://127.0.0.1:9000/oauth2/token",
+          "url.full": "http://127.0.0.1:9000/oauth2/token"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "4ec15b61e51401fd",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "POST /admin/api/assistant/chat http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 12000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.987350000",
+        "SpanAttributes": {
+          "error.type": "502"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "1797e7b708f30ea7",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "POST /admin/api/assistant/chat http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 4000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.987432000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "78ddf2c0b68609390c8ecf0abda29f7c",
+        "SpanId": "c371cfba9a19329f",
+        "ParentSpanId": "17041c73a22079b0",
+        "SpanName": "POST /admin/api/assistant/chat http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 4000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-25 08:02:47.987534000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      }
+    ],
+    "alcance|app=prometheus-inference-platform|componente=gateway": [
+      {
+        "ruta": "/admin/api/assistant/chat",
+        "fallidas": 1,
+        "totales": 1
+      },
+      {
+        "ruta": "/v1/chat/completions",
+        "fallidas": 0,
+        "totales": 11
+      },
+      {
+        "ruta": "/admin/api/auth/login",
+        "fallidas": 0,
+        "totales": 4
+      },
+      {
+        "ruta": "/admin/api/instances",
+        "fallidas": 0,
+        "totales": 1
+      },
+      {
+        "ruta": "/admin/api/billing/overview",
+        "fallidas": 0,
+        "totales": 1
+      }
+    ],
+    "concurrentes|componente=gateway": [],
+    "recurrencia|app=prometheus-inference-platform|componente=gateway|clase=400": [
+      {
+        "dia": "2026-10-04",
+        "errores": 5
+      },
+      {
+        "dia": "2026-10-05",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-06",
+        "errores": 5
+      },
+      {
+        "dia": "2026-10-07",
+        "errores": 1
+      },
+      {
+        "dia": "2026-10-10",
+        "errores": 5
+      },
+      {
+        "dia": "2026-10-15",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-25",
+        "errores": 1
+      }
+    ],
+    "recurrencia|app=prometheus-inference-platform|componente=gateway|clase=502": [
+      {
+        "dia": "2026-10-03",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-04",
+        "errores": 10
+      },
+      {
+        "dia": "2026-10-05",
+        "errores": 3
+      },
+      {
+        "dia": "2026-10-06",
+        "errores": 5
+      },
+      {
+        "dia": "2026-10-07",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-10",
+        "errores": 6
+      },
+      {
+        "dia": "2026-10-23",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-25",
+        "errores": 2
+      }
+    ]
+  },
+  "registro": [
+    {
+      "id": "argus",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "alert-bus",
+        "canary",
+        "collector-agent",
+        "collector-gateway"
+      ],
+      "depende_de": [
+        "clickhouse",
+        "victoriametrics"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "veritium",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "veritium-api",
+        "veritium-worker"
+      ],
+      "depende_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "postgres-main",
+        "minio-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prometheus-inference-platform",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "auth-service",
+        "gateway",
+        "manager-api",
+        "manager-tui",
+        "tei"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prosodia",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "prosodia-api",
+        "prosodia-worker"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai-prod",
+      "estado": "planificado",
+      "criticidad": "alta",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "llm-benchmark",
+      "estado": "planificado",
+      "criticidad": "baja",
+      "componentes": [
+        "bench-runner"
+      ],
+      "depende_de": [],
+      "canales": {}
+    },
+    {
+      "id": "centinela",
+      "estado": "planificado",
+      "criticidad": "media",
+      "componentes": [
+        "centinela-api",
+        "centinela-camera-manager",
+        "centinela-celery",
+        "centinela-enrich-worker",
+        "centinela-identity-worker",
+        "centinela-notifier",
+        "centinela-vision-worker"
+      ],
+      "depende_de": [
+        "prometheus-inference-platform"
+      ],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "postgres-main",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "postgres-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "redis-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "redis-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "minio-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "minio-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "clickhouse",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "clickhouse"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "victoriametrics",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "victoriametrics"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "temporal",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "temporal"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    }
+  ]
+}

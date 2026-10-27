@@ -44,6 +44,7 @@ de creerle, estan en `calificador.py` (B-41).
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -279,7 +280,11 @@ def sanear(valor):
     from .juicio import _sin_volcado
 
     if isinstance(valor, str):
-        return _sin_volcado(valor) if any(m in valor for m in ("DETAIL:", "[SQL:", "[parameters:")) else valor
+        valor = _sin_volcado(valor) if any(m in valor for m in ("DETAIL:", "[SQL:", "[parameters:")) else valor
+        # Y cualquier UUID: el banco de L4 grabo `case=<uuid> run=<uuid>` del
+        # `StatusMessage` de un span de Veritium. Son identificadores de su
+        # negocio, y para diagnosticar basta saber que habia uno.
+        return UUID.sub("<uuid>", valor)
     if isinstance(valor, list):
         return [sanear(v) for v in valor]
     if isinstance(valor, dict):
@@ -299,6 +304,9 @@ def anonimizar_procesos(expediente: dict) -> dict:
     for i, inst in enumerate(cambios.get("instancias") or [], start=1):
         inst["instancia"] = f"proceso-{i}"
     return expediente
+
+
+UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
 # Lo que el incidente lleva de vuelta de L3. Se quita al capturar: un caso cuyo
