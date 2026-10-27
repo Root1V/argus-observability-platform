@@ -47,6 +47,7 @@ class Diagnosticador:
         cliente: httpx.Client | None = None,
         sombra: Juez | None = None,
         investigacion: Any | None = None,
+        memoria: Any | None = None,
     ) -> None:
         self.settings = settings
         self.juez: Juez = juez or JuezDeReglas()
@@ -55,6 +56,9 @@ class Diagnosticador:
         # L4 en sombra (`SombraL4`): lo que el triage deja pasar se investiga
         # en segundo plano. Tampoco toca el aviso.
         self.investigacion = investigacion
+        # F3-05: la memoria por parecido (`MemoriaVectorial`). Se llena sola
+        # con el historico, unos pocos incidentes por ciclo.
+        self.memoria = memoria
         self._almacen = almacen
         self._http = cliente or httpx.Client(timeout=settings.timeout_s())
         # Huella -> cuando se juzgo por ultima vez y con cuantas senales. Las
@@ -73,6 +77,8 @@ class Diagnosticador:
             "sombra_fallidos": 0,
             "triage_investigar": 0,
             "triage_no": 0,
+            "memoria_indexados": 0,
+            "memoria_fallidos": 0,
         }
 
     # --- Un ciclo ------------------------------------------------------------
@@ -92,6 +98,7 @@ class Diagnosticador:
         # tiene por que ser una tormenta de peticiones.
         registro = self._registro()
         historico = self._historico()
+        self._indexar(historico)
 
         salida: list[tuple[Expediente, Veredicto]] = []
         for incidente in pendientes[: self.settings.max_por_ciclo]:
@@ -119,6 +126,7 @@ class Diagnosticador:
             registro=registro,
             historico=historico,
         )
+        self._parecidos(incidente, expediente)
         veredicto = self.juez.juzgar(expediente)
         # La memoria va con el veredicto la diga quien la diga: es un hecho del
         # historico, no una opinion del juez (F3-06).
@@ -190,6 +198,47 @@ class Diagnosticador:
                     f.write(json.dumps(registro, ensure_ascii=False) + "\n")
             except Exception as exc:  # noqa: BLE001
                 log.warning("sombra.write_failed", extra={"error": str(exc)[:200]})
+
+    # Cuantos incidentes nuevos se indexan por ciclo. Prometheus limita los
+    # embeddings a 40.000 tokens por minuto: el historico entero se indexa a lo
+    # largo de unos minutos en vez de en una rafaga que se coma el limite.
+    INDEXAR_POR_CICLO = 32
+
+    def _indexar(self, historico: list[dict[str, Any]] | None) -> None:
+        if self.memoria is None or not historico:
+            return
+        try:
+            n = self.memoria.indexar(historico, arbol_de=self._arbol_de, maximo=self.INDEXAR_POR_CICLO)
+        except Exception as exc:  # noqa: BLE001 - la memoria nunca para el diagnostico
+            self.stats["memoria_fallidos"] += 1
+            log.warning("memoria.index_failed", extra={"error": str(exc)[:200]})
+            return
+        self.stats["memoria_indexados"] += n
+
+    def _arbol_de(self, incidente: dict[str, Any]) -> Any | None:
+        from .expediente import arbol_desde_filas
+
+        trazas = list(incidente.get("trace_ids") or [])
+        if self._almacen is None or not trazas:
+            return None
+        try:
+            arbol = arbol_desde_filas(self._almacen.spans_de_traza(trazas[0]))
+        except Exception:  # noqa: BLE001
+            return None
+        return arbol if arbol.spans else None
+
+    def _parecidos(self, incidente: dict[str, Any], expediente: Expediente) -> None:
+        """F3-05 al expediente. Si falla, se anota como laguna y se sigue."""
+        if self.memoria is None:
+            return
+        from .expediente import Semejante
+
+        try:
+            encontrados = self.memoria.parecidos(incidente, arbol=expediente.arbol if expediente.arbol.spans else None)
+        except Exception as exc:  # noqa: BLE001
+            expediente.lagunas.append(f"parecidos: {str(exc)[:160]}")
+            return
+        expediente.parecidos = [Semejante(**vars(p)) for p in encontrados]
 
     def _triage(self, expediente: Expediente, veredicto: Veredicto) -> None:
         """F3-03: si L4 esta encendido, decide si este incidente se investiga, y lo dice."""

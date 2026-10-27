@@ -34,8 +34,9 @@ def main() -> int:
 
     sombra = _juez_en_sombra(settings, log)
     investigacion = _investigador_en_sombra(settings, log)
+    memoria = _memoria_vectorial(settings, log)
     diagnosticador = Diagnosticador(settings, almacen=almacen, juez=JuezDeReglas(), sombra=sombra,
-                                    investigacion=investigacion)
+                                    investigacion=investigacion, memoria=memoria)
     log.info(
         "diagnose.ready",
         extra={
@@ -44,6 +45,7 @@ def main() -> int:
             "juez": settings.juez,
             "sombra": sombra.nombre if sombra else "",
             "l4": bool(investigacion),
+            "memoria": memoria.indice if memoria else "",
             "intervalo_s": settings.intervalo_s,
         },
     )
@@ -79,6 +81,22 @@ def _juez_en_sombra(settings: Settings, log: logging.Logger):
         razonamiento=settings.razonamiento or None,
         completa_a=JuezDeReglas() if settings.juez_sombra == "reglas+modelo" else None,
     )
+
+
+def _memoria_vectorial(settings: Settings, log: logging.Logger):
+    """F3-05, si se pidio. Con un modelo de Axonium hace falta la credencial; la lexica no."""
+    if not settings.embeddings:
+        return None
+    import os
+
+    from .memoria_vectorial import EmbebedorAxonium, EmbebedorLexico, MemoriaVectorial
+
+    if settings.embeddings == "lexico":
+        return MemoriaVectorial(settings.memoria_path, EmbebedorLexico())
+    if not os.environ.get("AXONIUM_CLIENT_ID"):
+        log.warning("memoria.sin_credencial", extra={"falta": "AXONIUM_CLIENT_ID / AXONIUM_CLIENT_SECRET"})
+        return None
+    return MemoriaVectorial(settings.memoria_path, EmbebedorAxonium(settings.embeddings))
 
 
 def _investigador_en_sombra(settings: Settings, log: logging.Logger):
