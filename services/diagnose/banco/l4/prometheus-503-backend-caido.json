@@ -1,0 +1,801 @@
+{
+  "caso": "prometheus-503-backend-caido",
+  "hasta": "2026-10-26T20:07:48.706994+00:00",
+  "almacen": {
+    "spans_de_traza|trace_id=af2be78850c9d6165f787fb0e168d970": [
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "3b1557046e8e6d50",
+        "ParentSpanId": "",
+        "SpanName": "POST /v1/chat/completions",
+        "SpanKind": "Server",
+        "ServiceName": "gateway",
+        "Duration": 539151000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:47.651106000",
+        "SpanAttributes": {
+          "error.type": "503",
+          "http.route": "/v1/chat/completions",
+          "http.url": "http://host.docker.internal:8020/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "c3b92b3e68b119e0",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "auth.validate",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 1138000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:47.651296000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "55def0102a9ff50f",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "POST /v1/chat/completions http receive",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 7000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:47.654369000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "e6c1575be7566be0",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "inference.request",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 529307000,
+        "StatusCode": "Error",
+        "StatusMessage": "All connection attempts failed",
+        "Timestamp": "2026-10-26 19:27:47.654612000",
+        "SpanAttributes": {
+          "http.route": "/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "2f0320a2fb4c6a70",
+        "ParentSpanId": "e6c1575be7566be0",
+        "SpanName": "POST",
+        "SpanKind": "Client",
+        "ServiceName": "gateway",
+        "Duration": 1565000,
+        "StatusCode": "Error",
+        "StatusMessage": "ConnectError: All connection attempts failed",
+        "Timestamp": "2026-10-26 19:27:47.656923000",
+        "SpanAttributes": {
+          "error.type": "ConnectError",
+          "http.url": "http://127.0.0.1:8087/v1/chat/completions",
+          "url.full": "http://127.0.0.1:8087/v1/chat/completions"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "All connection attempts failed",
+            "exception.type": "httpx.ConnectError"
+          }
+        ]
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "4223897829922352",
+        "ParentSpanId": "e6c1575be7566be0",
+        "SpanName": "POST /v1/chat/completions http receive",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 526743000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:47.657240000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "3a571f37f0d127ea",
+        "ParentSpanId": "e6c1575be7566be0",
+        "SpanName": "POST",
+        "SpanKind": "Client",
+        "ServiceName": "gateway",
+        "Duration": 2183000,
+        "StatusCode": "Error",
+        "StatusMessage": "ConnectError: All connection attempts failed",
+        "Timestamp": "2026-10-26 19:27:47.849514000",
+        "SpanAttributes": {
+          "error.type": "ConnectError",
+          "http.url": "http://127.0.0.1:8087/v1/chat/completions",
+          "url.full": "http://127.0.0.1:8087/v1/chat/completions"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "All connection attempts failed",
+            "exception.type": "httpx.ConnectError"
+          }
+        ]
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "4bc75b12ddb0b949",
+        "ParentSpanId": "e6c1575be7566be0",
+        "SpanName": "POST",
+        "SpanKind": "Client",
+        "ServiceName": "gateway",
+        "Duration": 4221000,
+        "StatusCode": "Error",
+        "StatusMessage": "ConnectError: All connection attempts failed",
+        "Timestamp": "2026-10-26 19:27:48.177144000",
+        "SpanAttributes": {
+          "error.type": "ConnectError",
+          "http.url": "http://127.0.0.1:8087/v1/chat/completions",
+          "url.full": "http://127.0.0.1:8087/v1/chat/completions"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "All connection attempts failed",
+            "exception.type": "httpx.ConnectError"
+          }
+        ]
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "f0fadf1ef07238e3",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 28000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.189893000",
+        "SpanAttributes": {
+          "error.type": "503"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "a20ea63ce8504c1b",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 9000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.190157000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "af2be78850c9d6165f787fb0e168d970",
+        "SpanId": "c89521d314bf4202",
+        "ParentSpanId": "3b1557046e8e6d50",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 6000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.190234000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      }
+    ],
+    "spans_de_traza|trace_id=bfab6c3015f5e59c61acc4601076f338": [
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "30f167ac9e843d67",
+        "ParentSpanId": "",
+        "SpanName": "POST /v1/chat/completions",
+        "SpanKind": "Server",
+        "ServiceName": "gateway",
+        "Duration": 18920000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.987676000",
+        "SpanAttributes": {
+          "error.type": "503",
+          "http.route": "/v1/chat/completions",
+          "http.url": "http://host.docker.internal:8020/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "6d1ce42eb01b22d1",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "auth.validate",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 3513000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.988941000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "e3f0c1d1b0b31fb9",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "POST /v1/chat/completions http receive",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 33000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.998038000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "76a992663e02c43b",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "inference.request",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 4757000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:48.998800000",
+        "SpanAttributes": {
+          "http.route": "/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "fe72c2cff6e37c38",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 41000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:49.006142000",
+        "SpanAttributes": {
+          "error.type": "503"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "a9f9e43f06d26f88",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 10000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:49.006473000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "bfab6c3015f5e59c61acc4601076f338",
+        "SpanId": "b079960c85b35dbb",
+        "ParentSpanId": "30f167ac9e843d67",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 8000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:27:49.006565000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      }
+    ],
+    "spans_de_traza|trace_id=a900bf6ae3f60747b1a2c6c81a6ef692": [
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "6e65ae745c67cf25",
+        "ParentSpanId": "",
+        "SpanName": "POST /v1/chat/completions",
+        "SpanKind": "Server",
+        "ServiceName": "gateway",
+        "Duration": 8974000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.464376000",
+        "SpanAttributes": {
+          "error.type": "503",
+          "http.route": "/v1/chat/completions",
+          "http.url": "http://host.docker.internal:8020/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "c5152a259e94999f",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "auth.validate",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 1561000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.464580000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "9834faf9cc91e196",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "POST /v1/chat/completions http receive",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 10000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.468474000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "3b4e420b00088f13",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "inference.request",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 2046000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.468729000",
+        "SpanAttributes": {
+          "http.route": "/v1/chat/completions"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "a14c5cf1b5a83a0d",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 12000,
+        "StatusCode": "Error",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.473131000",
+        "SpanAttributes": {
+          "error.type": "503"
+        },
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "b17cb89ba5eea6e0",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 6000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.473273000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "a900bf6ae3f60747b1a2c6c81a6ef692",
+        "SpanId": "b68d7fb502a0f121",
+        "ParentSpanId": "6e65ae745c67cf25",
+        "SpanName": "POST /v1/chat/completions http send",
+        "SpanKind": "Internal",
+        "ServiceName": "gateway",
+        "Duration": 6000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-26 19:37:39.473331000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      }
+    ],
+    "alcance|app=prometheus-inference-platform|componente=gateway": [
+      {
+        "ruta": "/v1/chat/completions",
+        "fallidas": 37,
+        "totales": 128
+      },
+      {
+        "ruta": "/oauth2/token",
+        "fallidas": 0,
+        "totales": 4
+      }
+    ],
+    "concurrentes|componente=gateway": [],
+    "recurrencia|app=prometheus-inference-platform|componente=gateway|clase=503": [
+      {
+        "dia": "2026-10-03",
+        "errores": 1
+      },
+      {
+        "dia": "2026-10-04",
+        "errores": 12
+      },
+      {
+        "dia": "2026-10-05",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-06",
+        "errores": 14
+      },
+      {
+        "dia": "2026-10-23",
+        "errores": 14
+      },
+      {
+        "dia": "2026-10-24",
+        "errores": 1592
+      },
+      {
+        "dia": "2026-10-25",
+        "errores": 100
+      },
+      {
+        "dia": "2026-10-26",
+        "errores": 10
+      }
+    ],
+    "recurrencia|app=prometheus-inference-platform|componente=gateway|clase=connecterror": [
+      {
+        "dia": "2026-10-05",
+        "errores": 1
+      },
+      {
+        "dia": "2026-10-15",
+        "errores": 10
+      },
+      {
+        "dia": "2026-10-24",
+        "errores": 7
+      },
+      {
+        "dia": "2026-10-25",
+        "errores": 2
+      },
+      {
+        "dia": "2026-10-26",
+        "errores": 3
+      }
+    ]
+  },
+  "registro": [
+    {
+      "id": "argus",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "alert-bus",
+        "canary",
+        "collector-agent",
+        "collector-gateway"
+      ],
+      "depende_de": [
+        "clickhouse",
+        "victoriametrics"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "veritium",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "veritium-api",
+        "veritium-worker"
+      ],
+      "depende_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "postgres-main",
+        "minio-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prometheus-inference-platform",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "auth-service",
+        "gateway",
+        "manager-api",
+        "manager-tui",
+        "tei"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prosodia",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "prosodia-api",
+        "prosodia-worker"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai-prod",
+      "estado": "planificado",
+      "criticidad": "alta",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "llm-benchmark",
+      "estado": "planificado",
+      "criticidad": "baja",
+      "componentes": [
+        "bench-runner"
+      ],
+      "depende_de": [],
+      "canales": {}
+    },
+    {
+      "id": "centinela",
+      "estado": "planificado",
+      "criticidad": "media",
+      "componentes": [
+        "centinela-api",
+        "centinela-camera-manager",
+        "centinela-celery",
+        "centinela-enrich-worker",
+        "centinela-identity-worker",
+        "centinela-notifier",
+        "centinela-vision-worker"
+      ],
+      "depende_de": [
+        "prometheus-inference-platform"
+      ],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "postgres-main",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "postgres-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "redis-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "redis-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "minio-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "minio-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "clickhouse",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "clickhouse"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "victoriametrics",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "victoriametrics"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "temporal",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "temporal"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    }
+  ]
+}

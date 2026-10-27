@@ -155,7 +155,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F4-01` | 🚧 | Investigación multi-paso con **synaptum** | Escrito (D-144) y probado en vivo (D-146): investiga con `mcp-obs`, pero sus conclusiones en el único caso real fueron falsas y cita herramientas que no llamó. Apagado |
+| `F4-01` | 🚧 | Investigación multi-paso con **synaptum** | Escrito (D-144) y **medido en su propio banco** (D-147, herramientas congeladas servidas por el mismo `mcp-obs`): con Qwen3 no supera a L3 en ningún caso y tiene un fallo con confianza alta en cada modo. Apagado; el banco queda para el próximo modelo |
 | `F4-02` | ✅ | Presupuesto duro: 40 tool calls, 300k tokens, 15 min | Informe parcial al agotarse **Hecho (D-144)**: informe parcial sin causa al agotarse |
 | `F4-03` | 🚧 | **Shadow mode**: investiga y registra, no notifica | Hecho para el juez de L3 (`sombra.jsonl`, D-137). Falta para L4, que todavía no existe |
 | `F4-04` | ⏳ | Trazar el propio agente en Langfuse | Es una app LLM más |

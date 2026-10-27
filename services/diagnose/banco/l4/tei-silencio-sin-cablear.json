@@ -1,0 +1,297 @@
+{
+  "caso": "tei-silencio-sin-cablear",
+  "hasta": "2026-10-24T17:00:46.487847+00:00",
+  "almacen": {
+    "alcance|app=prometheus-inference-platform|componente=tei": [],
+    "concurrentes|componente=tei": [],
+    "recurrencia|app=prometheus-inference-platform|componente=tei|clase=canary-silencio": []
+  },
+  "registro": [
+    {
+      "id": "argus",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "alert-bus",
+        "canary",
+        "collector-agent",
+        "collector-gateway"
+      ],
+      "depende_de": [
+        "clickhouse",
+        "victoriametrics"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "veritium",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "veritium-api",
+        "veritium-worker"
+      ],
+      "depende_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "postgres-main",
+        "minio-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prometheus-inference-platform",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "auth-service",
+        "gateway",
+        "manager-api",
+        "manager-tui",
+        "tei"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prosodia",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "prosodia-api",
+        "prosodia-worker"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai-prod",
+      "estado": "planificado",
+      "criticidad": "alta",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "llm-benchmark",
+      "estado": "planificado",
+      "criticidad": "baja",
+      "componentes": [
+        "bench-runner"
+      ],
+      "depende_de": [],
+      "canales": {}
+    },
+    {
+      "id": "centinela",
+      "estado": "planificado",
+      "criticidad": "media",
+      "componentes": [
+        "centinela-api",
+        "centinela-camera-manager",
+        "centinela-celery",
+        "centinela-enrich-worker",
+        "centinela-identity-worker",
+        "centinela-notifier",
+        "centinela-vision-worker"
+      ],
+      "depende_de": [
+        "prometheus-inference-platform"
+      ],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "postgres-main",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "postgres-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "redis-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "redis-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "minio-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "minio-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "clickhouse",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "clickhouse"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "victoriametrics",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "victoriametrics"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "temporal",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "temporal"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    }
+  ]
+}

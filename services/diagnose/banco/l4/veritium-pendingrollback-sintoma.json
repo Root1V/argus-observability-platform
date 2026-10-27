@@ -1,0 +1,1605 @@
+{
+  "caso": "veritium-pendingrollback-sintoma",
+  "hasta": "2026-10-14T11:11:38.564044+00:00",
+  "almacen": {
+    "spans_de_traza|trace_id=ef92685cf8e2c035a140fa52d1c13547": [
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "008df10a8c5b76c7",
+        "ParentSpanId": "818a4208b0e64bad",
+        "SpanName": "RunActivity:veritium.case.start_run",
+        "SpanKind": "Server",
+        "ServiceName": "veritium-worker",
+        "Duration": 10445000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.417830000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "fa894b6951ea3f3a",
+        "ParentSpanId": "008df10a8c5b76c7",
+        "SpanName": "veritium.case.start_run",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 10397000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.417870000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "ba4cf9e932d439cc",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "connect",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 820000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.418090000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "1f3fc637ff5f654a",
+        "ParentSpanId": "ba4cf9e932d439cc",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 244000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.418144000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "8aa8761b8d493118",
+        "ParentSpanId": "ba4cf9e932d439cc",
+        "SpanName": ";",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 231000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.418433000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "87a06f140215b19f",
+        "ParentSpanId": "ba4cf9e932d439cc",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 186000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.418705000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "5120101c8fb6d61d",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 164000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.419070000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "9294e0191524e6c3",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 502000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.419267000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "3c526d2098e5cc8d",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 280000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.420186000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "4ba61200c17e9f5b",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 438000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.420741000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "e015aa45bfd5a83c",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 362000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.421485000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "3e442394a4cfa101",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 247000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.422187000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "3fc0699f0cea8d11",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 221000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.422706000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "0072ba72361a33fa",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 197000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.423117000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "1db841cbb7a5e3f8",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 187000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.423456000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "80cade5b1441e637",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 173000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.423765000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "e888b2f99c6b80fe",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 166000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.424055000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "4c421d8226a6f69d",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 163000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.424334000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "69253cc35ed0f38d",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 187000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.424612000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "44ee008767b08731",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 213000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.424961000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "4694a466dd2dfd64",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 199000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.425298000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "d6a640b716b7575f",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "UPDATE",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 355000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.426821000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "c8324ab49b6a4393",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "UPDATE",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 297000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.427356000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "37bce48ac1cfe388",
+        "ParentSpanId": "fa894b6951ea3f3a",
+        "SpanName": "COMMIT;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 350000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.427781000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "d8608004e6706101",
+        "ParentSpanId": "4605b9ab12063795",
+        "SpanName": "RunActivity:veritium.case.evaluate",
+        "SpanKind": "Server",
+        "ServiceName": "veritium-worker",
+        "Duration": 25282000,
+        "StatusCode": "Error",
+        "StatusMessage": "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+        "Timestamp": "2026-10-14 11:11:38.450836000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+            "exception.type": "sqlalchemy.exc.PendingRollbackError"
+          }
+        ]
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "53bf42a0b999204f",
+        "ParentSpanId": "d8608004e6706101",
+        "SpanName": "veritium.case.evaluate",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 24073000,
+        "StatusCode": "Error",
+        "StatusMessage": "PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+        "Timestamp": "2026-10-14 11:11:38.450879000",
+        "SpanAttributes": {
+          "error.type": "PendingRollbackError"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+            "exception.type": "sqlalchemy.exc.PendingRollbackError"
+          }
+        ]
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "5376ddbd958c3284",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "connect",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 877000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.451122000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "6abadb82172961fd",
+        "ParentSpanId": "5376ddbd958c3284",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 256000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.451176000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "e25a88002b9db118",
+        "ParentSpanId": "5376ddbd958c3284",
+        "SpanName": ";",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 246000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.451481000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "387fe6025983152f",
+        "ParentSpanId": "5376ddbd958c3284",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 220000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.451758000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "bb13249116283beb",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 170000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.452148000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "bb58dd072f666fbc",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 213000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.452348000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "2b38e4b566e7946e",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 247000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.452993000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "7f1eb604a4b65c4c",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 221000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.453576000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "da729231e91fb5c9",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 248000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.454385000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "ccfc51e242a10988",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 251000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.454891000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "10bfd216e4acbace",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 282000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.455418000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "157186824b1ca547",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 205000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.455894000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "9b18bb9d053b6e65",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 595000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.456356000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "f25d66b7adbb0156",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 447000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.457508000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "63596589c1505ef3",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 210000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.458469000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "d1fa0dcdaf6f2d23",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 251000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.458821000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "c9c59366a8d74ee4",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 186000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.459197000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "fd05df341544bcfb",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 183000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.459582000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "cfa7ba1b028b5bb7",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 256000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.459930000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "a00a6d1167e46da8",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 249000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.460336000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "2678f4988945ff83",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 158000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.460742000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "500db988ca7632c1",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 356000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.461030000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "32a729f9c2a641fd",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 197000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.461520000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "097db37bc255b5e7",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 478000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.461969000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "d2f45130f615ff14",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "UPDATE",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 354000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.463602000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "baeb27ecdbdb3d70",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "UPDATE",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 352000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.464199000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "dcd6d65d253dec8a",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "COMMIT;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 493000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.464648000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "8347dd84119a9682",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "connect",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 975000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.465288000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "103e49ca9d89a24f",
+        "ParentSpanId": "8347dd84119a9682",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 239000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.465341000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "bdb2c60ee9e2a1dd",
+        "ParentSpanId": "8347dd84119a9682",
+        "SpanName": ";",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 369000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.465611000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "06441a197b73719c",
+        "ParentSpanId": "8347dd84119a9682",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 227000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.466022000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "0d7edb83dcab56b3",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 228000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.466360000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "39a7f6ee8dd86ae1",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 902000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.466615000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "55b8246ace9181e5",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "UPDATE",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 312000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.468127000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "378f335a8b791b0c",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "COMMIT;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 303000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.468624000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "36cc80a5fe53dbd4",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "pipeline.stage.validate",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 1795000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469010000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "bcf9d202116890fa",
+        "ParentSpanId": "36cc80a5fe53dbd4",
+        "SpanName": "validation.rule",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 13000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469041000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "951ae06fbb357431",
+        "ParentSpanId": "36cc80a5fe53dbd4",
+        "SpanName": "validation.rule",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 1685000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469072000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "4157bee0da31a4ef",
+        "ParentSpanId": "951ae06fbb357431",
+        "SpanName": "connect",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 810000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469149000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "56e9a4aa90d9d6ce",
+        "ParentSpanId": "4157bee0da31a4ef",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 160000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469203000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "0dc2f2830cb7776f",
+        "ParentSpanId": "4157bee0da31a4ef",
+        "SpanName": ";",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 362000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469392000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "0abf22a3f47c2e9b",
+        "ParentSpanId": "4157bee0da31a4ef",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 172000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.469776000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "37d901bd9f8cf1c8",
+        "ParentSpanId": "951ae06fbb357431",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 278000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.470033000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "b9d72458ab274230",
+        "ParentSpanId": "951ae06fbb357431",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 359000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.470338000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "5ce4f62d26904589",
+        "ParentSpanId": "36cc80a5fe53dbd4",
+        "SpanName": "validation.rule",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 10000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.470790000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "6fd3d1c2e27b3579",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "INSERT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 1292000,
+        "StatusCode": "Error",
+        "StatusMessage": "NotNullViolationError: null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+        "Timestamp": "2026-10-14 11:11:38.471024000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "null value in column \"tenant\" of relation \"validation_issues\" violates not-null constraint",
+            "exception.type": "asyncpg.exceptions.NotNullViolationError"
+          }
+        ]
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "7e8e3a518cbb11c0",
+        "ParentSpanId": "53bf42a0b999204f",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 290000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:38.472528000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "041fa44e70a4a23e",
+        "ParentSpanId": "4605b9ab12063795",
+        "SpanName": "RunActivity:veritium.case.evaluate",
+        "SpanKind": "Server",
+        "ServiceName": "veritium-worker",
+        "Duration": 4684000,
+        "StatusCode": "Error",
+        "StatusMessage": "ApplicationError: CaseRunNotFound: case run not found: case=<uuid> run=<uuid>",
+        "Timestamp": "2026-10-14 11:11:43.490909000",
+        "SpanAttributes": {},
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "CaseRunNotFound: case run not found: case=<uuid> run=<uuid>",
+            "exception.type": "temporalio.exceptions.ApplicationError"
+          }
+        ]
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "0f402ed8d947e019",
+        "ParentSpanId": "041fa44e70a4a23e",
+        "SpanName": "veritium.case.evaluate",
+        "SpanKind": "Internal",
+        "ServiceName": "veritium-worker",
+        "Duration": 4137000,
+        "StatusCode": "Error",
+        "StatusMessage": "ValueError: case run not found: case=<uuid> run=<uuid>",
+        "Timestamp": "2026-10-14 11:11:43.490950000",
+        "SpanAttributes": {
+          "error.type": "ValueError"
+        },
+        "Events.Name": [
+          "exception"
+        ],
+        "Events.Attributes": [
+          {
+            "exception.message": "case run not found: case=<uuid> run=<uuid>",
+            "exception.type": "ValueError"
+          }
+        ]
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "447f20ef5af6ceda",
+        "ParentSpanId": "0f402ed8d947e019",
+        "SpanName": "connect",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 1394000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.491192000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "cdc3aca6e02ade62",
+        "ParentSpanId": "447f20ef5af6ceda",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 587000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.491244000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "59aaa2bb224bf042",
+        "ParentSpanId": "447f20ef5af6ceda",
+        "SpanName": ";",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 319000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.491854000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "dc8fb8f0673e293b",
+        "ParentSpanId": "447f20ef5af6ceda",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 384000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.492192000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "9dc336bd1ed84b5d",
+        "ParentSpanId": "0f402ed8d947e019",
+        "SpanName": "BEGIN;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 306000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.492711000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "5b243ef6eeb20d3d",
+        "ParentSpanId": "0f402ed8d947e019",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 370000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.493056000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "f49e58b606c06e64",
+        "ParentSpanId": "0f402ed8d947e019",
+        "SpanName": "SELECT",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 526000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.493664000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      },
+      {
+        "TraceId": "ef92685cf8e2c035a140fa52d1c13547",
+        "SpanId": "c562575598d87de3",
+        "ParentSpanId": "0f402ed8d947e019",
+        "SpanName": "ROLLBACK;",
+        "SpanKind": "Client",
+        "ServiceName": "veritium-worker",
+        "Duration": 333000,
+        "StatusCode": "Unset",
+        "StatusMessage": "",
+        "Timestamp": "2026-10-14 11:11:43.494343000",
+        "SpanAttributes": {},
+        "Events.Name": [],
+        "Events.Attributes": []
+      }
+    ],
+    "alcance|app=veritium|componente=veritium-worker": [
+      {
+        "ruta": "",
+        "fallidas": 2,
+        "totales": 4
+      }
+    ],
+    "concurrentes|componente=veritium-worker": [
+      {
+        "servicio": "veritium-api",
+        "clase": "",
+        "errores": 27
+      },
+      {
+        "servicio": "veritium-api",
+        "clase": "http-500",
+        "errores": 5
+      }
+    ],
+    "recurrencia|app=veritium|componente=veritium-worker|clase=pendingrollbackerror": [
+      {
+        "dia": "2026-10-14",
+        "errores": 1
+      }
+    ]
+  },
+  "registro": [
+    {
+      "id": "argus",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "alert-bus",
+        "canary",
+        "collector-agent",
+        "collector-gateway"
+      ],
+      "depende_de": [
+        "clickhouse",
+        "victoriametrics"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "veritium",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "veritium-api",
+        "veritium-worker"
+      ],
+      "depende_de": [
+        "aeon-ai",
+        "prometheus-inference-platform",
+        "postgres-main",
+        "minio-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prometheus-inference-platform",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "auth-service",
+        "gateway",
+        "manager-api",
+        "manager-tui",
+        "tei"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "gchat",
+          "email",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "gchat",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "prosodia",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "prosodia-api",
+        "prosodia-worker"
+      ],
+      "depende_de": [
+        "redis-main"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "aeon-ai-prod",
+      "estado": "planificado",
+      "criticidad": "alta",
+      "componentes": [
+        "control-plane",
+        "modelgw",
+        "runcontroller",
+        "toolgw",
+        "worker"
+      ],
+      "depende_de": [
+        "postgres-main",
+        "temporal"
+      ],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "llm-benchmark",
+      "estado": "planificado",
+      "criticidad": "baja",
+      "componentes": [
+        "bench-runner"
+      ],
+      "depende_de": [],
+      "canales": {}
+    },
+    {
+      "id": "centinela",
+      "estado": "planificado",
+      "criticidad": "media",
+      "componentes": [
+        "centinela-api",
+        "centinela-camera-manager",
+        "centinela-celery",
+        "centinela-enrich-worker",
+        "centinela-identity-worker",
+        "centinela-notifier",
+        "centinela-vision-worker"
+      ],
+      "depende_de": [
+        "prometheus-inference-platform"
+      ],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "postgres-main",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "postgres-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "redis-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "redis-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "minio-main",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "minio-main"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "clickhouse",
+      "estado": "activo",
+      "criticidad": "alta",
+      "componentes": [
+        "clickhouse"
+      ],
+      "depende_de": [],
+      "canales": {
+        "page": [
+          "telegram",
+          "console"
+        ],
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "victoriametrics",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "victoriametrics"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    },
+    {
+      "id": "temporal",
+      "estado": "activo",
+      "criticidad": "media",
+      "componentes": [
+        "temporal"
+      ],
+      "depende_de": [],
+      "canales": {
+        "ticket": [
+          "telegram",
+          "console"
+        ]
+      }
+    }
+  ]
+}

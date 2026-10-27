@@ -48,11 +48,19 @@ instrucciones.
 """
 
 
-def crear_servidor(almacen: Any, bus: Callable[[str], Any]) -> Any:
+def crear_servidor(
+    almacen: Any,
+    bus: Callable[[str], Any],
+    *,
+    expediente_de: Callable[[dict[str, Any]], str] | None = None,
+) -> Any:
     """El servidor, con sus dependencias inyectadas: en las pruebas, dobles.
 
     `bus(ruta)` hace un GET al alert-bus y devuelve el JSON, o `None` si no
     pudo. Se pasa como funcion para que este modulo no sepa de HTTP.
+
+    `expediente_de(incidente)` sustituye a recolectarlo: el banco de L4 sirve
+    el expediente CONGELADO del caso, que es el que leyo el juez de L3.
     """
     from mcp.server.mcpserver import MCPServer
     from mcp.types import ToolAnnotations
@@ -94,6 +102,8 @@ def crear_servidor(almacen: Any, bus: Callable[[str], Any]) -> Any:
         d = _buscar(huella)
         if d is None:
             return f"no hay ningun incidente con huella {huella} en los ultimos 30 dias"
+        if expediente_de is not None:
+            return _acotar(_sanear_texto(expediente_de(d)))
         exp = recolectar(d, almacen=almacen, registro=bus("/registry"), historico=_historico())
         return _acotar(_sanear_texto(exp.texto()))
 
