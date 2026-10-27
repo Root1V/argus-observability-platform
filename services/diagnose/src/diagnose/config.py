@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # El diario de synaptum y las investigaciones pendientes: lo que permite
     # retomar tras un reinicio sin repetir inferencias (F4-01).
     l4_diario_path: str = "/var/lib/argus/l4.sqlite"
+    # Investigaciones por hora como mucho (D-150): cada una son ~35.000 tokens
+    # de la plataforma que comparten Centinela y Veritium.
+    l4_por_hora: int = 2
 
     def timeout_s(self) -> float:
         return 10.0

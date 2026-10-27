@@ -74,8 +74,8 @@ def test_lo_que_no_cabe_en_la_cola_se_cuenta_y_se_tira() -> None:
         bloqueo.wait(5)
         return Resultado(huella=huella)
 
-    sombra = SombraL4(lenta, max_cola=1)
-    resultados = [sombra.encolar(_exp(huella=f"h{i}"), SIN_CAUSA, "m") for i in range(4)]
+    sombra = SombraL4(lenta, max_cola=1, por_hora=100)
+    resultados = [sombra.encolar(_exp(huella=f"h{i}", componente=f"c{i}"), SIN_CAUSA, "m") for i in range(4)]
     bloqueo.set()
     sombra.esperar(timeout=5)
 
@@ -111,3 +111,24 @@ def test_lo_pendiente_sobrevive_a_un_reinicio_y_se_retoma_con_su_run_id(tmp_path
     tercera = SombraL4(investigar, pendientes=pendientes)               # ya terminada: no se repite
     tercera.esperar(timeout=5)
     assert len(retomadas) == 1
+
+
+
+def test_el_mismo_episodio_con_otra_huella_no_se_investiga_dos_veces() -> None:
+    """El colector que se reabre cada pocos minutos es un problema, no cuarenta (D-150)."""
+    sombra = SombraL4(lambda h, r: Resultado(huella=h), por_hora=100)
+    assert sombra.encolar(_exp(huella="h1"), SIN_CAUSA, "m")
+    assert not sombra.encolar(_exp(huella="h2"), SIN_CAUSA, "m")
+    assert sombra.encolar(_exp(huella="h3", firma="OtraClase"), SIN_CAUSA, "m")
+    assert sombra.stats["repetidas"] == 1
+    sombra.esperar(timeout=5)
+
+
+def test_lo_que_no_cabe_en_la_hora_se_cuenta_y_se_tira() -> None:
+    """Cada investigacion son ~35.000 tokens de una plataforma compartida (D-150)."""
+    sombra = SombraL4(lambda h, r: Resultado(huella=h), por_hora=2)
+    hechos = [sombra.encolar(_exp(huella=f"h{i}", componente=f"c{i}"), SIN_CAUSA, "m") for i in range(5)]
+
+    assert hechos == [True, True, False, False, False]
+    assert sombra.stats["descartadas_por_ritmo"] == 3
+    sombra.esperar(timeout=5)

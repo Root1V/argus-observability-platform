@@ -292,7 +292,10 @@ services:
       # L4 EN SOMBRA (F4-01, F4-03): lo que el triage deja pasar se investiga en
       # segundo plano con `mcp-obs` y se registra en `sombra-l4.jsonl`. Nunca
       # notifica. `modelo` para encenderlo.
-      DIAGNOSE_INVESTIGADOR: ${DIAGNOSE_INVESTIGADOR:-}
+      DIAGNOSE_INVESTIGADOR: ${DIAGNOSE_INVESTIGADOR:-modelo}
+      # Como mucho tantas investigaciones por hora (D-150): cada una son
+      # ~35.000 tokens de la plataforma que comparten Centinela y Veritium.
+      DIAGNOSE_L4_POR_HORA: ${DIAGNOSE_L4_POR_HORA:-2}
       DIAGNOSE_SOMBRA_L4_PATH: /var/lib/argus/sombra-l4.jsonl
       # F3-05, memoria por parecido: el modelo de embeddings de Axonium,
       # `lexico` para la linea base sin modelo, o vacio para apagarla. Solo

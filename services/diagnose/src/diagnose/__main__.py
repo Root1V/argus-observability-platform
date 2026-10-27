@@ -122,6 +122,7 @@ def _investigador_en_sombra(settings: Settings, log: logging.Logger):
         investigar,
         ruta=settings.sombra_l4_path,
         pendientes=settings.l4_diario_path,
+        por_hora=settings.l4_por_hora,
         nuevo_run_id=lambda huella, epoca: id_de_investigacion(settings.modelo, razonamiento, huella, epoca),
     )
 

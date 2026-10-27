@@ -7944,3 +7944,47 @@ menos de 3 s. La prueba buena es la que da el propio synaptum.
 **F4-01 queda hecho como capacidad.** L4 sigue apagado por lo que midió D-147:
 con los modelos disponibles no supera a L3. Cuando llegue uno mejor, la
 durabilidad ya está.
+
+---
+
+## D-150 · F4-03: L4 en sombra en producción, con frenos, y la primera noche no tuvo modelo
+
+**Estado**: ✅ Encendido · investiga y registra, nunca notifica
+
+**Lo que faltaba de F4-03** era encender la sombra de L4 (D-144) en producción,
+que es donde están los casos que el banco no tiene: incidentes en los que las
+reglas se abstienen.
+
+**Los frenos**, porque encenderlo tal cual habría sido una avalancha. El 26/10
+hubo **145 `page`** y el 25/10, 61, muchos de ellos los mismos incidentes del
+colector reabriéndose. Cada investigación son unos 35.000 tokens de la
+plataforma que comparten Centinela y Veritium.
+
+- **Por episodio, no por huella.** Lo que no se repite en 6 h es el mismo
+  `(app, componente, clase)`: el colector que se reabre cada pocos minutos es un
+  problema, no cuarenta.
+- **Un ritmo máximo**: `DIAGNOSE_L4_POR_HORA`, 2 por defecto. Son unas 48 al
+  día, cerca de 1,7 M de tokens y unos 6 minutos de GPU. Lo que no cabe se cuenta
+  (`descartadas_por_ritmo`) y se tira.
+- **Sin razonamiento**, con el `DIAGNOSE_RAZONAMIENTO=off` que comparte con el
+  juez: unos 8 s por investigación.
+
+**La garantía**, fijada con un test: con L4 encendido, el aviso lleva solo el
+veredicto de las reglas. L4 corre en otro hilo y no tiene ningún camino hacia el
+alert-bus: sus herramientas son de solo lectura y escribe únicamente en su
+JSONL.
+
+**Leerlo**: `python -m diagnose.informe_sombra` (dentro del contenedor, con
+`/app/.venv/bin/python`). Pone lado a lado las reglas, el juez en sombra y L4, el
+coste y en qué acabó cada investigación. Señala los incidentes en los que una
+sombra propone causa y las reglas no, que son los candidatos a caso de banco.
+
+**La primera noche, sin modelo de chat.** Las dos primeras investigaciones
+acabaron en `error:ProviderError` en menos de un segundo. Prometheus había
+retirado `qwen3-30b-a3b-q4-k-m-local`: no hay `llama-server` para él y responde
+«not registered». Y el gateway seguía rechazando `gpt-oss-20b-mxfp4` con
+«circuit half-open, recuperación más temprana a las 19:28:21» más de 7 horas
+después, con el backend de `:8087` levantado desde esa hora. Parece un
+disyuntor atascado. Es de Prometheus y se le dice a través del dueño. La sombra
+hizo lo que tenía que hacer: dos informes parciales sin causa, registrados, y
+ningún aviso tocado.
