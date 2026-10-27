@@ -7901,3 +7901,46 @@ cambia ningún aviso. Para el juez en sombra y para L4 es contexto.
 
 **Lo que falta** es un banco de memoria con más parejas. Cada caso nuevo de F3-08
 con una causa compartida debería añadir una.
+
+---
+
+## D-149 · F4-01: L4 es durable, y reanudar no repite inferencias (medido contra el stack)
+
+**Estado**: ✅ Hecho y verificado · L4 sigue apagado por calidad (D-147), no por esto
+
+**Lo que pedía F4-01** (D-135): investigación de varios pasos con synaptum, un
+checkpoint por paso, y que reanudar con el mismo `run_id` no repita
+inferencias. Lo de varios pasos ya estaba (D-144). Faltaba que fuera durable:
+el investigador usaba un `run_id` aleatorio y sin diario, así que un reinicio
+del contenedor a mitad de una investigación tiraba lo ya pagado.
+
+**Qué se hizo**:
+
+- **Diario persistente**: `SqliteCheckpointer` de synaptum en
+  `/var/lib/argus/l4.sqlite`. La idempotencia la garantiza la clave primaria
+  `(run_id, step_id, phase)`, no el código.
+- **`run_id` determinista**, a partir del modelo, la versión de las
+  instrucciones, el razonamiento, la huella y el momento en que se encoló. La
+  misma petición da el mismo run; el mismo incidente pedido seis horas después da
+  otro y no comparte diario.
+- **Pendientes en disco.** La sombra de L4 guarda cada trabajo con su `run_id`
+  antes de investigarlo y lo marca al terminar. Al arrancar, retoma los que no
+  terminaron con su mismo `run_id`.
+- **El resultado dice cuántos pasos salieron del diario** (`pasos_reproducidos`,
+  del `replayed_steps` que synaptum pone en el paso final).
+
+**Verificado contra Qwen3 y el stack real**: una investigación de un `page` real
+(`ArgusSLOBurnRateFast` del gateway) se mató con `kill -9` con tres pasos
+completados (modelo, herramienta, modelo). Al retomarla con el mismo `run_id`
+informó de **3 pasos reproducidos**, siguió con lo que faltaba y entregó el
+informe. Con el doble de synaptum, la misma prueba deja medido que la
+reanudación hace **1 llamada al modelo de 2 y 0 ejecuciones de herramienta**.
+
+**Un intento de prueba que no valía, y por qué**: contar las peticiones en las
+trazas del gateway de Prometheus. En el mismo minuto la sombra de producción
+también llamó a Qwen, y el muestreo de cola descarta parte de las peticiones de
+menos de 3 s. La prueba buena es la que da el propio synaptum.
+
+**F4-01 queda hecho como capacidad.** L4 sigue apagado por lo que midió D-147:
+con los modelos disponibles no supera a L3. Cuando llegue uno mejor, la
+durabilidad ya está.
