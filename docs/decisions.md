@@ -8170,3 +8170,64 @@ contra uno mismo.
 - L4 no se midió con modelo: con el 27B cada investigación tarda más de una hora.
   Sus defensas son de código: herramientas de solo lectura, salidas
   neutralizadas, citas y cifras verificadas, y presupuesto duro.
+
+---
+
+## D-154 · F5-01: el evaluador arranca con lo que hay en el almacén, y `desconocido` no es `pasa`
+
+**Estado**: 🧪 Probado contra el stack real · contenedor sin desplegar
+
+**Lo verificado**: las consultas, contra 2.485 spans reales de 3 días. Además,
+el bucle corriendo desde el Mac contra la ClickHouse real: rellenó 24 h (82
+spans, 328 evaluaciones), creó `argus.evaluaciones` y evaluó una llamada hecha
+a propósito al 27B (`stop` → 4 × `pasa`). **Falta**: construir la imagen y ver
+`argus_eval_results_total` en VictoriaMetrics. El 28/10 de madrugada el Mac
+estaba dormido con batería: Docker Desktop no alcanzaba `ghcr.io` y el bucle
+solo avanzaba en los despertares (B-21).
+
+**El problema de partida**: las evaluaciones del PLAN (§7.4c) que valen la pena
+—groundedness, consistencia— necesitan el contenido de los mensajes, y el
+contenido no está en ningún sitio. Las apps no lo capturan por defecto
+(`ARGUS_CAPTURE_CONTENT=false`), ClickHouse lo borra a propósito (D-008) y
+Langfuse, que es donde debería vivir, está apagado.
+
+**Decisión**: el `evaluator` se construye entero (muestreo, bucle, tabla,
+métrica), pero con las evaluaciones que sí se pueden hacer hoy. Son cuatro
+deterministas sobre la estructura del span: `rechazo`, `truncado`, `abandono` y
+`vacia`. Las caras quedan con su sitio hecho (`CARAS`, que solo ven la muestra)
+y llegan con F5-02. No se enciende Langfuse ni se pide a nadie que capture
+contenido sin que lo decida el dueño.
+
+**Cuatro detalles que no son obvios**:
+
+1. **Tres resultados.** Un span sin `finish_reasons` no pasa la evaluación de
+   rechazo: no se puede hacer. Se guarda `desconocido` con el motivo. Contarlo
+   como `pasa` daría una tasa de rechazos del 0 % que en realidad es una laguna
+   de instrumentación (la misma trampa que D-091). Las palabras fuera del
+   vocabulario tampoco se adivinan.
+2. **Las baratas, a todo; la muestra, para las caras.** Con 200 llamadas al día,
+   un 5 % no ve un pico de rechazos. La muestra (todos los errores, todo el P99
+   contra la semana y un 5 % por hash del `trace_id`) existe para acotar lo que
+   cuesta un modelo, y las evaluaciones deterministas no cuestan nada.
+3. **El cursor va por el FIN del span.** El span se inserta cuando termina. Con
+   un cursor sobre el inicio, las generaciones de nueve minutos del 27B llegarían
+   cuando su ventana ya había pasado: las llamadas más lentas serían justo las
+   que nunca se evalúan.
+4. **Las métricas cuentan el presente.** El primer arranque rellena 24 h en la
+   tabla, pero el contador solo suma spans de los últimos 15 minutos. Si sumara
+   el relleno, desplegar haría saltar la alerta de F5-03.
+
+**Lo que ya dice sobre el portafolio real**:
+
+- **Centinela no se puede evaluar**: ninguno de sus spans de chat trae
+  `gen_ai.response.finish_reasons` (316 de 316 en 3 días), y algunos tampoco
+  traen los tokens de salida. Es una petición para su equipo, a través del dueño.
+- El gateway de Prometheus usa `complete` donde el estándar dice `stop`, y
+  `client_disconnected` para el cliente que se va. Las dos palabras están en el
+  vocabulario con su origen anotado; hubo 4 abandonos en 3 días.
+- Veritium: 113 de 113 pasan las cuatro evaluaciones.
+
+**Dónde escribe**: `argus.evaluaciones` (ReplacingMergeTree, idempotente, 90
+días) y `argus_eval_results_total` por app, componente, evaluación, resultado y
+modelo pedido. La métrica vive en el servicio y no en `argus-semconv`: cuando
+F5-03 la consuma y se estabilice, se sube a las convenciones.

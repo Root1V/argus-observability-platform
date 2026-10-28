@@ -317,6 +317,31 @@ services:
     volumes:
       - diagnose-data:/var/lib/argus
 
+  # F5-01: evaluaciones online de las llamadas a modelos de todo el portafolio.
+  # Lee los spans GenAI terminados, los evalua y escribe en
+  # `argus.evaluaciones` y en el contador `argus_eval_results_total`. No llama
+  # a ningun modelo: las evaluaciones de hoy son deterministas (D-154).
+  evaluator:
+    <<: *restart
+    profiles: [agents, full]
+    build:
+      context: ..
+      dockerfile: services/evaluator/Dockerfile
+    depends_on: [clickhouse]
+    environment:
+      EVALUATOR_CLICKHOUSE_URL: http://clickhouse:8123/
+      EVALUATOR_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-argus}
+      EVALUATOR_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      EVALUATOR_INTERVALO_S: ${EVALUATOR_INTERVALO_S:-60}
+      EVALUATOR_MUESTRA_PCT: ${EVALUATOR_MUESTRA_PCT:-5}
+      EVALUATOR_CURSOR_PATH: /var/lib/argus/evaluator-cursor.json
+      # 4318 y no 4317: sin el extra `grpc` el SDK habla OTLP/HTTP (D-122).
+      ARGUS_ENDPOINT: http://collector:4318
+      ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
+      OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
+    volumes:
+      - evaluator-data:/var/lib/argus
+
   canary:
     <<: *restart
     profiles: [lean, genai, agents, full]
@@ -560,6 +585,8 @@ volumes:
   alertbus-data:
   # Lo que juzga el modelo en sombra, una linea por juicio (D-135).
   diagnose-data:
+  # El cursor del evaluador: hasta donde ha evaluado (F5-01).
+  evaluator-data:
   # Volumenes NOMBRADOS: son lo que hace portable el plano central.
   clickhouse-data:
   vm-data:

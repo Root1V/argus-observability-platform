@@ -10,6 +10,7 @@ dependencies = [
     "alert-bus",
     "canary",
     "diagnose",
+    "evaluator",
 ]
 
 [dependency-groups]
@@ -24,7 +25,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus", "services/canary", "services/diagnose"]
+members = ["libs/argus-semconv", "libs/argus-sdk", "libs/argus-schemas", "services/alert-bus", "services/canary", "services/diagnose", "services/evaluator"]
 
 [tool.uv.sources]
 argus-obs-semconv = { workspace = true }
@@ -33,6 +34,7 @@ argus-obs-schemas = { workspace = true }
 alert-bus = { workspace = true }
 canary = { workspace = true }
 diagnose = { workspace = true }
+evaluator = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -49,6 +51,7 @@ testpaths = [
     "services/alert-bus/tests",
     "services/canary/tests",
     "services/diagnose/tests",
+    "services/evaluator/tests",
     # El vigilante NO es un servicio y por eso se quedo fuera de la lista al
     # principio. Sus tests estuvieron escritos y sin ejecutarse hasta que se
     # conto: un guardarrail que no corre es un fichero de texto (D-088).

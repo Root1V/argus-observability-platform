@@ -33,7 +33,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
 | **F4** | Investigación agéntica L4 | 🚧 | 5/7 |
-| **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
+| **F5** | Calidad, coste y deriva | 🚧 | 0/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
 
@@ -165,11 +165,11 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 ---
 
-## F5 · Calidad, coste y deriva ⏳
+## F5 · Calidad, coste y deriva 🚧
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F5-01` | ⏳ | `evaluator`: evals online sobre trazas muestreadas | |
+| `F5-01` | 🧪 | `evaluator`: evals online sobre trazas muestreadas | **D-154**: servicio `evaluator`, cuatro evaluaciones deterministas (rechazo, truncado, abandono, vacía) sobre todos los spans GenAI; la muestra (errores + P99 + 5 %) espera a las caras de F5-02. `desconocido` ≠ `pasa`: Centinela no trae `finish_reasons`. Verificado contra la ClickHouse real; falta construir la imagen y ver la métrica (el Mac dormía) |
 | `F5-02` | ⏳ | Groundedness, consistencia, formato, rechazo | Formato con Pydantic, no LLM |
 | `F5-03` | ⏳ | Alerta por **condición conjunta** deriva + caída de eval | Deriva sola es falsa alarma |
 | `F5-04` | ⏳ | `drift-monitor` con Evidently | |
