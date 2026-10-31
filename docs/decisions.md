@@ -8398,12 +8398,20 @@ no confiables (F4-06).
   línea base, después los objetivos.
 - **`B-50` Flujos de negocio**, **`B-51` regresión tras un cambio** (absorbe
   B-03) y **`B-52` simulaciones de fallo** sobre una app propia.
-- Sin decidir: modelos fundacionales de series temporales (`B-53`), un
-  clasificador de triage cuando haya etiquetas (`B-54`) y profiling (`B-55`).
+- Sin decidir: modelos fundacionales de series temporales (`B-53`), triage con
+  un modelo de decisión System One cuando haya etiquetas (`B-54`) y profiling
+  (`B-55`).
 
 **Lo que no se adopta, a propósito**: Kafka y Flink, Mimir, Loki, Tempo y
 OpenSearch, LangGraph y Temporal, PostgreSQL y pgvector, CMDB, ServiceNow,
-PagerDuty, IAM/PAM, OPA todavía, y Jev como dependencia externa. Cada una choca
-con una decisión ya tomada (ClickHouse unificado, synaptum, SQLite, Axonium
-como única puerta) o con la escala: un portafolio personal en un portátil, no
-un banco. El porqué de cada una está en el análisis.
+PagerDuty, IAM/PAM y, todavía, OPA. Cada una choca con una decisión ya tomada
+(ClickHouse unificado, synaptum, SQLite) o con la escala: un portafolio personal
+en un portátil, no un banco. El porqué de cada una está en el análisis.
+
+**Corrección del dueño, el mismo día**: la primera versión descartaba Jev «por
+ser un proveedor externo y por la regla de Axonium», y eso estaba mal planteado.
+Axonium sirve los modelos que **provee Prometheus**, y Prometheus ofrece modelos
+System One **abiertos**, Laya y Von; Jev es el privado de esa familia. Así que
+el modelo de decisión del documento no se descarta: es `B-54`, con Laya o Von
+por Axonium. El 31/10 el cliente de Argus no los ve (lista tres modelos), así
+que hará falta el permiso.
