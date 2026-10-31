@@ -33,7 +33,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
 | **F4** | Investigación agéntica L4 | 🚧 | 5/7 |
-| **F5** | Calidad, coste y deriva | ⏳ | 0/8 |
+| **F5** | Calidad, coste y deriva | 🚧 | 1/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
 
@@ -165,11 +165,11 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 
 ---
 
-## F5 · Calidad, coste y deriva ⏳
+## F5 · Calidad, coste y deriva 🚧
 
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
-| `F5-01` | ⏳ | `evaluator`: evals online sobre trazas muestreadas | |
+| `F5-01` | ✅ | `evaluator`: evals online sobre trazas muestreadas | **Hecho (D-154)**: servicio `evaluator` desplegado; cuatro evaluaciones deterministas (rechazo, truncado, abandono, vacía) sobre todos los spans GenAI → `argus.evaluaciones` y `argus_eval_results_total`. `desconocido` ≠ `pasa`: Centinela no trae `finish_reasons`. La muestra (errores + P99 + 5 %) espera a las caras de F5-02 |
 | `F5-02` | ⏳ | Groundedness, consistencia, formato, rechazo | Formato con Pydantic, no LLM |
 | `F5-03` | ⏳ | Alerta por **condición conjunta** deriva + caída de eval | Deriva sola es falsa alarma |
 | `F5-04` | ⏳ | `drift-monitor` con Evidently | |
@@ -316,3 +316,4 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-42` | ✅ | **¿Y si el modelo no compite con las reglas, sino que las completa?** | El modelo acierta lo que se lee en el árbol y pierde lo que depende de los bloques nuevos; las reglas, al revés en los casos en que se abstienen. Darle el veredicto de las reglas como parte del expediente cambia la pregunta de «quién acierta más» a «¿añade algo donde las reglas callan?», que es la que importa para un aviso que hoy dice «investigando…». Se mide en el banco contra el modelo solo — D-138 **Medido el 26/10 con Qwen3 (D-146): completar no añade nada y quita algo** — diseño 6 → 4 aciertos; en producción la sombra va en modo «completa» para ver los casos donde las reglas se abstienen |
 
 | `B-43` | ⏳ | **Portal web de Argus: administrar y ver el ciclo entero de un incidente** | Pedido por el dueño el 26/10. Hoy cada pieza se ve por separado: el registro en `apps.yaml`, las señales en Grafana, los incidentes en `/incidents`, el diagnóstico en el aviso y la sombra en un `.jsonl` dentro de un contenedor. El portal tiene que enseñar, para cada incidente y de punta a punta: **cómo se registra** la app (alta, componentes, dependencias, estado de cada sonda), **cómo se detecta y se lanza** la anomalía (las señales que entraron, la huella, la agrupación y la correlación que la suprimió o la abrió), **cómo se diagnostica** (el expediente tal cual lo leyó el juez, el veredicto de las reglas y el del modelo en sombra, uno al lado del otro), **cómo se propone la solución** (cuando exista L4/L5) y **cómo se notifica** (a qué canales, cuándo y con qué texto). Y además **administrar**: dar de alta apps, cambiar el estado de una sonda, revisar y confirmar etiquetas del banco. Las vistas de solo lectura van primero; administrar escribe en el registro y necesita autenticación |
+| `B-44` | ⏳ | **El muestreo de cola pierde las llamadas largas** | Descubierto el 31/10 (D-154). El gateway decide a los 30 s con los spans iniciales de la traza (milisegundos, sin `gen_ai`), le toca el 10 % al azar y la decisión en caché descarta el span `chat` que llega después. Sobreviven el 99 % de las llamadas ≤ 16 s y el **41 %** de las > 64 s. Sesga el P99, los abandonos, los timeouts de L3/L4 y la línea base de B-35. Opciones: no cachear las decisiones negativas (los spans tardíos se deciden de nuevo y la política GenAI los guarda), o una política que reconozca el inicio de una llamada a modelo |

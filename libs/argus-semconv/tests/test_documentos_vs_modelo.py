@@ -50,6 +50,13 @@ PERMITIDOS: dict[str, str] = {
     # ocurren donde pusiste el decorador (D-116).
     "argus.step": "el decorador de unidad de trabajo, no un atributo (D-116)",
     "argus.usecase": "aparece en PLAN.md como EJEMPLO de nombre mal escrito",
+    # La TABLA del evaluador en ClickHouse (base `argus`), no un atributo.
+    "argus.evaluaciones": "la tabla de resultados del evaluador, no un atributo (D-154)",
+    # Atributos de punto del contador `argus.eval.results`. Los emite solo el
+    # evaluador y no se le piden a ningun equipo, que es lo que D-081 protege.
+    # Entran en el modelo cuando F5-03 los consuma y dejen de moverse; el
+    # primero ya cambio de nombre al desplegar (`argus.app` lo pisaba el Resource).
+    "argus.eval.app": "atributo local del contador del evaluador, fuera del modelo hasta F5-03 (D-154)",
     # Los tres nombres viejos del grupo de inferencia. Siguen citados en el
     # registro de decisiones porque la historia de D-081 no se puede contar sin
     # ellos; lo que no pueden es volver a aparecer en material que mandemos.
