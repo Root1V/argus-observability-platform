@@ -31,10 +31,13 @@ from typing import Literal, Protocol
 # modelo.
 GENERATIVAS = frozenset({"chat", "text_completion", "generate_content"})
 
-# Fin normal de una generacion. `complete` es la palabra del gateway de
-# Prometheus; las demas son las de OpenAI, Anthropic y Gemini.
-FIN_NORMAL = frozenset({"stop", "end_turn", "stop_sequence", "tool_calls", "tool_use", "function_call",
-                        "complete"})
+# Fin normal de una generacion: las palabras de OpenAI, Anthropic y Gemini.
+FIN_NORMAL = frozenset({"stop", "end_turn", "stop_sequence", "tool_calls", "tool_use", "function_call"})
+# El DESENLACE del gateway de Prometheus, que hasta PRM-282 iba dentro de
+# `finish_reasons`. No dice por que paro el modelo: un `length` sale como
+# `complete` (verificado el 31/10 con max_tokens=600). Para rechazo y truncado
+# es `desconocido`; para abandono, `complete` es que el cliente si estaba.
+DESENLACE_GATEWAY = frozenset({"complete", "upstream_error"})
 TRUNCADO = frozenset({"length", "max_tokens"})
 RECHAZO = frozenset({"content_filter", "refusal", "safety", "recitation", "prohibited_content", "blocklist",
                      "spii"})
@@ -42,7 +45,7 @@ RECHAZO = frozenset({"content_filter", "refusal", "safety", "recitation", "prohi
 # asi). No es un fallo del modelo, pero si es una respuesta que nadie recibio.
 ABANDONO = frozenset({"client_disconnected", "cancelled"})
 LLAMA_HERRAMIENTA = frozenset({"tool_calls", "tool_use", "function_call"})
-CONOCIDOS = FIN_NORMAL | TRUNCADO | RECHAZO | ABANDONO | {"error"}
+CONOCIDOS = FIN_NORMAL | TRUNCADO | RECHAZO | ABANDONO | DESENLACE_GATEWAY | {"error"}
 
 
 class Resultado(StrEnum):
@@ -68,6 +71,8 @@ class Span:
     finish_reasons: str = ""
     tokens_salida: str = ""
     max_tokens: str = ""
+    # `argus.inference.outcome`: como termino la peticion en el gateway (A-53).
+    desenlace: str = ""
     error: bool = False
     duracion_ns: int = 0
 
@@ -127,6 +132,9 @@ class _PorMotivo:
     version = "1"
     coste: Literal["barato", "caro"] = "barato"
     falla_con: frozenset[str] = frozenset()
+    # Si la evaluacion pregunta por que paro EL MODELO. Abandono no: pregunta
+    # por el cliente, y para eso el desenlace del gateway si vale.
+    lee_el_modelo = True
 
     def evaluar(self, span: Span) -> Evaluacion | None:
         if not _aplica(span):
@@ -140,6 +148,9 @@ class _PorMotivo:
             return Evaluacion(self.nombre, self.version, Resultado.FALLA, ", ".join(malos))
         if raros:
             return self._desconocido(f"finish_reasons fuera del vocabulario: {', '.join(raros)}")
+        if self.lee_el_modelo and set(lista) <= DESENLACE_GATEWAY | ABANDONO:
+            return self._desconocido(f"finish_reasons trae el desenlace del gateway ({', '.join(lista)}), "
+                                     "no el motivo del modelo")
         return self._pasa(span, lista)
 
     def _pasa(self, span: Span, lista: list[str]) -> Evaluacion:
@@ -153,6 +164,7 @@ class Rechazo(_PorMotivo):
     """El modelo se nego a responder o el filtro de contenido corto la respuesta."""
 
     nombre = "rechazo"
+    version = "2"
     falla_con = RECHAZO
 
 
@@ -160,6 +172,7 @@ class Truncado(_PorMotivo):
     """La respuesta se corto por longitud: quien la lee recibe media frase o un JSON roto."""
 
     nombre = "truncado"
+    version = "2"
     falla_con = TRUNCADO
 
     def _pasa(self, span: Span, lista: list[str]) -> Evaluacion:
@@ -176,7 +189,18 @@ class Abandono(_PorMotivo):
     """El cliente se fue antes de recibir la respuesta. Casi siempre es su timeout: la espera fue demasiado larga."""
 
     nombre = "abandono"
+    version = "2"
     falla_con = ABANDONO
+    lee_el_modelo = False
+
+    def evaluar(self, span: Span) -> Evaluacion | None:
+        # Con PRM-282 el desenlace sale de `finish_reasons` y pasa aqui; un
+        # abandono llegara con `finish_reasons` vacio.
+        if _aplica(span) and span.desenlace:
+            if span.desenlace in ABANDONO:
+                return Evaluacion(self.nombre, self.version, Resultado.FALLA, span.desenlace)
+            return Evaluacion(self.nombre, self.version, Resultado.PASA)
+        return super().evaluar(span)
 
 
 class Vacia(_PorMotivo):

@@ -497,6 +497,16 @@
           "id": "argus.inference.tokens_per_second",
           "type": "double",
           "brief": ""
+        },
+        {
+          "id": "argus.inference.outcome",
+          "type": "enum",
+          "brief": "Como termino la peticion en el gateway, que no es por que dejo de generar el modelo: eso es `gen_ai.response.finish_reasons`. Hasta PRM-282 Prometheus ponia aqui su desenlace dentro de `finish_reasons` y tapaba el motivo real (un `length` salia como `complete`). Nombre acordado con su equipo en A-53. `client_disconnected` es la señal de coste desperdiciado: el modelo genero para un cliente que ya no estaba.",
+          "members": [
+            "complete",
+            "upstream_error",
+            "client_disconnected"
+          ]
         }
       ]
     },

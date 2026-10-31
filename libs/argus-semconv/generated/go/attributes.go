@@ -106,6 +106,7 @@ const (
 	ArgusInferenceTtftMs = "argus.inference.ttft_ms"
 	ArgusInferenceFirstTokenMs = "argus.inference.first_token_ms"
 	ArgusInferenceTokensPerSecond = "argus.inference.tokens_per_second"
+	ArgusInferenceOutcome = "argus.inference.outcome"
 )
 
 // platform: Puestos por el Collector, no por quien emite

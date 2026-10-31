@@ -8256,3 +8256,44 @@ frente a las guardadas:
 Es el riesgo que el PLAN ya avisaba (§7.1, *decision_wait* frente a operaciones
 largas). Sesga justo lo que más importa: el P99 de la muestra, los abandonos, los
 timeouts que diagnostican L3 y L4, y la línea base de latencia de B-35.
+
+---
+
+## D-155 · B-44: las llamadas largas al gateway se reconocen por la ruta, no por la caché
+
+**Estado**: ✅ Desplegado y verificado el 31/10 · 3 de 3 llamadas de 176–396 s guardadas enteras
+
+**El problema** (medido en D-154): el muestreo de cola decidía a los 30 s con los
+spans iniciales de una llamada al gateway (`auth.validate`, `http receive`), que
+duran milisegundos y no llevan `gen_ai`. Les tocaba el 10 % y el span `chat`
+que llegaba después se tiraba con la decisión. Se guardaba el 41 % de las
+llamadas de más de 64 s.
+
+**Lo primero que probé no funcionó, y está medido**: poner a 0 la caché de
+decisiones negativas (`non_sampled_cache_size`). De tres llamadas de 130–159 s
+se guardó una, y por el `baseline`. Mientras la traza sigue en memoria
+(`num_traces`) su decisión se aplica a los spans tardíos, con caché o sin ella,
+y con nuestro tráfico nunca se desaloja. Se revirtió: una configuración con un
+comentario que afirma algo falso es peor que ninguna.
+
+**Lo que sí funciona**: la política `inferencia-por-ruta`. El span `http receive`
+del ASGI lleva en el nombre la ruta de la API compatible con OpenAI
+(`POST /v1/chat/completions http receive`) y cierra en el primer milisegundo. Es
+la misma idea que `async-handoff` en D-083: decidir con la evidencia que sí
+llega dentro de la ventana. No añade volumen, porque esas trazas ya eran de
+`genai-always` cuando cabían en los 30 s. Verificado: tres llamadas de 396, 251 y
+176 s, las tres guardadas enteras (10–11 spans con su `chat`) y anotadas con
+`argus.sampling.policy = inferencia-por-ruta`. Con la configuración anterior, que
+se guardaran las tres tenía un 0,1 % de probabilidad.
+
+**Los spans de cliente de las apps no lo necesitaban**: sus trazas llevan spans
+`gen_ai` tempranos. Veritium, 4 de 4 de más de 64 s guardadas; Centinela, igual.
+
+**Lo que la verificación destapó en el evaluador**: con `max_tokens` el cliente
+recibió `length` y el span del gateway decía `complete`. D-154 contaba `complete`
+como fin normal, así que `truncado` daba `pasa` a respuestas truncadas. Ahora
+`complete` es el **desenlace** del gateway y no un motivo del modelo: para
+`rechazo` y `truncado` da `desconocido`, y para `abandono` sí vale. `abandono` lee
+además `argus.inference.outcome`, el atributo que acordamos con Prometheus en
+A-53 para `PRM-282`, ya añadido al modelo de convenciones. Las tres evaluaciones
+pasan a la versión 2, y el informe solo cuenta la vigente.

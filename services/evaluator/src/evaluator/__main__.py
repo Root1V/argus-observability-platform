@@ -19,6 +19,9 @@ INFORME = f"""
 SELECT app, componente, eval, resultado, count() AS n, any(motivo) AS ejemplo
 FROM {TABLA} FINAL
 WHERE span_fin > now() - toIntervalHour({{horas:UInt32}})
+  -- Solo la version vigente de cada evaluacion: al cambiar su criterio, las
+  -- filas viejas se quedan con su version y no deben sumarse a las nuevas.
+  AND (eval, version) IN (SELECT eval, max(version) FROM {TABLA} GROUP BY eval)
 GROUP BY app, componente, eval, resultado
 ORDER BY app, componente, eval, resultado
 """

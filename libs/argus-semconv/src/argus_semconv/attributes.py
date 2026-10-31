@@ -119,6 +119,8 @@ ARGUS_INFERENCE_COST_USD: Final[str] = "argus.inference.cost_usd"
 ARGUS_INFERENCE_TTFT_MS: Final[str] = "argus.inference.ttft_ms"
 ARGUS_INFERENCE_FIRST_TOKEN_MS: Final[str] = "argus.inference.first_token_ms"
 ARGUS_INFERENCE_TOKENS_PER_SECOND: Final[str] = "argus.inference.tokens_per_second"
+ARGUS_INFERENCE_OUTCOME: Final[str] = "argus.inference.outcome"
+ARGUS_INFERENCE_OUTCOME_VALUES: Final[tuple[str, ...]] = ("complete", "upstream_error", "client_disconnected",)
 
 # --------------------------------------------------------------------------
 # platform: Puestos por el Collector, no por quien emite
