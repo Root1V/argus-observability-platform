@@ -241,6 +241,12 @@ class JuezConModelo:
             + f"modelo:{modelo}"
             + (f"@{razonamiento}" if razonamiento else "")
         )
+        # El ultimo intercambio con el modelo, para el diario de la sombra: la
+        # entrada tal cual la leyo y el dictamen CRUDO, antes de `a_veredicto`.
+        # Crudo porque `a_veredicto` arregla en silencio lo que viene mal —una
+        # confianza inventada, «sin causa» con confianza alta— y eso es justo
+        # lo que la evaluacion de formato tiene que contar (F5-02).
+        self.ultimo: dict[str, Any] | None = None
 
     def juzgar(self, expediente: Expediente) -> Veredicto:
         # El bucle de `diagnose` es sincrono a proposito —es lo unico que hace
@@ -249,10 +255,17 @@ class JuezConModelo:
         return asyncio.run(self._juzgar(expediente))
 
     async def _juzgar(self, expediente: Expediente) -> Veredicto:
+        import time
+        from dataclasses import asdict
+
         from synaptum import Session, SynaptumError, generate
 
         previo = self._completa_a.juzgar(expediente) if self._completa_a is not None else None
         peticion = pedir(expediente, previo)
+        inicio = time.monotonic()
+        self.ultimo = {"modelo": self.modelo, "razonamiento": self.razonamiento,
+                       "instrucciones": VERSION_INSTRUCCIONES, "entrada": peticion,
+                       "salida": None, "error": None, "segundos": None}
         run_id = id_del_run(self.modelo, peticion, self.razonamiento)
         sesion = (
             Session(run_id, self._gateway(), self._checkpointer)
@@ -271,6 +284,8 @@ class JuezConModelo:
             )
         except SynaptumError as exc:
             log.warning("juez_modelo.failed", extra={"error": f"{type(exc).__name__}: {exc}"[:300]})
+            self.ultimo |= {"error": f"{type(exc).__name__}: {exc}"[:300],
+                            "segundos": round(time.monotonic() - inicio, 1)}
             if previo is not None:
                 return previo
             return Veredicto(
@@ -279,6 +294,7 @@ class JuezConModelo:
                 evidence=[f"NO DISPONIBLE — el juez con modelo fallo: {type(exc).__name__}"],
                 origen=self.nombre,
             )
+        self.ultimo |= {"salida": asdict(dictamen), "segundos": round(time.monotonic() - inicio, 1)}
         veredicto = a_veredicto(dictamen, origen=self.nombre)
         if previo is not None and previo.root_cause and not veredicto.root_cause:
             # Completar no es borrar (F4-06, D-153). El ataque que funciono con el

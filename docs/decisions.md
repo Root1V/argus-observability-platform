@@ -8297,3 +8297,63 @@ como fin normal, así que `truncado` daba `pasa` a respuestas truncadas. Ahora
 además `argus.inference.outcome`, el atributo que acordamos con Prometheus en
 A-53 para `PRM-282`, ya añadido al modelo de convenciones. Las tres evaluaciones
 pasan a la versión 2, y el informe solo cuenta la vigente.
+
+---
+
+## D-156 · F5-02: formato, groundedness y consistencia sobre nuestro propio juez
+
+**Estado**: ✅ Desplegado · groundedness medido contra el banco (0 falsos ✓) · primer juicio real evaluado el 31/10
+
+**La fuente**: el texto de prompt y respuesta de las apps no está en ningún sitio
+(D-008, Langfuse apagado). El dueño decidió avanzar con nuestros propios agentes
+y dejar pendiente **encender Langfuse más adelante (B-45)**, que es lo mejor. El
+juez de L3 en sombra guarda ahora en su diario la entrada tal cual la leyó, el
+dictamen **crudo** (o el error) y los segundos. El evaluador lee ese diario en
+solo lectura.
+
+**Reactivar el juez obligó a ponerle ritmo**: rediagnosticaba el mismo incidente
+cada vez que cambiaban sus señales, de 200 a 430 juicios al día para solo 10–20
+incidentes distintos. Con el 27B cada juicio es medio minuto de inferencia
+compartida y bloquea el bucle. Ahora la sombra juzga cada incidente una vez cada
+6 h, con un máximo de 6 por hora, y pasa del `qwen3-30b` retirado al 27B sin
+razonamiento.
+
+**Las tres evaluaciones**:
+
+1. **Formato** (Pydantic, sin modelo): el dictamen crudo contra el contrato. Se
+   mide el crudo, no el veredicto, porque `a_veredicto` arregla en silencio una
+   confianza inventada, «sin causa» con confianza alta, la evidencia de más o un
+   volcado de fila, y eso es justo lo que hay que contar. `NoObjectGeneratedError`
+   es fallo de formato; un fallo del proveedor no aplica.
+2. **Groundedness** (con modelo): cada evidencia que **añadió** el modelo (las de
+   las reglas salen del expediente por construcción) necesita un fragmento
+   **literal** del expediente que la respalde. El modelo propone el fragmento y
+   el código comprueba que esté en el texto. Las cifras se comprueban antes y sin
+   modelo, como **números** redondeados y no como texto. La causa no se mide: es
+   una hipótesis, y lo que la sostiene es la evidencia.
+3. **Consistencia** (con modelo solo si hace falta): dos juicios del mismo
+   episodio no pueden dar causas incompatibles. Si las causas se parecen en un
+   60 % o más, no se pregunta al modelo. Abstenerse no es contradecirse.
+
+**Medido antes de fiarse**, con los veredictos del 27B en el banco
+(`l3-juez-3`), cada uno contra su expediente y contra el del caso siguiente:
+
+| | Con su expediente | Con el de otro caso |
+|---|---|---|
+| Completo | 11 de 11 aprueban | **0 de 11** aprueban |
+| Solo el modelo (sin cifras) | 10 de 10 aprueban (1 fallo del proveedor) | **0 de 11** aprueban |
+
+La primera pasada dio 10 de 11 con el expediente correcto. El fallo era mío:
+«100 %» frente a «100.0 %», comparado como texto. Se corrigió comparando
+números. La medida «solo el modelo» existe porque con el expediente equivocado
+casi todo lo suspendían las cifras, y eso no probaba al modelo.
+
+**Verificado en producción**: el primer juicio del 27B (`ArgusFugaDeCoste`, 28 s,
+abstención con confianza baja) da `formato: pasa` y `groundedness: pasa` (4 de 4)
+en `argus.evaluaciones` y en `argus_eval_results_total`. **Consistencia** está
+probada con pruebas, pero aún no ha salido en producción: necesita dos juicios
+del mismo episodio, y con el ritmo nuevo el segundo llega al menos 6 h después.
+
+**Coste**: las evaluaciones caras tienen un tope de 6 registros por hora; las
+que pasan de ahí se quedan sin evaluar y se cuentan. Un juicio de groundedness
+tarda de 10 a 30 s.

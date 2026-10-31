@@ -285,7 +285,10 @@ services:
       # Sin `AXONIUM_CLIENT_ID` no arranca y lo dice en el log — el diagnostico
       # de las reglas no depende de esto.
       DIAGNOSE_JUEZ_SOMBRA: ${DIAGNOSE_JUEZ_SOMBRA:-reglas+modelo}
-      DIAGNOSE_MODELO: ${DIAGNOSE_MODELO:-qwen3-30b-a3b-q4-k-m-local}
+      # El 27B desde el 31/10: `qwen3-30b` lo retiro Prometheus. Es lento, por
+      # eso la sombra juzga cada incidente una vez cada 6 h y como mucho 6 por
+      # hora (F5-02).
+      DIAGNOSE_MODELO: ${DIAGNOSE_MODELO:-qwen3-8-27b-ud-iq4-xs-local}
       DIAGNOSE_SOMBRA_PATH: /var/lib/argus/sombra.jsonl
       # `off`/`low`/`medium`/`high`; vacio deja el del modelo (juez e investigador).
       DIAGNOSE_RAZONAMIENTO: ${DIAGNOSE_RAZONAMIENTO:-off}
@@ -320,7 +323,7 @@ services:
   # F5-01: evaluaciones online de las llamadas a modelos de todo el portafolio.
   # Lee los spans GenAI terminados, los evalua y escribe en
   # `argus.evaluaciones` y en el contador `argus_eval_results_total`. No llama
-  # a ningun modelo: las evaluaciones de hoy son deterministas (D-154).
+  # a ningun modelo salvo para groundedness y consistencia del juez (D-156).
   evaluator:
     <<: *restart
     profiles: [agents, full]
@@ -335,12 +338,25 @@ services:
       EVALUATOR_INTERVALO_S: ${EVALUATOR_INTERVALO_S:-60}
       EVALUATOR_MUESTRA_PCT: ${EVALUATOR_MUESTRA_PCT:-5}
       EVALUATOR_CURSOR_PATH: /var/lib/argus/evaluator-cursor.json
+      # F5-02: el diario de la sombra de L3 (prompt y dictamen crudo), en solo
+      # lectura. Es el unico contenido evaluable hasta encender Langfuse (B-45).
+      EVALUATOR_DIARIO_JUEZ_PATH: /var/lib/diagnose/sombra.jsonl
+      EVALUATOR_DIARIO_ESTADO_PATH: /var/lib/argus/evaluator-diario.json
+      EVALUATOR_MODELO: ${EVALUATOR_MODELO:-qwen3-8-27b-ud-iq4-xs-local}
+      EVALUATOR_RAZONAMIENTO: ${EVALUATOR_RAZONAMIENTO:-off}
+      EVALUATOR_CARAS_POR_HORA: ${EVALUATOR_CARAS_POR_HORA:-6}
+      AXONIUM_CLIENT_ID: ${AXONIUM_CLIENT_ID:-}
+      AXONIUM_CLIENT_SECRET: ${AXONIUM_CLIENT_SECRET:-}
+      AXONIUM_GATEWAY_BASE_URL: ${AXONIUM_GATEWAY_BASE_URL:-http://host.docker.internal:8020}
       # 4318 y no 4317: sin el extra `grpc` el SDK habla OTLP/HTTP (D-122).
       ARGUS_ENDPOINT: http://collector:4318
       ARGUS_ENVIRONMENT: ${ARGUS_ENVIRONMENT:-development}
       OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${ARGUS_GATEWAY_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - evaluator-data:/var/lib/argus
+      - diagnose-data:/var/lib/diagnose:ro
 
   canary:
     <<: *restart
