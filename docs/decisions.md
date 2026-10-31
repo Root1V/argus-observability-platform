@@ -8414,4 +8414,6 @@ Axonium sirve los modelos que **provee Prometheus**, y Prometheus ofrece modelos
 System One **abiertos**, Laya y Von; Jev es el privado de esa familia. Así que
 el modelo de decisión del documento no se descarta: es `B-54`, con Laya o Von
 por Axonium. Al volver a listar ese mismo día, el cliente de Argus ya ve `von-decide`
-(clasificación zero-shot, 512 tokens de contexto); Laya todavía no.
+(clasificación zero-shot, 512 tokens de contexto). `laya-decide` no sale en
+el listado, pero llamado por su nombre responde: decisión tipada (`choice`,
+`noul`, `score`) con probabilidades y confianza, enrutada a su modelo `english`.
