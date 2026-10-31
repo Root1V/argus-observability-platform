@@ -6,7 +6,7 @@ ya han terminado, les pasa evaluaciones y deja el resultado en dos sitios:
 - **`argus.evaluaciones`** (ClickHouse): una fila por span y evaluación, con
   `pasa`, `falla` o `desconocido` y el motivo. Es idempotente: volver a evaluar
   una ventana reemplaza las filas.
-- **`argus_eval_results_total`** (VictoriaMetrics): el contador por app,
+- **`argus_eval_results_total`** (VictoriaMetrics): el contador por app (`argus_eval_app`),
   componente, evaluación, resultado y modelo pedido. Es lo que leerá la
   alerta de condición conjunta de F5-03.
 

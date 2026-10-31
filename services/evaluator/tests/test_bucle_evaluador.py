@@ -90,7 +90,7 @@ def test_las_metricas_solo_cuentan_el_presente(tmp_path):
     # Cuatro evaluaciones del reciente; el relleno va a la tabla pero no al contador.
     assert len(contador.sumas) == 4
     assert {a["argus.eval.result"] for a in contador.sumas} == {"pasa"}
-    assert contador.sumas[0]["argus.app"] == "veritium"
+    assert contador.sumas[0]["argus.eval.app"] == "veritium"
 
 
 def test_la_muestra_errores_p99_y_azar():

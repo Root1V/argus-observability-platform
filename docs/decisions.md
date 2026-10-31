@@ -8175,15 +8175,15 @@ contra uno mismo.
 
 ## D-154 · F5-01: el evaluador arranca con lo que hay en el almacén, y `desconocido` no es `pasa`
 
-**Estado**: 🧪 Probado contra el stack real · contenedor sin desplegar
+**Estado**: ✅ Desplegado y verificado de punta a punta el 31/10 · una
+llamada al 27B → `argus.evaluaciones` → `argus_eval_results_total` en
+VictoriaMetrics con la app correcta
 
-**Lo verificado**: las consultas, contra 2.485 spans reales de 3 días. Además,
-el bucle corriendo desde el Mac contra la ClickHouse real: rellenó 24 h (82
-spans, 328 evaluaciones), creó `argus.evaluaciones` y evaluó una llamada hecha
-a propósito al 27B (`stop` → 4 × `pasa`). **Falta**: construir la imagen y ver
-`argus_eval_results_total` en VictoriaMetrics. El 28/10 de madrugada el Mac
-estaba dormido con batería: Docker Desktop no alcanzaba `ghcr.io` y el bucle
-solo avanzaba en los despertares (B-21).
+**Un fallo que solo salió desplegando**: la etiqueta de app del contador se
+llamaba `argus.app`, y el SDK pone `argus.app` en el Resource del evaluador. Al
+convertir a etiquetas, el del Resource pisaba al del punto y todas las series
+decían `argus`. Ahora es `argus.eval.app`. Las pruebas no podían verlo: el
+contador falso no tiene Resource.
 
 **El problema de partida**: las evaluaciones del PLAN (§7.4c) que valen la pena
 —groundedness, consistencia— necesitan el contenido de los mensajes, y el
@@ -8224,10 +8224,35 @@ contenido sin que lo decida el dueño.
   traen los tokens de salida. Es una petición para su equipo, a través del dueño.
 - El gateway de Prometheus usa `complete` donde el estándar dice `stop`, y
   `client_disconnected` para el cliente que se va. Las dos palabras están en el
-  vocabulario con su origen anotado; hubo 4 abandonos en 3 días.
+  vocabulario con su origen anotado. Hubo 4 abandonos en 3 días: trazas solo del
+  gateway, sin span del cliente y de 0 s (25/10, `gpt-oss-20b`).
+  **Corrección (31/10)**: Prometheus los atribuyó a Argus (P-43), pero los de
+  Argus son otros: cuatro cortes a los 600 s contra el 27B, el 27/10 entre las
+  04:05 y las 04:35 UTC. Esos no llegaron nunca al almacén, por el sesgo del
+  muestreo que se cuenta abajo.
 - Veritium: 113 de 113 pasan las cuatro evaluaciones.
 
 **Dónde escribe**: `argus.evaluaciones` (ReplacingMergeTree, idempotente, 90
 días) y `argus_eval_results_total` por app, componente, evaluación, resultado y
 modelo pedido. La métrica vive en el servicio y no en `argus-semconv`: cuando
 F5-03 la consuma y se estabilice, se sube a las convenciones.
+
+**Lo que destapó: el muestreo pierde las llamadas largas (B-44)**. Buscando los
+abandonos de 600 s que citaba Prometheus, no estaban. El muestreo de cola del
+gateway decide 30 s después del primer span de la traza, y a esa hora una
+llamada larga solo ha mandado sus spans iniciales (`auth.validate`,
+`http receive`), que duran milisegundos. Sin error, sin `gen_ai` y sin latencia,
+le toca el 10 % al azar, y la decisión queda en caché: el span `chat` que llega
+600 s después se descarta con ella. Medido en 5 días (24–29/10), las llamadas
+`chat` del gateway antes del muestreo (las métricas, que se derivan antes)
+frente a las guardadas:
+
+| Duración | Antes del muestreo | Guardadas | Sobreviven |
+|---|---|---|---|
+| ≤ 16 s | 2.030 | 2.015 | 99 % |
+| 16–64 s | 230 | 162 | 70 % |
+| > 64 s | 85 | 35 | **41 %** |
+
+Es el riesgo que el PLAN ya avisaba (§7.1, *decision_wait* frente a operaciones
+largas). Sesga justo lo que más importa: el P99 de la muestra, los abandonos, los
+timeouts que diagnostican L3 y L4, y la línea base de latencia de B-35.

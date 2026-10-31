@@ -137,8 +137,11 @@ class Evaluador:
         for s, e, _ in filas:
             self.stats[str(e.resultado)] += 1
             if self.contador is not None and ahora - _fecha(s.fin) <= self.presente:
+                # `argus.eval.app` y no `argus.app`: el SDK pone `argus.app` en
+                # el Resource del evaluador, y al convertir a etiquetas el del
+                # Resource pisa al del punto. Todas las series decian `argus`.
                 self.contador.add(1, {
-                    "argus.app": s.app,
+                    "argus.eval.app": s.app,
                     "argus.eval.service": s.componente,
                     "argus.eval.name": e.eval,
                     "argus.eval.result": str(e.resultado),
