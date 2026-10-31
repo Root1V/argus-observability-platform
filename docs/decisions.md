@@ -8413,5 +8413,5 @@ ser un proveedor externo y por la regla de Axonium», y eso estaba mal planteado
 Axonium sirve los modelos que **provee Prometheus**, y Prometheus ofrece modelos
 System One **abiertos**, Laya y Von; Jev es el privado de esa familia. Así que
 el modelo de decisión del documento no se descarta: es `B-54`, con Laya o Von
-por Axonium. El 31/10 el cliente de Argus no los ve (lista tres modelos), así
-que hará falta el permiso.
+por Axonium. Al volver a listar ese mismo día, el cliente de Argus ya ve `von-decide`
+(clasificación zero-shot, 512 tokens de contexto); Laya todavía no.
