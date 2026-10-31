@@ -8357,3 +8357,53 @@ del mismo episodio, y con el ritmo nuevo el segundo llega al menos 6 h después.
 **Coste**: las evaluaciones caras tienen un tope de 6 registros por hora; las
 que pasan de ahí se quedan sin evaluar y se cuentan. Un juicio de groundedness
 tarda de 10 a 30 s.
+
+---
+
+## D-157 · Una investigación externa sobre Agentic AIOps: el objetivo se mide en seis preguntas, y diez entradas nuevas
+
+**Estado**: ✅ Analizada el 31/10 · [análisis completo](investigacion/propuesta-agentic-aiops-2026-10.md)
+
+**La fuente**: una propuesta de otro equipo (octubre de 2026, 39 páginas,
+orientada a banca) sobre qué debe tener una plataforma de observabilidad
+inteligente y operaciones autónomas: capacidades, modelos, arquitectura, 14
+agentes, gobierno, indicadores y roadmap. Nueve de sus páginas son el CSS de
+diagramas mal exportados. Las fechas y capacidades de productos que cita no se
+han verificado, y nada de lo adoptado depende de ellas.
+
+**Lo que cambia en el objetivo**: el PLAN dice **cómo** se construye Argus, pero
+no **qué tiene que poder contestar**, y por eso no se podía medir. Ahora el
+objetivo del roadmap es contestar con evidencia reproducible **seis preguntas**:
+qué falla, a quién afecta, qué cambió, cuál es la causa más probable, quién lo
+atiende y qué opciones seguras hay. Hoy hay dos contestadas (✅), tres en parte
+(🟡) y una sin empezar (❌), cada una con la entrada que la completa.
+
+**Lo que confirma**: la mayoría de sus principios ya estaban en Argus con otro
+nombre. La notificación no espera a la IA (D-015). El modelo propone y el
+código decide (`a_veredicto`, citas y cifras verificadas). Los agentes consultan
+con herramientas fijas en vez de copiar los datos (D-013). La IA está
+especializada por tarea. Se evalúa con incidentes reales congelados antes de
+activar (banco y sombra), y las salidas de las herramientas se tratan como datos
+no confiables (F4-06).
+
+**Lo que destapa**, en orden de valor:
+
+- **`B-46` Feedback del operador**: el hueco más importante. Sin él, la memoria
+  guarda lo que L3 anotó sin confirmar, el banco solo crece a mano y el acierto
+  real de la causa no se puede medir.
+- **`B-47` y `B-49` Acuse con hora y línea de tiempo**: el acuse existe en la
+  API, pero no se puede pulsar desde el aviso y no guarda cuándo. Por eso no hay
+  MTTA ni MTTR.
+- **`B-48` Indicadores**: MTTD, MTTA, MTTR, precisión, Top-1/Top-3. Primero la
+  línea base, después los objetivos.
+- **`B-50` Flujos de negocio**, **`B-51` regresión tras un cambio** (absorbe
+  B-03) y **`B-52` simulaciones de fallo** sobre una app propia.
+- Sin decidir: modelos fundacionales de series temporales (`B-53`), un
+  clasificador de triage cuando haya etiquetas (`B-54`) y profiling (`B-55`).
+
+**Lo que no se adopta, a propósito**: Kafka y Flink, Mimir, Loki, Tempo y
+OpenSearch, LangGraph y Temporal, PostgreSQL y pgvector, CMDB, ServiceNow,
+PagerDuty, IAM/PAM, OPA todavía, y Jev como dependencia externa. Cada una choca
+con una decisión ya tomada (ClickHouse unificado, synaptum, SQLite, Axonium
+como única puerta) o con la escala: un portafolio personal en un portátil, no
+un banco. El porqué de cada una está en el análisis.

@@ -3,6 +3,11 @@
 > Proyecto: `app_monitoring_explainability` (directorio vacío — se construye desde cero)
 > Plan v3. Cambios sobre v2: topología multi-host portátil (macOS ahora, no Linux), catálogo abierto de aplicaciones, ruta de migración de bajo coste, y el modelo de capas API/SDK que resuelve el caso Axonium.
 
+> **Objetivo medible (revisado el 31/10/2026, D-157)**: contestar con evidencia
+> reproducible seis preguntas sobre cualquier incidente — qué falla, a quién
+> afecta, qué cambió, cuál es la causa más probable, quién lo atiende y qué
+> opciones seguras hay. El estado de cada una está en `roadmap.md`.
+
 ---
 
 ## Resumen en 12 líneas
