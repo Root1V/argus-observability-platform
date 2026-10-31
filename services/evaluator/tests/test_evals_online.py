@@ -48,9 +48,26 @@ def test_una_palabra_fuera_del_vocabulario_no_se_adivina():
     assert "weird_new_reason" in e.motivo
 
 
-def test_la_palabra_del_gateway_de_prometheus_es_un_fin_normal():
-    assert _r(Rechazo(), finish_reasons='["complete"]') is Resultado.PASA
+def test_el_desenlace_del_gateway_no_es_el_motivo_del_modelo():
+    # Verificado el 31/10: con max_tokens=600 el cliente recibio `length` y el
+    # span del gateway decia `complete`. Contarlo como fin normal daba `pasa`
+    # a una respuesta truncada.
+    for ev in (Rechazo(), Truncado()):
+        e = ev.evaluar(replace(BASE, finish_reasons='["complete"]'))
+        assert e.resultado is Resultado.DESCONOCIDO and "desenlace del gateway" in e.motivo
+        assert _r(ev, finish_reasons='["client_disconnected"]') is Resultado.DESCONOCIDO
+    # Para abandono si vale: `complete` es que el cliente estaba.
+    assert _r(Abandono(), finish_reasons='["complete"]') is Resultado.PASA
     assert _r(Abandono(), finish_reasons='["client_disconnected"]') is Resultado.FALLA
+
+
+def test_abandono_lee_argus_inference_outcome():
+    # Con PRM-282 el desenlace sale de `finish_reasons`: un abandono llegara
+    # con `finish_reasons` vacio y el desenlace en su atributo (A-53).
+    assert _r(Abandono(), finish_reasons="", desenlace="client_disconnected") is Resultado.FALLA
+    assert _r(Abandono(), finish_reasons='["stop"]', desenlace="complete") is Resultado.PASA
+    assert _r(Rechazo(), finish_reasons='["length"]', desenlace="complete") is Resultado.PASA
+    assert _r(Truncado(), finish_reasons='["length"]', desenlace="complete") is Resultado.FALLA
 
 
 def test_truncado_por_motivo_o_por_la_cuenta_de_tokens():

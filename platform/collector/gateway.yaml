@@ -426,6 +426,11 @@ processors:
     # seguir en memoria 21 minutos despues, que es cuando cierra el span del
     # worker. Si la entrada se desaloja antes, el span tardio llega a un
     # gateway que ya no recuerda haber dicho que si.
+    #
+    # Poner a 0 el de las decisiones NEGATIVAS NO arregla B-44, y esta medido:
+    # mientras la traza sigue en memoria (`num_traces`), su decision se aplica
+    # a los spans tardios con o sin cache. Lo que lo arregla es la politica
+    # `inferencia-por-ruta` de abajo.
     decision_cache:
       sampled_cache_size: 100000
       non_sampled_cache_size: 100000
@@ -454,6 +459,31 @@ processors:
         string_attribute:
           key: gen_ai.operation.name
           values: [chat, text_completion, embeddings, generate_content, retrieval, execute_tool, invoke_agent, create_agent]
+
+      # --- Las llamadas largas al gateway de inferencia (B-44) -------------
+      # `genai-always` no las alcanza: el span `chat` cierra cuando termina la
+      # generacion, y a los 30 s solo han llegado los spans iniciales del
+      # gateway —`auth.validate`, `http receive`—, que duran milisegundos y no
+      # llevan `gen_ai`. Les tocaba el 10 % y el `chat` tardio se tiraba con la
+      # decision. Medido en 5 dias: se guardaba el 99 % de las llamadas de
+      # hasta 16 s y el 41 % de las de mas de 64 s, justo el P99, los abandonos
+      # y los timeouts que diagnostica L3.
+      #
+      # La evidencia que SI llega a tiempo es la ruta: el span `http receive`
+      # del ASGI lleva en el nombre la ruta de la API compatible con OpenAI y
+      # cierra en el primer milisegundo. Es la misma idea que `async-handoff`:
+      # decidir con lo que llega dentro de la ventana. No cuesta volumen: esas
+      # trazas ya eran todas de `genai-always` cuando cabian en los 30 s.
+      #
+      # Los spans de cliente de las apps no lo necesitan: sus trazas llevan
+      # spans `gen_ai` tempranos, y se guardaban todos (Veritium, 4 de 4 de mas
+      # de 64 s).
+      - name: inferencia-por-ruta
+        type: ottl_condition
+        ottl_condition:
+          error_mode: ignore
+          span:
+            - 'IsMatch(name, "^[A-Z]+ /v1/(chat/completions|completions|embeddings|responses)( |$)")'
 
       # Las investigaciones del propio agente de RCA se conservan enteras: es
       # como se evalua si el agente mejora con el tiempo.

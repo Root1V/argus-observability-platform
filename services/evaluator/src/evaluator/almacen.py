@@ -70,6 +70,7 @@ SELECT
     SpanAttributes['gen_ai.response.finish_reasons'] AS finish_reasons,
     SpanAttributes['gen_ai.usage.output_tokens'] AS tokens_salida,
     SpanAttributes['gen_ai.request.max_tokens'] AS max_tokens,
+    SpanAttributes['argus.inference.outcome'] AS desenlace,
     StatusCode = 'Error' AS error,
     Duration AS duracion_ns
 FROM otel.otel_traces
@@ -141,7 +142,7 @@ class Almacen:
                 trace_id=f["trace_id"], span_id=f["span_id"], fin=f["fin"], app=f["app"],
                 componente=f["componente"], operacion=f["operacion"], modelo=f["modelo"],
                 modelo_pedido=f["modelo_pedido"], finish_reasons=f["finish_reasons"],
-                tokens_salida=f["tokens_salida"], max_tokens=f["max_tokens"],
+                tokens_salida=f["tokens_salida"], max_tokens=f["max_tokens"], desenlace=f["desenlace"],
                 error=bool(int(f["error"])), duracion_ns=int(f["duracion_ns"]),
             )
             for f in filas

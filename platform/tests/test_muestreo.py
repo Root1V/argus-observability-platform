@@ -377,3 +377,19 @@ def test_los_atributos_estan_declarados_en_el_modelo() -> None:
     from argus_semconv import attributes as A
     assert A.ARGUS_ERROR_KIND == "argus.error.kind"
     assert A.ARGUS_ERROR_FINGERPRINT == "argus.error.fingerprint"
+
+
+
+def test_las_llamadas_largas_al_gateway_se_reconocen_por_la_ruta(politicas: list[dict]) -> None:
+    """El span `chat` de una llamada larga llega cuando la traza ya se decidio
+    con sus spans iniciales, que no llevan `gen_ai`. Lo que si llega a tiempo
+    es el `http receive` con la ruta en el nombre (B-44)."""
+    import re
+
+    pol = next(p for p in politicas if p["name"] == "inferencia-por-ruta")
+    patron = re.search(r'IsMatch\(name, "(.+)"\)', pol["ottl_condition"]["span"][0]).group(1)
+    for nombre in ("POST /v1/chat/completions http receive", "POST /v1/chat/completions",
+                   "POST /v1/embeddings http receive", "POST /v1/responses"):
+        assert re.search(patron, nombre), nombre
+    for nombre in ("GET /v1/backends", "POST /v1/chat/completionsX", "auth.validate", "POST /oauth2/token"):
+        assert not re.search(patron, nombre), nombre
