@@ -679,14 +679,18 @@ source = { editable = "services/evaluator" }
 dependencies = [
     { name = "argus-obs-sdk" },
     { name = "httpx" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "synaptum", extra = ["axonium"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "argus-obs-sdk", editable = "libs/argus-sdk" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "synaptum", extras = ["axonium"], specifier = ">=1.0.0rc6" },
 ]
 
 [[package]]

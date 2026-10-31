@@ -54,6 +54,7 @@ def bucle(s: Settings) -> None:
         almacen, Cursor(s.cursor_path), contador=_contador(), muestreo=Muestreo(s.muestra_pct),
         retraso=timedelta(seconds=s.retraso_s), relleno=timedelta(hours=s.relleno_h),
     )
+    del_juez = _evaluador_del_juez(s, almacen)
     parar = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: parar.set())
     log.info("evaluator.arranca", extra={"cursor": str(ev.cursor.leer())})
@@ -61,10 +62,45 @@ def bucle(s: Settings) -> None:
         try:
             vistos = ev.vuelta()
             log.info(f"evaluator.vuelta spans={vistos} {dict(ev.stats)}")
+            if del_juez is not None:
+                filas = del_juez.vuelta()
+                if filas:
+                    log.info(f"evaluator.juez evaluaciones={len(filas)} {del_juez.stats}")
+                    _contar(ev.contador, filas)
         except Exception:
             # Un fallo inesperado no tumba el servicio: se reintenta en la vuelta siguiente.
             log.exception("evaluator.vuelta_fallida")
         parar.wait(s.intervalo_s)
+
+
+def _evaluador_del_juez(s: Settings, almacen: Almacen):
+    """F5-02, si hay diario. Sin modelo (o sin credencial) solo se evalua el formato."""
+    import os
+
+    if s.diario_juez_path is None:
+        return None
+    from .juez import EstadoDiario, EvaluadorDelJuez
+
+    juez = None
+    if s.modelo and os.environ.get("AXONIUM_CLIENT_ID"):
+        from .modelo_juez import JuezConModelo
+
+        juez = JuezConModelo(s.modelo, razonamiento=s.razonamiento or None)
+    elif s.modelo:
+        log.warning("evaluator.juez.sin_credencial")
+    log.info("evaluator.juez.arranca", extra={"diario": str(s.diario_juez_path), "modelo": s.modelo if juez else ""})
+    return EvaluadorDelJuez(s.diario_juez_path, EstadoDiario.cargar(s.diario_estado_path), juez,
+                            almacen.guardar, caras_por_hora=s.caras_por_hora)
+
+
+def _contar(contador, filas) -> None:
+    """El diario se lee en cuanto se escribe: todo lo que sale de aqui es presente."""
+    if contador is None:
+        return
+    for span, e, _ in filas:
+        contador.add(1, {"argus.eval.app": span.app, "argus.eval.service": span.componente,
+                         "argus.eval.name": e.eval, "argus.eval.result": str(e.resultado),
+                         "gen_ai.request.model": span.modelo})
 
 
 def informe(s: Settings, horas: int) -> str:

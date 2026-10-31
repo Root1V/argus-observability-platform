@@ -33,7 +33,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
 | **F4** | Investigación agéntica L4 | 🚧 | 5/7 |
-| **F5** | Calidad, coste y deriva | 🚧 | 1/8 |
+| **F5** | Calidad, coste y deriva | 🚧 | 2/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
 
@@ -170,7 +170,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 | Código | Estado | Elemento | Notas |
 |---|---|---|---|
 | `F5-01` | ✅ | `evaluator`: evals online sobre trazas muestreadas | **Hecho (D-154)**: servicio `evaluator` desplegado; cuatro evaluaciones deterministas (rechazo, truncado, abandono, vacía) sobre todos los spans GenAI → `argus.evaluaciones` y `argus_eval_results_total`. `desconocido` ≠ `pasa`: Centinela no trae `finish_reasons`. La muestra (errores + P99 + 5 %) espera a las caras de F5-02 |
-| `F5-02` | ⏳ | Groundedness, consistencia, formato, rechazo | Formato con Pydantic, no LLM |
+| `F5-02` | ✅ | Groundedness, consistencia, formato, rechazo | **Hecho (D-156)** sobre nuestro propio juez de L3 (hasta encender Langfuse, B-45): formato con Pydantic sobre el dictamen crudo; groundedness con fragmento literal verificado por código (banco: 11/11 con su expediente, 0/11 con el equivocado); consistencia entre juicios del mismo episodio (aún sin caso real); rechazo en F5-01 |
 | `F5-03` | ⏳ | Alerta por **condición conjunta** deriva + caída de eval | Deriva sola es falsa alarma |
 | `F5-04` | ⏳ | `drift-monitor` con Evidently | |
 | `F5-05` | ⏳ | NannyML: rendimiento **sin etiquetas de verdad** | En scoring la verdad llega semanas después |
@@ -317,3 +317,4 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 
 | `B-43` | ⏳ | **Portal web de Argus: administrar y ver el ciclo entero de un incidente** | Pedido por el dueño el 26/10. Hoy cada pieza se ve por separado: el registro en `apps.yaml`, las señales en Grafana, los incidentes en `/incidents`, el diagnóstico en el aviso y la sombra en un `.jsonl` dentro de un contenedor. El portal tiene que enseñar, para cada incidente y de punta a punta: **cómo se registra** la app (alta, componentes, dependencias, estado de cada sonda), **cómo se detecta y se lanza** la anomalía (las señales que entraron, la huella, la agrupación y la correlación que la suprimió o la abrió), **cómo se diagnostica** (el expediente tal cual lo leyó el juez, el veredicto de las reglas y el del modelo en sombra, uno al lado del otro), **cómo se propone la solución** (cuando exista L4/L5) y **cómo se notifica** (a qué canales, cuándo y con qué texto). Y además **administrar**: dar de alta apps, cambiar el estado de una sonda, revisar y confirmar etiquetas del banco. Las vistas de solo lectura van primero; administrar escribe en el registro y necesita autenticación |
 | `B-44` | ✅ | **El muestreo de cola pierde las llamadas largas** | **Hecho (D-155)**: política `inferencia-por-ruta`, que reconoce la llamada por el span `http receive` con la ruta `/v1/...`, que llega en el primer milisegundo. Verificado: 3 de 3 llamadas de 176–396 s guardadas enteras (antes se guardaba el 41 % de las > 64 s). Poner a 0 la caché de decisiones negativas no servía, y está medido |
+| `B-45` | ⏳ | **Encender Langfuse y evaluar el contenido de las apps, no solo el de Argus** | Decidido por el dueño el 31/10: F5-02 avanza con nuestros propios agentes (el diario de la sombra de L3 guarda prompt y dictamen), pero **lo mejor es encender Langfuse más adelante**. Es donde el PLAN pone el contenido (D-008) y lo que permitiría evaluar Veritium y Centinela. Falta: levantar el perfil `genai` (~4 vCPU, 16 GiB), pedir a sus equipos `ARGUS_CAPTURE_CONTENT` (sus textos llevan datos de usuarios: decisión del dueño) y añadir Langfuse como fuente del `evaluator` |

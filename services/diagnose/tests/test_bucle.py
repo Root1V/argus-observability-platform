@@ -274,3 +274,27 @@ def test_l4_en_sombra_investiga_pero_el_aviso_solo_lleva_las_reglas(tmp_path) ->
     assert len(enriquecidos) == 1 and "root_cause" not in enriquecidos[0][1]
     assert json.loads(ruta.read_text().splitlines()[0])["l4"]["causa"] == "dijo L4"
     assert d.stats["triage_investigar"] == 1
+
+
+def test_la_sombra_juzga_cada_incidente_una_vez_y_con_tope_por_hora(tmp_path) -> None:
+    """El bucle rediagnostica el mismo incidente cada vez que cambian sus
+    senales; con el 27B, cada juicio de la sombra es un minuto (F5-02)."""
+    import json
+
+    modelo = JuezQuieto(Veredicto(root_cause="dijo el modelo", confidence="alta", origen="modelo:x"))
+    modelo.ultimo = {"entrada": "EXPEDIENTE ...", "salida": {"causa": "x"}, "error": None}
+    ruta = tmp_path / "sombra.jsonl"
+    d = Diagnosticador(
+        Settings(alertbus_url="http://bus", sombra_path=str(ruta), sombra_por_hora=2),
+        almacen=None, juez=JuezQuieto(), sombra=modelo,
+        cliente=_bus([_inc(fingerprint="h1"), _inc(id="i2", fingerprint="h2"), _inc(id="i3", fingerprint="h3")], []),
+    )
+    for _ in range(3):
+        d._juzgados.clear()
+        d.ciclo()
+
+    assert modelo.veces == 2
+    assert d.stats["sombra_por_ritmo"] >= 1
+    assert d.stats["sombra_repetidos"] >= 1
+    fila = json.loads(ruta.read_text(encoding="utf-8").splitlines()[0])
+    assert fila["llm"]["entrada"] == "EXPEDIENTE ..."

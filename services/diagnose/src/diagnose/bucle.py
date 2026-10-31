@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -66,6 +66,9 @@ class Diagnosticador:
         # permite volver antes cuando el incidente ha CRECIDO —mas senales es
         # mas evidencia, y puede que ahora si se explique.
         self._juzgados: dict[str, tuple[datetime, int]] = {}
+        # La sombra: cuando juzgo cada huella y los juicios de la ultima hora.
+        self._sombra_vista: dict[str, datetime] = {}
+        self._sombra_hora: list[datetime] = []
         self.stats = {
             "ciclos": 0,
             "diagnosticados": 0,
@@ -75,6 +78,8 @@ class Diagnosticador:
             "saltados_por_espera": 0,
             "sombra_juzgados": 0,
             "sombra_fallidos": 0,
+            "sombra_repetidos": 0,
+            "sombra_por_ritmo": 0,
             "triage_investigar": 0,
             "triage_no": 0,
             "memoria_indexados": 0,
@@ -162,6 +167,17 @@ class Diagnosticador:
         """
         if self.sombra is None:
             return
+        ahora = datetime.now(UTC)
+        vista = self._sombra_vista.get(expediente.huella)
+        if vista and ahora - vista < timedelta(hours=self.settings.sombra_repetir_tras_h):
+            self.stats["sombra_repetidos"] += 1
+            return
+        self._sombra_hora = [t for t in self._sombra_hora if ahora - t < timedelta(hours=1)]
+        if len(self._sombra_hora) >= self.settings.sombra_por_hora:
+            self.stats["sombra_por_ritmo"] += 1
+            return
+        self._sombra_vista[expediente.huella] = ahora
+        self._sombra_hora.append(ahora)
         try:
             del_modelo = self.sombra.juzgar(expediente)
         except Exception as exc:  # noqa: BLE001 - la sombra nunca tumba el diagnostico
@@ -181,6 +197,9 @@ class Diagnosticador:
             # Si coinciden en tener causa o no. La comparacion de fondo la hace
             # el banco; esto es para ver de un vistazo cuanto discrepan.
             "coinciden_en_tener_causa": de_las_reglas.tiene_causa == del_modelo.tiene_causa,
+            # Entrada, dictamen crudo o error, y tiempo: lo que evalua F5-02.
+            # Hasta que haya Langfuse (B-45) es el unico sitio con el contenido.
+            "llm": getattr(self.sombra, "ultimo", None),
         }
         log.info(
             "sombra.done",

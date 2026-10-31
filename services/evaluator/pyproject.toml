@@ -9,6 +9,8 @@ dependencies = [
     "argus-obs-sdk>=1.0,<2",
     "pydantic-settings>=2.6",
     "httpx>=0.27",
+    "pydantic>=2.9",
+    "synaptum[axonium]>=1.0.0rc6",
 ]
 
 [build-system]

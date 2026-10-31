@@ -24,3 +24,15 @@ class Settings(BaseSettings):
     muestra_pct: float = 5.0
 
     cursor_path: Path = Path("/var/lib/argus/evaluator-cursor.json")
+
+    # --- F5-02: el juez de L3 en sombra ----------------------------------------
+    # El diario de la sombra de `diagnose`, montado en solo lectura. Vacio apaga
+    # estas evaluaciones. Es el unico sitio con prompt y respuesta hasta que se
+    # encienda Langfuse (B-45).
+    diario_juez_path: Path | None = None
+    diario_estado_path: Path = Path("/var/lib/argus/evaluator-diario.json")
+    # El modelo de groundedness y consistencia, por Axonium. Vacio: solo formato.
+    modelo: str = ""
+    razonamiento: str = "off"
+    # Inferencia de la plataforma compartida: como mucho tantos registros por hora.
+    caras_por_hora: int = 6

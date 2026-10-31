@@ -10,7 +10,7 @@ aviso no lleve volcados de filas aunque el modelo los copie.
 from __future__ import annotations
 
 from diagnose.expediente import Expediente
-from diagnose.juez_modelo import INSTRUCCIONES, JuezConModelo, id_del_run, pedir
+from diagnose.juez_modelo import INSTRUCCIONES, VERSION_INSTRUCCIONES, JuezConModelo, id_del_run, pedir
 from synaptum.testing import FakeGateway, says
 
 
@@ -185,3 +185,24 @@ def test_compitiendo_si_puede_abstenerse() -> None:
     """Sin reglas detras no hay nada que proteger: abstenerse sigue siendo legitimo."""
     v = _juez(says('{"causa": null, "confianza": "baja", "evidencia": []}')).juzgar(_exp())
     assert v.root_cause is None
+
+
+def test_el_ultimo_intercambio_guarda_la_entrada_y_el_dictamen_crudo() -> None:
+    """F5-02: el formato se evalua sobre lo que dijo el modelo, no sobre lo que
+    `a_veredicto` arreglo en silencio."""
+    juez = _juez(says('{"causa": null, "confianza": "alta", "evidencia": ["ALCANCE: 0 de 44"]}'))
+    v = juez.juzgar(_exp())
+
+    assert v.confidence == "baja"
+    assert juez.ultimo["salida"]["confianza"] == "alta"
+    assert "<<<EXPEDIENTE" in juez.ultimo["entrada"]
+    assert juez.ultimo["error"] is None
+    assert juez.ultimo["instrucciones"] == VERSION_INSTRUCCIONES
+
+
+def test_el_ultimo_intercambio_guarda_el_error() -> None:
+    juez = _juez(*[says("no se") for _ in range(5)])
+    juez.juzgar(_exp())
+
+    assert juez.ultimo["salida"] is None
+    assert juez.ultimo["error"]

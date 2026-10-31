@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # Es lo que permite comparar los dos sobre incidentes REALES y no solo
     # sobre el banco. Vacio = solo al log.
     sombra_path: str = ""
+    # La sombra juzga cada incidente UNA vez por ventana, y como mucho tantas
+    # por hora. El bucle rediagnostica el mismo incidente cada vez que cambian
+    # sus senales: 200-430 juicios al dia para 10-20 incidentes distintos. Con
+    # un modelo rapido daba igual; con el 27B son un minuto cada uno de
+    # inferencia compartida, y el juicio bloquea el bucle mientras tanto (F5-02).
+    sombra_repetir_tras_h: float = 6.0
+    sombra_por_hora: int = 6
 
     # --- L4 en sombra (F4-01, F4-03) ------------------------------------------
     # `modelo` para encenderlo: lo que el triage (F3-03) deja pasar se
