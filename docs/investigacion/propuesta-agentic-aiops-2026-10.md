@@ -3,6 +3,11 @@
 > Documento de otro equipo, octubre de 2026, 39 páginas, orientado a banca
 > (BBVA). Lo leyó Argus el 31/10/2026 para completar su backlog y revisar su
 > objetivo. Las decisiones que salen de aquí están en **D-157**.
+>
+> **Corregido el mismo día por el dueño**: la primera versión descartaba Jev
+> «por ser un proveedor externo y por la regla de Axonium». Lo correcto: Axonium
+> sirve los modelos que **provee Prometheus**, y Prometheus ofrece modelos
+> System One **abiertos** (Laya y Von). Jev es el privado de esa familia.
 
 **Dos avisos sobre la fuente:**
 
@@ -104,8 +109,8 @@ el cuadro (B-48) lo mide todo.
 | **B-50** | **Flujos de negocio por app en el registro**: un SLI de «el trabajo sale», no de «el servidor responde». Prioriza por impacto real y generaliza F2-19. | §2 transversal, §11A |
 | **B-51** | **Regresión tras un cambio**: cuando cambia `service.version` (o reinicia con otra configuración), comparar errores y latencia antes y después y anotarlo en el expediente. Capta los cambios **reales**, no solo los formales; las *releases* de GitHub, como fuente formal, son opcionales. Absorbe B-03. | §7, §8, §11C |
 | **B-52** | **Simulaciones de fallo controladas** sobre una app de demostración **propia**, nunca sobre la de otro equipo: casos de banco con causa conocida y MTTD medido de punta a punta. | §14 piloto, §15 |
-| **B-53** 💭 | **Modelos fundacionales de series temporales** (Chronos-2, Toto) frente a las bandas estadísticas de F5-08, con fallos reales. Tendrían que servirse por Prometheus: Axonium es la única puerta a la inferencia local. | §4.2 |
-| **B-54** 💭 | **Clasificador de triage probabilístico** (un modelo pequeño o supervisado), solo cuando B-46 dé etiquetas. Como el triage determinista de F3-03, decide si merece investigación. | §4.3 |
+| **B-53** 💭 | **Modelos fundacionales de series temporales** (Chronos-2, Toto) frente a las bandas estadísticas de F5-08, con fallos reales. Axonium sirve los modelos que **provee Prometheus**: habría que pedirle a su equipo que los ofrezca. | §4.2 |
+| **B-54** 💭 | **Triage con un modelo de decisión System One**: Prometheus ofrece modelos System One abiertos (**Laya** y **Von**), que contestan con una elección o una probabilidad tipada en vez de texto. Se usarían por Axonium para «¿rutinario, investigable o crítico?», **solo cuando B-46 dé etiquetas con las que medirlos** contra el triage de reglas de F3-03. Hoy el cliente de Argus no los ve: hay que pedir el permiso. | §4.3 |
 | **B-55** 💭 | **Profiling continuo** (perfiles de OTel), cuando aparezca una pregunta de CPU o memoria que las trazas no contesten. | §2, §5.2 |
 
 **Notas que se añaden a entradas existentes:**
@@ -133,7 +138,7 @@ el cuadro (B-48) lo mide todo.
 | LangGraph y Temporal | Los agentes se construyen con synaptum, que trae su propia durabilidad (D-135, F4-01 verificado con `kill -9`). |
 | PostgreSQL y pgvector para incidentes y memoria | SQLite basta para unos 850 incidentes al mes (D-148). Se revisa si crece. |
 | CMDB, ServiceNow, PagerDuty, IAM/PAM, DORA | Un solo dueño, un portafolio personal y ninguna obligación bancaria. El registro de apps es la CMDB y Telegram, el canal. |
-| Jev / System One como dependencia | Proveedor externo: residencia de datos, y la regla del dueño de que Axonium es la única puerta. Si hace falta un clasificador, va B-54 en local. |
+| Jev | Es un modelo System One **privado**. La misma familia está disponible en abierto por Prometheus (Laya, Von), que es la vía de B-54: Axonium sirve los modelos que provee Prometheus, y no hace falta un proveedor externo. |
 | Grafo de contexto en una base de grafos | El registro, con sus dependencias y la topología del `alert-bus`, cubre las relaciones de hoy. Una base de grafos se justificaría con muchas más apps y relaciones (el propio documento lo condiciona a eso). |
 | OPA | Hasta que exista F6 no hay acciones que autorizar. Entonces se decide entre OPA y una política propia como código. |
 
