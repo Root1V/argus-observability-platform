@@ -8499,3 +8499,63 @@ está cubierto por pruebas, pero eso solo se demuestra pulsando.
 L3 que llegó un segundo después de otro veredicto **sobrescribió la confianza y
 la evidencia, pero dejó la causa**. Hoy solo escribe L3; el día que escriban
 dos, el estado quedaría mezclado.
+
+---
+
+## D-159 · B-48: la línea base de los indicadores, y lo que dice de entrada
+
+**Estado**: ✅ Desplegado el 01/11 · `GET /indicadores?dias=N` y `python -m alert_bus.indicadores`
+
+**Solo se restan horas del mismo reloj.** En 523 de 1.966 incidentes notificados
+`opened_at`, que viene del emisor, va después de `notified_at`, que pone el
+alert-bus (B-34). Así que el MTTA, el tiempo hasta el diagnóstico y la duración
+visible salen de marcas del alert-bus, sobre todo el histórico. El MTTD sale de
+los eventos de B-49, partido por camino: en el **caliente** (hora del span
+contra el alert-bus) los desfases se cuentan aparte; en el **templado** se mide
+con `startsAt` de vmalert, que vive en la misma VM de Docker. Hasta B-48
+`startsAt` se descartaba, y estas alertas daban un MTTD de 0 ms porque
+comparaban la recepción consigo misma. Cada cifra lleva su `n` y su cobertura,
+y los avisos de prueba quedan fuera (por la firma o por la etiqueta
+`argus_prueba`, que ahora pone `make channel-test`).
+
+**Tres errores que la primera pasada tenía y se corrigieron antes de anotar
+nada**: los dos avisos de prueba de los botones salían como «precisión 0 de 1»
+y «acierto 0 de 2»; un incidente de una sola señal quedaba fuera de la duración
+por un negativo de milisegundos (excluía dos tercios de los `page`); y el MTTD
+de 0 ms era el de vmalert contra sí mismo.
+
+**Línea base, 30 días (02/10–01/11, 21 días con incidentes, 1.975 incidentes)**:
+
+| Indicador | Valor | Cobertura |
+|---|---|---|
+| Señales por incidente | 16,7 (32.987 → 1.975) | — |
+| `page` | 1.626, unos **58 al día** (mediana) | — |
+| Duración visible de un `page` | mediana **0 s**, P90 7,8 min | 1.578 de 1.587 |
+| Hasta el diagnóstico | mediana 20 s, P90 28,6 min | 903 de 1.965 |
+| Con causa / con evidencia | 25,3 % / 51,8 % | 1.975 |
+| Hasta notificar (eventos) | mediana 0 ms, P90 2,1 min (la ventana de los `ticket`) | 125 de 127 |
+| MTTD, camino caliente | mediana 4,8 s, P90 8,6 s | **10** de 127; **65 con la app adelantada** |
+| MTTD, camino templado | sin datos todavía (`startsAt` se guarda desde hoy) | 0 |
+| MTTA | sin datos: el botón existe desde hoy | 0 de 1.587 |
+| Precisión de alertas y acierto de la causa | sin datos: el feedback existe desde hoy | 0 |
+
+**Lo que dice de entrada, antes de fijar ningún objetivo**:
+
+- **El ruido manda.** 58 `page` al día, la mitad con una sola señal y duración
+  cero. Los cinco más frecuentes concentran 1.165: el `NotNullViolationError` de
+  Veritium (456, D-118), el `ReadTimeout` del gateway de Prometheus (292, en su
+  mayoría el sueño del Mac, B-25), las autométricas de Argus (149 + 148, B-21)
+  y el `503` del gateway (120). Es el argumento para la poda de F5-07 y la razón
+  de que el escalado siga apagado.
+- **El reloj de la VM de Docker se queda atrás.** 65 de los 75 incidentes del
+  camino caliente con eventos traen la hora de la app **por delante** de la del
+  alert-bus: el MTTD real solo se puede medir en 10. Es B-34 y el desfase de
+  D-129 al dormir el Mac; mientras no se arregle, el MTTD caliente es una
+  muestra pequeña y sesgada.
+- **Tres cuartos de los incidentes se quedan sin causa.** Era de esperar con
+  el juez en sombra, pero ahora es una cifra que se puede mover.
+
+**Lo que falta**: un panel en Grafana (hoy es JSON y texto), el coste de IA por
+incidente (necesita F4-04) y el Top-3 de causa, que no aplica mientras L3 dé
+una sola causa. Los objetivos (el documento de D-157 proponía −20 a −30 % de
+MTTD y −25 % de MTTR) se fijan cuando el MTTA y el feedback tengan datos.

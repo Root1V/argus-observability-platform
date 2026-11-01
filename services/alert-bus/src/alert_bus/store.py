@@ -216,6 +216,25 @@ class IncidentStore:
             return []
         return [{"tipo": t, "cuando": c, "detalle": d} for t, c, d in filas]
 
+    def eventos_desde(self, dias: int = 30) -> dict[str, list[dict]]:
+        """Los eventos de los ultimos N dias, por incidente y en orden. Para los indicadores (B-48)."""
+        if not self.disponible:
+            return {}
+        desde = (datetime.now(UTC) - timedelta(days=dias)).isoformat()
+        try:
+            with self._lock:
+                filas = self._con.execute(
+                    "SELECT incidente, tipo, cuando, detalle FROM eventos WHERE cuando >= ? ORDER BY cuando, rowid",
+                    (desde,),
+                ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            log.error("store.read_failed", extra={"error": str(exc)})
+            return {}
+        por: dict[str, list[dict]] = {}
+        for inc, t, c, d in filas:
+            por.setdefault(inc, []).append({"tipo": t, "cuando": c, "detalle": d})
+        return por
+
     def obtener(self, incidente_id: str) -> Incident | None:
         """Un incidente por id, abierto o resuelto. El feedback llega a menudo despues del cierre."""
         if not self.disponible:

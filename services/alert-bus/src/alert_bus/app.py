@@ -284,6 +284,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(status_code=404, detail="incidente no encontrado")
         return {"status": "acknowledged", "id": incidente.id}
 
+    @app.get("/indicadores")
+    async def indicadores(dias: int = 30) -> dict[str, Any]:
+        """B-48: MTTA, tiempos, precision y acierto, cada cifra con su `n` y su cobertura."""
+        from .indicadores import calcular
+
+        if store is None:
+            raise HTTPException(status_code=503, detail="sin almacen no hay historico que medir")
+        return {"dias": dias, **calcular(store.historico(dias=dias), store.eventos_desde(dias))}
+
     @app.get("/incidents/{incident_id}/timeline")
     async def timeline(incident_id: str) -> list[dict[str, Any]]:
         """B-49: lo que le paso al incidente, con la hora del reloj del alert-bus."""

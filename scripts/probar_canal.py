@@ -142,6 +142,8 @@ def main() -> int:
             "service_namespace": APP_PRUEBA,
             "service_name": "alert-bus",
             "severity": args.severidad,
+            # Una prueba no es un incidente: fuera de los indicadores (B-48).
+            "argus_prueba": "true",
         },
         "annotations": {
             "summary": "Prueba de canal: si ves esto, los avisos llegan",

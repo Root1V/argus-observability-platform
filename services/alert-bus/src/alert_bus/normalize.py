@@ -308,7 +308,10 @@ def signals_from_alertmanager(payload: dict[str, Any] | list[dict[str, Any]]) ->
             environment=labels.get("deployment_environment_name"),
             signature=name,
             title=annotations.get("summary") or name,
-            attributes={"labels": labels, "annotations": annotations},
+            # `startsAt` es cuando vmalert empezo a ver la condicion. No se usa
+            # como `opened_at` —cambiaria la ventana de agrupacion—, pero es lo
+            # que mide la deteccion del camino templado (B-48).
+            attributes={"labels": labels, "annotations": annotations, "starts_at": alert.get("startsAt")},
         )
 
 
