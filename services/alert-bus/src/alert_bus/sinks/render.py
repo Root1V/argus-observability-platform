@@ -78,6 +78,9 @@ def cuerpo(incident: Incident) -> list[tuple[str, str]]:
     """
     secciones: list[tuple[str, str]] = []
 
+    if (estado := _estado(incident)):
+        secciones.append(("ESTADO", estado))
+
     if incident.root_cause:
         confianza = f" (confianza: {incident.confidence})" if incident.confidence else ""
         secciones.append((f"CAUSA PROBABLE{confianza}", incident.root_cause))
@@ -98,6 +101,32 @@ def cuerpo(incident: Incident) -> list[tuple[str, str]]:
         secciones.append(("TRAZA", incident.trace_ids[0]))
 
     return secciones
+
+
+def _estado(incident: Incident) -> str:
+    """Lo que ha hecho la PERSONA con el incidente (B-46, B-47), primero porque cambia como se lee.
+
+    Un aviso escalado dice que nadie lo ha visto; uno reconocido, que alguien
+    ya esta en ello. Y una causa confirmada por una persona pesa distinto que
+    una propuesta por una regla.
+    """
+    lineas: list[str] = []
+    if incident.acknowledged_at is not None:
+        lineas.append(f"✋ Reconocido a las {incident.acknowledged_at:%H:%M} UTC")
+    elif incident.escalations:
+        lineas.append(f"🔔 Sin acuse: aviso {incident.escalations + 1}")
+    fb = incident.feedback or {}
+    if fb.get("causa_real"):
+        lineas.append(f"👎 La causa propuesta era incorrecta. La real: {fb['causa_real']}")
+    elif fb.get("causa") == "correcta":
+        lineas.append("👍 Causa confirmada por una persona")
+    elif fb.get("causa") == "incorrecta":
+        lineas.append("👎 La causa propuesta era incorrecta")
+    if fb.get("util") is False:
+        lineas.append("🔇 Marcado como ruido")
+    elif fb.get("util") is True:
+        lineas.append("👌 Marcado como útil")
+    return "\n".join(lineas)
 
 
 def texto_plano(incident: Incident) -> str:

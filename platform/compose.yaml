@@ -209,6 +209,12 @@ services:
       ALERTBUS_TELEGRAM_TOKEN: ${ALERTBUS_TELEGRAM_TOKEN:-}
       ALERTBUS_TELEGRAM_CHAT_ID: ${ALERTBUS_TELEGRAM_CHAT_ID:-}
       ALERTBUS_TELEGRAM_API_BASE: ${ALERTBUS_TELEGRAM_API_BASE:-https://api.telegram.org}
+      # B-46/B-47: escuchar los botones del aviso (solo el chat de arriba).
+      ALERTBUS_TELEGRAM_ENTRADA: ${ALERTBUS_TELEGRAM_ENTRADA:-true}
+      # B-47: volver a avisar de un `page` sin acuse. 0 = apagado, a proposito
+      # mientras los avisos que se reabren solos (B-21) sigan siendo ruido.
+      ALERTBUS_ESCALAR_TRAS_S: ${ALERTBUS_ESCALAR_TRAS_S:-0}
+      ALERTBUS_ESCALADOS_MAX: ${ALERTBUS_ESCALADOS_MAX:-2}
       ALERTBUS_SMTP_HOST: ${ALERTBUS_SMTP_HOST:-}
       ALERTBUS_SMTP_PORT: ${ALERTBUS_SMTP_PORT:-587}
       ALERTBUS_SMTP_USER: ${ALERTBUS_SMTP_USER:-}

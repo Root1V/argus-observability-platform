@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # Solo para pruebas: apunta el sink a un servidor que imita la API. En
     # produccion no se toca.
     telegram_api_base: str = "https://api.telegram.org"
+    # Escuchar los botones del aviso y la causa real (B-46, B-47). Solo se
+    # atiende el chat de `telegram_chat_id`.
+    telegram_entrada: bool = True
+
+    # --- Escalado (B-47) -------------------------------------------------------
+    # Segundos sin acuse antes de volver a avisar de un `page`. 0 = apagado, y
+    # es el valor por defecto: con avisos que se reabren solos (B-21), escalar
+    # duplicaria el ruido. Cada escalado espera otro plazo igual.
+    escalar_tras_s: int = 0
+    escalados_max: int = 2
 
     # --- Correo --------------------------------------------------------------
     # El canal del informe COMPLETO, sin limite de longitud ni urgencia.

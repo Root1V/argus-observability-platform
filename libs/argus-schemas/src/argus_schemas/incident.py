@@ -161,6 +161,19 @@ class Incident(BaseModel):
     notified_at: datetime | None = None
     enriched_at: datetime | None = None
 
+    # --- La persona (B-46, B-47) ----------------------------------------------
+    # Cuando alguien dijo «lo veo». Con `notified_at` da el MTTA, y los dos los
+    # pone el mismo reloj —el del alert-bus—, que es lo que `opened_at`, del
+    # emisor, no garantiza (B-34).
+    acknowledged_at: datetime | None = None
+    # Cuantas veces se ha vuelto a avisar porque nadie lo reconocio.
+    escalations: int = 0
+    # Lo que dijo la persona sobre el incidente: `causa` (`correcta` o
+    # `incorrecta`), `causa_real` (texto libre), `util` (bool), y quien y cuando.
+    # Es lo unico del incidente que no escribe una maquina, y por eso lo que
+    # convierte la memoria en resolucion confirmada.
+    feedback: dict[str, Any] = Field(default_factory=dict)
+
     # Lo que anade el agente de investigacion, mas tarde.
     root_cause: str | None = None
     confidence: str | None = None
