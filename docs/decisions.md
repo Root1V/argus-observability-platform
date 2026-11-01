@@ -8559,3 +8559,64 @@ de 0 ms era el de vmalert contra sí mismo.
 incidente (necesita F4-04) y el Top-3 de causa, que no aplica mientras L3 dé
 una sola causa. Los objetivos (el documento de D-157 proponía −20 a −30 % de
 MTTD y −25 % de MTTR) se fijan cuando el MTTA y el feedback tengan datos.
+
+---
+
+## D-160 · El reloj que falla es el de la VM de Docker al despertar el Mac; los componentes emiten bien
+
+**Estado**: ✅ Medido el 01/11 · **sin compensación aplicada**, a propósito: primero saber quién tiene la hora mal
+
+**La pregunta del dueño**: antes de hacer cualquier artificio con las horas
+(D-159 vio 65 de 75 incidentes con «la app adelantada»), comprobar si nuestros
+componentes y los de los otros proyectos emiten la hora correcta.
+
+**Lo medido**:
+
+1. **El Mac contra NTP**: +0,05 s (`sntp time.apple.com`). Bien.
+2. **La VM de Docker contra el Mac, despierto**: 0,00 s ±0,03. Todos los
+   contenedores comparten ese reloj, porque comparten núcleo (aerarium,
+   +0,009 s).
+3. **Ningún componente emite en el futuro**: 0 spans con hora posterior a
+   `now()` en 30 días, en los 23 servicios. Los que emiten ahora (gateway,
+   `manager-api` y `auth-service` de Prometheus; `alert-bus` y canario) tienen
+   su último span de hace 1–6 minutos: tampoco van atrasados de forma
+   permanente. No hay zonas horarias tomadas como UTC.
+4. **Los 75 desfases del camino caliente son del gateway de Prometheus**, que
+   corre **nativo en el Mac** (`127.0.0.1:8020`), no en Docker. Y cada desfase es
+   **igual a lo que acababa de dormir el Mac**: −939 s tras 943 s de sueño,
+   −913 tras 917, −1.073 tras 1.079, −918 tras 924. El span termina justo al
+   despertar.
+
+**La conclusión**: el gateway sella la hora real del despertar, con el reloj del
+Mac. El `alert-bus`, en la VM de Docker Desktop (4.55.0, kernel
+6.12.54-linuxkit), la recibe con un reloj que **se paró mientras el Mac dormía**:
+al despertar va atrasado exactamente la duración del sueño, y tarda en
+recuperarse; con sueños de mantenimiento seguidos el atraso se acumula (−398 s
+seis minutos después de despertar). **El reloj equivocado es el nuestro**, el
+de la infraestructura del plano central.
+
+**Lo que implica**:
+
+- **A Prometheus no hay que pedirle nada**: su hora es correcta. Los 523
+  incidentes «notificados antes de abrirse» de B-34 son, en el camino caliente,
+  este atraso.
+- **Los proyectos que corren en Docker en este Mac** (Veritium, Centinela,
+  Prosodia, Aerarium) comparten la VM, así que sus spans de justo después de un
+  sueño salen con la hora atrasada. No es un fallo de su código y no tienen nada
+  que ajustar: se arregla en la VM.
+- **Lo nuestro que vive en la VM** (`alert-bus`, vmalert, Collector, ClickHouse,
+  canario) usa ese reloj tras cada sueño. Es muy probablemente la misma causa del
+  desfase de vmalert de **B-21** y D-087, y del `ReadTimeout` de **B-25**.
+
+**Cómo se arregla de verdad, sin compensar horas** (decisión del dueño, porque
+toca el sistema y la energía del Mac):
+
+1. **Que la VM se resincronice al despertar**: un gancho de despertar en el Mac
+   que fuerce la hora de la VM. Toca la VM del sistema; no se ha hecho.
+2. **Comprobar si una versión más nueva de Docker Desktop lo corrige.** Sin
+   verificar.
+3. **Que el plano central no duerma**: llevarlo al iMac (F7-05) o impedir el
+   reposo con corriente. Es lo que también acabaría con B-21 y B-25.
+
+Mientras tanto, los indicadores de D-159 ya apartan estos casos como desfase de
+reloj en vez de mezclarlos con el MTTD.
