@@ -8422,7 +8422,7 @@ el listado, pero llamado por su nombre responde: decisión tipada (`choice`,
 
 ## D-158 · B-46, B-47 y B-49: la persona entra en el ciclo del incidente
 
-**Estado**: 🧪 Implementado y probado (900 pruebas) · despliegue pendiente: el Mac se durmió en batería durante la construcción
+**Estado**: ✅ Desplegado el 01/11 y verificado contra el sistema real, salvo la pulsación física de un botón (el móvil del dueño no estaba disponible)
 
 **Por qué estos tres juntos** (D-157): sin feedback no se puede medir si Argus
 acierta (B-46); sin la hora del acuse no hay MTTA (B-47); y sin una línea de
@@ -8477,6 +8477,25 @@ ni actualizaciones pendientes, ni otro proceso leyéndolo.
 Igual que el atributo de convenciones de D-155, sale en la próxima publicación
 conjunta de las librerías, no ahora.
 
-**Lo que falta**: desplegar y probarlo con un aviso real, pulsando los botones.
-Eso necesita a una persona, y es la verificación que de verdad cuenta (un
-servidor falso de Telegram solo prueba que se le llama).
+**Verificado el 01/11**, con dos avisos de PRUEBA reales y el móvil del dueño
+fuera de servicio, haciendo por la API lo mismo que hacen los botones (es el
+mismo código del motor):
+
+- Línea de tiempo en producción: abierto → notificado → diagnosticado →
+  reconocido → feedback (causa real) → feedback (ruido), con un solo reloj.
+- Feedback sobre un incidente **ya cerrado** (resuelto a las 04:08, anotado a
+  las 13:17).
+- **Telegram aceptó la edición real** del mensaje con la sección ESTADO y sin
+  los botones ya usados (ningún `edit_failed`).
+- `/incidents/history` lleva el feedback, y la memoria de L3 dentro del
+  contenedor devuelve la causa escrita por la persona, como confirmada, en vez
+  de la anotada.
+
+**Lo único sin probar** es que Telegram entregue una pulsación a la escucha
+(`getUpdates` → `callback_query`). La escucha corre sin errores y el formato
+está cubierto por pruebas, pero eso solo se demuestra pulsando.
+
+**Visto de pasada**: `enrich` acepta veredictos parciales, y un «sin causa» de
+L3 que llegó un segundo después de otro veredicto **sobrescribió la confianza y
+la evidencia, pero dejó la causa**. Hoy solo escribe L3; el día que escriban
+dos, el estado quedaría mezclado.
