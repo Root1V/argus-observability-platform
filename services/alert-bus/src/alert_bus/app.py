@@ -132,18 +132,26 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             resolve_after_s=settings.resolve_after_s,
             dispatcher=dispatcher,
             store=store,
+            escalar_tras_s=settings.escalar_tras_s,
+            escalados_max=settings.escalados_max,
         )
     else:
         # Motor inyectado: si trae almacen propio, el historico lo usa.
         store = getattr(engine, "_store", None)
 
+    entrada = _entrada_telegram(settings, engine)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if dispatcher is not None:
             dispatcher.start()
+        if entrada is not None:
+            entrada.start()
         tarea = asyncio.create_task(_ticker(engine, settings.tick_s))
         yield
         tarea.cancel()
+        if entrada is not None:
+            entrada.stop()
         if dispatcher is not None:
             # Vaciar antes de parar: apagar con avisos pendientes en la cola es
             # perder justo las notificaciones del incidente que probablemente
@@ -170,6 +178,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     app.state.engine = engine
     app.state.settings = settings
+    app.state.entrada = entrada
 
     def _check_token(authorization: str | None) -> None:
         """La red privada protege el transporte; el token la integridad.
@@ -275,6 +284,27 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             raise HTTPException(status_code=404, detail="incidente no encontrado")
         return {"status": "acknowledged", "id": incidente.id}
 
+    @app.get("/incidents/{incident_id}/timeline")
+    async def timeline(incident_id: str) -> list[dict[str, Any]]:
+        """B-49: lo que le paso al incidente, con la hora del reloj del alert-bus."""
+        return engine.timeline(incident_id)
+
+    @app.post("/incidents/{incident_id}/feedback")
+    async def feedback(incident_id: str, cuerpo: dict[str, Any],
+                       authorization: str | None = Header(default=None)) -> dict[str, Any]:
+        """B-46 por API: lo mismo que los botones. Con token, porque acaba en la memoria del agente."""
+        _check_token(authorization)
+        try:
+            incidente = engine.feedback(
+                incident_id, por=str(cuerpo.get("por") or "api"), causa=cuerpo.get("causa"),
+                causa_real=cuerpo.get("causa_real"), util=cuerpo.get("util"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if incidente is None:
+            raise HTTPException(status_code=404, detail="incidente no encontrado o feedback vacio")
+        return {"status": "anotado", "id": incidente.id, "feedback": incidente.feedback}
+
     @app.post("/incidents/{fingerprint}/enrich")
     async def enrich(fingerprint: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Lo llama el agente de investigacion al terminar.
@@ -340,6 +370,20 @@ def _process(engine: Engine, signals: list[Any]) -> None:
         )
 
 
+def _entrada_telegram(settings: Settings, engine: Engine):
+    """La escucha de los botones, si hay sink de Telegram y no se apago."""
+    if not settings.telegram_entrada:
+        return None
+    sink = next((s for s in getattr(engine, "_sinks", []) if s.name == "telegram"), None)
+    if sink is None:
+        return None
+    from .telegram_entrada import TelegramEntrada
+
+    log.info("telegram_entrada.ready")
+    return TelegramEntrada(settings.telegram_token, settings.telegram_chat_id, engine, sink,
+                           api_base=settings.telegram_api_base)
+
+
 async def _ticker(engine: Engine, every_s: int) -> None:
     """Cierra ventanas de agrupacion, resuelve inactivos y recarga el registro.
 
@@ -355,6 +399,7 @@ async def _ticker(engine: Engine, every_s: int) -> None:
                 log.info("registry.reloaded", extra={"apps": len(engine._registry.apps)})
             engine.flush_grouped()
             engine.sweep()
+            engine.escalate()
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001

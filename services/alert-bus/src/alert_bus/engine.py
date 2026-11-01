@@ -34,6 +34,11 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+# Lo unico que se acepta como juicio sobre la causa. Cerrado: lo escribe una
+# persona desde un boton y acaba en la memoria del agente (B-46).
+CAUSAS = ("correcta", "incorrecta")
+
+
 class Engine:
     """Estado en memoria de los incidentes abiertos.
 
@@ -54,6 +59,8 @@ class Engine:
         correlation_window_s: int = 300,
         dispatcher: object | None = None,
         store: object | None = None,
+        escalar_tras_s: int = 0,
+        escalados_max: int = 2,
     ) -> None:
         self._registry = registry
         self._sinks = list(sinks)
@@ -68,6 +75,12 @@ class Engine:
         # ahora: a partir de cierto punto, "hay algo roto arriba" deja de ser
         # una explicacion y pasa a ser una excusa para no avisar.
         self._correlation_window = timedelta(seconds=correlation_window_s)
+        # B-47: volver a avisar de un `page` que nadie ha reconocido. 0 lo
+        # apaga, y es el valor por defecto a proposito: con avisos que se
+        # reabren solos (B-21), escalar duplicaria justo el ruido que mas
+        # cansa. Un aviso nuevo, no una edicion: Telegram no suena al editar.
+        self._escalar_tras = timedelta(seconds=escalar_tras_s) if escalar_tras_s > 0 else None
+        self._escalados_max = escalados_max
 
         self._incidents: dict[str, Incident] = {}   # huella -> incidente abierto
         self._order: deque[str] = deque()           # para acotar la memoria
@@ -93,6 +106,9 @@ class Engine:
             "unregistered_apps": 0,
             "symptoms_suppressed": 0,
             "symptoms_promoted": 0,
+            "acknowledged": 0,
+            "escalations": 0,
+            "feedback": 0,
         }
 
     # --- Persistencia --------------------------------------------------------
@@ -109,6 +125,15 @@ class Engine:
             self._store.guardar(incident)
         except Exception as exc:  # noqa: BLE001
             log.error("engine.persist_failed", extra={"incident": incident.id, "error": str(exc)})
+
+    def _evento(self, incident: Incident, tipo: str, detalle: str = "") -> None:
+        """Una entrada de la linea de tiempo (B-49), con el reloj de este proceso."""
+        if self._store is None:
+            return
+        try:
+            self._store.registrar_evento(incident, tipo, _now(), detalle)  # type: ignore[union-attr]
+        except Exception as exc:  # noqa: BLE001
+            log.error("engine.event_failed", extra={"incident": incident.id, "tipo": tipo, "error": str(exc)})
 
     def _restaurar(self) -> None:
         """Recupera los incidentes que estaban abiertos al apagarse.
@@ -201,6 +226,8 @@ class Engine:
 
         # Fuera del lock: escribir en disco no puede bloquear la ingesta.
         self._persistir(incident)
+        self._evento(incident, "abierto", f"{incident.severity} · emisor {incident.opened_at.isoformat()}"
+                     + (f" · sintoma de {incident.suppressed_by}" if incident.suppressed_by else ""))
         return incident, True
 
     def _find_upstream_cause(self, app_id: str) -> Incident | None:
@@ -266,7 +293,7 @@ class Engine:
 
     # --- Salida --------------------------------------------------------------
 
-    def _notify(self, incident: Incident, *, update: bool) -> None:
+    def _notify(self, incident: Incident, *, update: bool, escalado: bool = False) -> None:
         canales = set(self._registry.channels_for(incident.app, incident.severity))
         destinos = [s for s in self._sinks if s.name in canales]
 
@@ -297,9 +324,10 @@ class Engine:
         # la deteccion del siguiente incidente (D-029).
         self._dispatcher.submit(destinos, incident, update=update)
 
-        if not update:
+        if not update and not escalado:
             incident.notified_at = _now()
             self.stats["notifications_sent"] += 1
+            self._evento(incident, "notificado", ",".join(sorted(s.name for s in destinos)))
             # `notified_at` es lo que impide volver a avisar de lo mismo. Si
             # no se persiste, un reinicio lo pone a `None` y el primer ciclo
             # de reconciliacion vuelve a notificar un problema que ya se
@@ -346,6 +374,8 @@ class Engine:
         # El informe del agente cuesta tokens y minutos; perderlo en un
         # reinicio significa volver a investigar lo mismo.
         self._persistir(incident)
+        self._evento(incident, "diagnosticado",
+                     f"{'con causa' if incident.root_cause else 'sin causa'} · confianza {incident.confidence or '—'}")
 
         if incident.notified_at is not None:
             self._notify(incident, update=True)
@@ -398,6 +428,7 @@ class Engine:
 
         for incident in resueltos:
             self._persistir(incident)
+            self._evento(incident, "resuelto", "sin senales")
 
         # Los que ahora merecen aviso, lo reciben. Fuera del lock: notificar
         # puede tardar y no queremos bloquear la ingesta mientras tanto.
@@ -422,13 +453,19 @@ class Engine:
                 key=lambda i: (-i.severity.rank, i.opened_at),
             )
 
-    def acknowledge(self, incident_id: str) -> Incident | None:
+    def acknowledge(self, incident_id: str, *, por: str = "api") -> Incident | None:
         encontrado: Incident | None = None
+        primera_vez = False
         with self._lock:
             for incident in self._incidents.values():
                 if incident.id == incident_id:
                     incident.state = IncidentState.ACKNOWLEDGED
                     incident.updated_at = _now()
+                    # La PRIMERA vez es la que mide el MTTA; pulsar otra vez
+                    # «lo veo» no puede mover la hora.
+                    if incident.acknowledged_at is None:
+                        incident.acknowledged_at = incident.updated_at
+                        primera_vez = True
                     encontrado = incident
                     break
         # El acuse de recibo es de lo que MAS importa conservar: significa que
@@ -436,4 +473,74 @@ class Engine:
         # es la forma mas rapida de que deje de mirar.
         if encontrado is not None:
             self._persistir(encontrado)
+            if primera_vez:
+                self.stats["acknowledged"] += 1
+                self._evento(encontrado, "reconocido", por)
         return encontrado
+
+    def feedback(self, incident_id: str, *, por: str = "api", causa: str | None = None,
+                 causa_real: str | None = None, util: bool | None = None) -> Incident | None:
+        """Lo que dice la persona del incidente (B-46). Vale tambien para uno ya resuelto.
+
+        El feedback llega a menudo despues del cierre —se mira el aviso con
+        calma al dia siguiente—, asi que si no esta en memoria se busca en el
+        almacen.
+        """
+        if causa is not None and causa not in CAUSAS:
+            raise ValueError(f"causa debe ser una de {CAUSAS}")
+        nuevo: dict[str, object] = {}
+        if causa is not None:
+            nuevo["causa"] = causa
+        if causa_real:
+            nuevo["causa_real"] = " ".join(causa_real.split())[:500]
+            nuevo["causa"] = "incorrecta"
+        if util is not None:
+            nuevo["util"] = bool(util)
+        if not nuevo:
+            return None
+
+        with self._lock:
+            incident = next((i for i in self._incidents.values() if i.id == incident_id), None)
+            if incident is not None:
+                incident.feedback = {**incident.feedback, **nuevo, "por": por, "cuando": _now().isoformat()}
+                incident.updated_at = _now()
+        if incident is None and self._store is not None:
+            incident = self._store.obtener(incident_id)  # type: ignore[union-attr]
+            if incident is not None:
+                incident.feedback = {**incident.feedback, **nuevo, "por": por, "cuando": _now().isoformat()}
+        if incident is None:
+            return None
+        self._persistir(incident)
+        self.stats["feedback"] += 1
+        self._evento(incident, "feedback", ", ".join(f"{k}={v}" for k, v in nuevo.items()) + f" · {por}")
+        return incident
+
+    def escalate(self) -> list[Incident]:
+        """Vuelve a avisar de los `page` que nadie ha reconocido (B-47). Apagado si `escalar_tras_s` es 0."""
+        if self._escalar_tras is None:
+            return []
+        ahora = _now()
+        debidos: list[Incident] = []
+        with self._lock:
+            for incident in self._incidents.values():
+                if (incident.severity is not Severity.PAGE or incident.state is not IncidentState.OPEN
+                        or incident.is_symptom or incident.notified_at is None
+                        or incident.escalations >= self._escalados_max):
+                    continue
+                # Cada escalado espera su propio plazo desde el anterior.
+                if ahora - incident.notified_at >= self._escalar_tras * (incident.escalations + 1):
+                    incident.escalations += 1
+                    incident.updated_at = ahora
+                    debidos.append(incident)
+        for incident in debidos:
+            self.stats["escalations"] += 1
+            self._persistir(incident)
+            minutos = int((ahora - incident.notified_at).total_seconds() // 60)  # type: ignore[operator]
+            self._evento(incident, "escalado", f"aviso {incident.escalations} · {minutos} min sin acuse")
+            self._notify(incident, update=False, escalado=True)
+        return debidos
+
+    def timeline(self, incident_id: str) -> list[dict]:
+        if self._store is None:
+            return []
+        return self._store.linea_de_tiempo(incident_id)  # type: ignore[union-attr]

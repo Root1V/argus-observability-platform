@@ -73,7 +73,27 @@ CREATE TABLE IF NOT EXISTS incidentes (
 CREATE INDEX IF NOT EXISTS idx_huella   ON incidentes(huella);
 CREATE INDEX IF NOT EXISTS idx_estado   ON incidentes(estado);
 CREATE INDEX IF NOT EXISTS idx_abierto  ON incidentes(abierto_en);
+
+-- B-49: la linea de tiempo. Una fila por cosa que le pasa al incidente, con la
+-- hora del RELOJ DEL ALERT-BUS en todas. `opened_at` es del emisor y puede ir
+-- por detras de `notified_at` (B-34); medir MTTA o MTTR restando horas de dos
+-- relojes daria tiempos negativos. Aqui todos los `cuando` son del mismo.
+CREATE TABLE IF NOT EXISTS eventos (
+    incidente   TEXT NOT NULL,
+    huella      TEXT NOT NULL,
+    tipo        TEXT NOT NULL,
+    cuando      TEXT NOT NULL,
+    detalle     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_eventos_incidente ON eventos(incidente);
+CREATE INDEX IF NOT EXISTS idx_eventos_cuando    ON eventos(cuando);
 """
+
+# Los tipos de evento, en el orden del ciclo de vida. Cerrado a proposito: un
+# indicador que cuenta `reconocido` no puede perder los que alguien escribio
+# `acusado`.
+TIPOS_DE_EVENTO = ("abierto", "notificado", "escalado", "reconocido", "diagnosticado",
+                   "feedback", "resuelto")
 
 
 def _migrar_si_hace_falta(con: sqlite3.Connection) -> int:
@@ -163,7 +183,50 @@ class IncidentStore:
         except Exception as exc:  # noqa: BLE001
             log.error("store.write_failed", extra={"huella": incidente.fingerprint, "error": str(exc)})
 
+    def registrar_evento(self, incidente: Incident, tipo: str, cuando: datetime, detalle: str = "") -> None:
+        """Una entrada de la linea de tiempo. Nunca levanta."""
+        if not self.disponible:
+            return
+        if tipo not in TIPOS_DE_EVENTO:
+            raise ValueError(f"tipo de evento desconocido: {tipo}")
+        try:
+            with self._lock:
+                self._con.execute(
+                    "INSERT INTO eventos (incidente, huella, tipo, cuando, detalle) VALUES (?, ?, ?, ?, ?)",
+                    (incidente.id, incidente.fingerprint, tipo, cuando.isoformat(), detalle[:500]),
+                )
+                self._con.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.error("store.event_failed", extra={"incidente": incidente.id, "tipo": tipo, "error": str(exc)})
+
     # --- Lectura -------------------------------------------------------------
+
+    def linea_de_tiempo(self, incidente_id: str) -> list[dict]:
+        """Los eventos de un incidente, en orden."""
+        if not self.disponible:
+            return []
+        try:
+            with self._lock:
+                filas = self._con.execute(
+                    "SELECT tipo, cuando, detalle FROM eventos WHERE incidente = ? ORDER BY cuando, rowid",
+                    (incidente_id,),
+                ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            log.error("store.read_failed", extra={"error": str(exc)})
+            return []
+        return [{"tipo": t, "cuando": c, "detalle": d} for t, c, d in filas]
+
+    def obtener(self, incidente_id: str) -> Incident | None:
+        """Un incidente por id, abierto o resuelto. El feedback llega a menudo despues del cierre."""
+        if not self.disponible:
+            return None
+        try:
+            with self._lock:
+                fila = self._con.execute("SELECT documento FROM incidentes WHERE id = ?", (incidente_id,)).fetchone()
+            return Incident.model_validate_json(fila[0]) if fila else None
+        except Exception as exc:  # noqa: BLE001
+            log.error("store.read_failed", extra={"error": str(exc)})
+            return None
 
     def abiertos(self) -> Iterator[Incident]:
         """Los que estaban abiertos al apagarse. Lo que se carga al arrancar.

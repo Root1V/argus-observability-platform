@@ -165,6 +165,9 @@ class Historia(BaseModel):
     # huellas distintas, asi que un top-N de similares devolveria 468 copias
     # del mismo error como 468 precedentes.
     causas_anteriores: list[str] = Field(default_factory=list)
+    # B-46: las que una persona confirmo o escribio desde el aviso. Van primero
+    # en `causas_anteriores`; esta lista dice cuales son.
+    causas_confirmadas: list[str] = Field(default_factory=list)
 
     # Lo mismo contado desde las TRAZAS, que no se pisan. Es la fuente que
     # manda para «¿es nuevo?»: el almacen de incidentes guardo hasta D-133 una
@@ -396,11 +399,16 @@ class Precedente(BaseModel):
     # memoria aunque X lo dijera una regla, y quien lo lea sabe de donde sale.
     causa: str | None = None
     resuelto: bool = True
+    # B-46: si una PERSONA la confirmo desde el aviso, o escribio la real. Es
+    # la diferencia entre memoria y rumor: una causa de L3 sin confirmar puede
+    # estar mal y repetirse en cada incidente de la misma clase.
+    confirmada: bool = False
 
     def resumen(self) -> str:
         linea = f"{self.dia} · {self.componente} · {self.incidentes} incidente(s) de {self.clase}"
         if self.causa:
-            linea += f" — L3 anoto, sin confirmar: {self.causa[:160]}"
+            origen = "confirmada por una persona" if self.confirmada else "L3 anoto, sin confirmar"
+            linea += f" — {origen}: {self.causa[:160]}"
         return linea
 
 
@@ -530,11 +538,15 @@ class Expediente(BaseModel):
                 linea += f", el ultimo el {h.ultima_vez:%Y-%m-%d %H:%M}Z"
             partes = [linea]
             for causa in h.causas_anteriores[:MAX_HISTORIA]:
-                # Hoy toda causa guardada la escribio L3: ninguna persona anota
-                # causas. Dicho asi para que nadie —ni un modelo— lea un
-                # diagnostico anterior como un hecho. El 26/10 L4 repitio una
-                # causa equivocada que L3 habia anotado con el defecto de D-145.
-                partes.append(f"  L3 anoto antes, sin confirmar: {causa}")
+                # Se dice quien la escribio para que nadie —ni un modelo— lea
+                # un diagnostico anterior de L3 como un hecho. El 26/10 L4
+                # repitio una causa equivocada que L3 habia anotado con el
+                # defecto de D-145. Desde B-46 una persona puede confirmarla
+                # o escribir la real desde el aviso, y eso si es un hecho.
+                if causa in h.causas_confirmadas:
+                    partes.append(f"  una persona confirmo antes: {causa}")
+                else:
+                    partes.append(f"  L3 anoto antes, sin confirmar: {causa}")
             bloques.append("HISTORIA\n" + "\n".join(partes))
 
         a = self.alcance

@@ -339,11 +339,17 @@ def _historia(exp: Expediente, historico: list[dict[str, Any]]) -> Historia:
     # repetir: tres incidentes con la misma causa anotada son una pista, no
     # tres.
     vistas: set[str] = set()
+    confirmadas: list[str] = []
+    sin_confirmar: list[str] = []
     for d in sorted(propios, key=lambda d: str(d.get("opened_at") or ""), reverse=True):
-        causa = causa_original(d.get("root_cause"))
+        causa, confirmada = _causa_con_feedback(d)
         if causa and causa not in vistas and d.get("id") != exp.incidente_id:
             vistas.add(causa)
-            h.causas_anteriores.append(causa)
+            (confirmadas if confirmada else sin_confirmar).append(causa)
+    # Las confirmadas por una persona primero (B-46): son las que la regla
+    # «ya paso» cita, y una causa descartada ya no llega aqui.
+    h.causas_anteriores = confirmadas + sin_confirmar
+    h.causas_confirmadas = confirmadas
     return h
 
 
@@ -426,20 +432,42 @@ def _memoria(exp: Expediente, historico: list[dict[str, Any]], abierto: datetime
         if cuando is None or cuando >= abierto:
             continue
         clave = (str(d.get("component") or ""), f"{cuando:%Y-%m-%d}")
-        e = episodios.setdefault(clave, {"n": 0, "causa": None, "cuando_causa": None, "abiertos": 0})
+        e = episodios.setdefault(clave, {"n": 0, "causa": None, "cuando_causa": None, "abiertos": 0,
+                                         "confirmada": False})
         e["n"] += 1
         if d.get("state") != "resolved":
             e["abiertos"] += 1
-        if (causa := causa_original(d.get("root_cause"))) and (e["cuando_causa"] is None or cuando > e["cuando_causa"]):
-            e["causa"], e["cuando_causa"] = causa, cuando
+        causa, confirmada = _causa_con_feedback(d)
+        # Una confirmada gana a cualquier anotada; entre iguales, la mas reciente.
+        if causa and ((confirmada, cuando) > (e["confirmada"], e["cuando_causa"] or datetime.min.replace(tzinfo=UTC))):
+            e["causa"], e["cuando_causa"], e["confirmada"] = causa, cuando, confirmada
     precedentes = [
-        Precedente(componente=c, clase=clase, dia=dia, incidentes=e["n"], causa=e["causa"], resuelto=not e["abiertos"])
+        Precedente(componente=c, clase=clase, dia=dia, incidentes=e["n"], causa=e["causa"],
+                   resuelto=not e["abiertos"], confirmada=e["confirmada"])
         for (c, dia), e in episodios.items()
     ]
-    # Con causa primero —es lo que alguien puede usar—, y dentro de eso lo
-    # mas reciente y el mismo componente antes que sus vecinos.
-    precedentes.sort(key=lambda p: (p.causa is None, p.componente != exp.componente, _invertir(p.dia)))
+    # Confirmada primero, despues con causa —es lo que alguien puede usar—, y
+    # dentro de eso lo mas reciente y el mismo componente antes que sus vecinos.
+    precedentes.sort(key=lambda p: (not p.confirmada, p.causa is None, p.componente != exp.componente,
+                                    _invertir(p.dia)))
     return precedentes[:MAX_MEMORIA]
+
+
+def _causa_con_feedback(d: dict[str, Any]) -> tuple[str | None, bool]:
+    """La causa de un incidente del historico y si una persona la confirmo (B-46).
+
+    - Escribio la real → esa, confirmada.
+    - Dijo «correcta» → la anotada, confirmada.
+    - Dijo «incorrecta» sin dar la real → ninguna: repetir como precedente una
+      causa que alguien ya descarto es justo el rumor que esto quiere cortar.
+    """
+    fb = d.get("feedback") or {}
+    if fb.get("causa_real"):
+        return str(fb["causa_real"]), True
+    anotada = causa_original(d.get("root_cause"))
+    if fb.get("causa") == "incorrecta":
+        return None, False
+    return anotada, bool(anotada) and fb.get("causa") == "correcta"
 
 
 def _invertir(dia: str) -> str:

@@ -29,6 +29,28 @@ from .render import cuerpo, resumen, titular
 
 log = logging.getLogger("alert_bus.sinks.telegram")
 
+
+def botones(incident: Incident) -> dict[str, Any] | None:
+    """Los botones del aviso (B-46, B-47). Cada uno desaparece cuando ya se uso.
+
+    `callback_data` admite 64 bytes: `accion:id`, con ids de 12 caracteres, va
+    sobrado. Lo que se pulsa lo recibe `TelegramEntrada`, que comprueba que
+    venga de este chat antes de hacer nada.
+    """
+    fila1: list[dict[str, str]] = []
+    fila2: list[dict[str, str]] = []
+    fb = incident.feedback or {}
+    if incident.acknowledged_at is None:
+        fila1.append({"text": "✋ Lo veo", "callback_data": f"ack:{incident.id}"})
+    if incident.root_cause and "causa" not in fb:
+        fila1.append({"text": "👍 Causa correcta", "callback_data": f"ok:{incident.id}"})
+        fila1.append({"text": "👎 Incorrecta", "callback_data": f"no:{incident.id}"})
+    if "util" not in fb:
+        fila2.append({"text": "👌 Útil", "callback_data": f"util:{incident.id}"})
+        fila2.append({"text": "🔇 Ruido", "callback_data": f"ruido:{incident.id}"})
+    filas = [f for f in (fila1, fila2) if f]
+    return {"inline_keyboard": filas} if filas else None
+
 class TelegramSink:
     """Envia avisos a un chat de Telegram y los ACTUALIZA en el sitio.
 
@@ -65,37 +87,70 @@ class TelegramSink:
     def send(self, incident: Incident, *, update: bool) -> None:
         clave = incident.thread_key or incident.id
         texto = self._render(incident)
+        teclado = botones(incident)
 
         if update and (message_id := self._mensajes.get(clave)):
-            if self._editar(message_id, texto):
+            if self._editar(message_id, texto, teclado):
                 return
             # No se pudo editar —mensaje muy viejo, borrado, o sin cambios—.
             # Mandar uno nuevo es peor que editar y mucho mejor que perder el
             # informe del agente.
             log.warning("telegram.edit_failed", extra={"incident": incident.id})
 
-        if (message_id := self._enviar(texto)) is not None:
+        if (message_id := self._enviar(texto, teclado)) is not None:
             self._mensajes[clave] = message_id
 
-    def _enviar(self, texto: str) -> int | None:
-        respuesta = self._llamar("sendMessage", {
+    def actualizar(self, message_id: int, incident: Incident) -> bool:
+        """Rehace un mensaje concreto tras pulsar un boton (lo llama `TelegramEntrada`).
+
+        Por `message_id` y no por `thread_key`: tras un reinicio el sink no
+        recuerda que mensaje era de que incidente, pero el boton pulsado si lo
+        sabe, porque viene en la propia pulsacion.
+        """
+        self._mensajes[incident.thread_key or incident.id] = message_id
+        return self._editar(message_id, self._render(incident), botones(incident))
+
+    def preguntar(self, texto: str, *, responder_a: int | None = None) -> int | None:
+        """Un mensaje que pide respuesta (la causa real, tras pulsar «incorrecta»)."""
+        datos: dict[str, Any] = {"chat_id": self._chat, "text": texto,
+                                 "reply_markup": {"force_reply": True, "input_field_placeholder": "La causa real…"}}
+        if responder_a is not None:
+            datos["reply_to_message_id"] = responder_a
+        respuesta = self._llamar("sendMessage", datos, silencioso=True)
+        return (respuesta or {}).get("result", {}).get("message_id")
+
+    def decir(self, texto: str, *, responder_a: int | None = None) -> None:
+        datos: dict[str, Any] = {"chat_id": self._chat, "text": texto}
+        if responder_a is not None:
+            datos["reply_to_message_id"] = responder_a
+        self._llamar("sendMessage", datos, silencioso=True)
+
+    def _enviar(self, texto: str, teclado: dict[str, Any] | None = None) -> int | None:
+        datos: dict[str, Any] = {
             "chat_id": self._chat,
             "text": texto,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
-        })
+        }
+        if teclado:
+            datos["reply_markup"] = teclado
+        respuesta = self._llamar("sendMessage", datos)
         if respuesta is None:
             return None
         return respuesta.get("result", {}).get("message_id")
 
-    def _editar(self, message_id: int, texto: str) -> bool:
-        respuesta = self._llamar("editMessageText", {
+    def _editar(self, message_id: int, texto: str, teclado: dict[str, Any] | None = None) -> bool:
+        datos: dict[str, Any] = {
             "chat_id": self._chat,
             "message_id": message_id,
             "text": texto,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
-        }, silencioso=True)
+            # Sin teclado se manda uno vacio: es lo que QUITA los botones ya
+            # usados. Omitir el campo los dejaria donde estaban.
+            "reply_markup": teclado or {"inline_keyboard": []},
+        }
+        respuesta = self._llamar("editMessageText", datos, silencioso=True)
         return respuesta is not None
 
     def _llamar(

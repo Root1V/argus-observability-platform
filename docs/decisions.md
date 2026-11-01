@@ -8417,3 +8417,66 @@ por Axonium. Al volver a listar ese mismo día, el cliente de Argus ya ve `von-d
 (clasificación zero-shot, 512 tokens de contexto). `laya-decide` no sale en
 el listado, pero llamado por su nombre responde: decisión tipada (`choice`,
 `noul`, `score`) con probabilidades y confianza, enrutada a su modelo `english`.
+
+---
+
+## D-158 · B-46, B-47 y B-49: la persona entra en el ciclo del incidente
+
+**Estado**: 🧪 Implementado y probado (900 pruebas) · despliegue pendiente: el Mac se durmió en batería durante la construcción
+
+**Por qué estos tres juntos** (D-157): sin feedback no se puede medir si Argus
+acierta (B-46); sin la hora del acuse no hay MTTA (B-47); y sin una línea de
+tiempo con un solo reloj no hay MTTR fiable (B-49). Son la base del cuadro de
+indicadores (B-48) y de poder probar Laya y Von con datos reales (B-54).
+
+**B-49, la línea de tiempo**: una tabla `eventos` en el almacén del `alert-bus`
+con un vocabulario cerrado (`abierto`, `notificado`, `escalado`, `reconocido`,
+`diagnosticado`, `feedback`, `resuelto`). Todas las horas son **del reloj del
+`alert-bus`**: `opened_at` es del emisor y puede ir por detrás de
+`notified_at` (B-34), así que restar horas de dos relojes daría tiempos
+negativos. Se lee en `GET /incidents/{id}/timeline`.
+
+**B-47, el acuse y el escalado**:
+
+- Botón «✋ Lo veo» en el aviso de Telegram, y `acknowledged_at` en el
+  incidente. Cuenta **la primera vez**: pulsar otra vez no mueve el MTTA.
+- Escalado: vuelve a avisar de un `page` sin acuse, con un aviso **nuevo**
+  (Telegram no suena al editar), cada `ALERTBUS_ESCALAR_TRAS_S` y como mucho
+  `ALERTBUS_ESCALADOS_MAX` veces. **Viene apagado** (`0`) a propósito: mientras
+  los avisos que se reabren solos (B-21) sigan siendo ruido, escalar
+  duplicaría justo eso. No escala lo reconocido ni los síntomas.
+
+**B-46, el feedback**:
+
+- Botones «👍 Causa correcta / 👎 Incorrecta» (solo si hay causa) y «👌 Útil /
+  🔇 Ruido». Al pulsar «incorrecta», el bot pregunta por la causa real, y la
+  respuesta a ese mensaje queda anotada. Cada botón desaparece una vez usado, y
+  el aviso muestra una sección ESTADO con lo que hizo la persona.
+- Vale también **después del cierre**: el aviso se mira a menudo al día
+  siguiente, así que el feedback de un incidente resuelto se busca en el
+  almacén.
+- `POST /incidents/{id}/feedback` hace lo mismo por API, con token, porque
+  acaba en la memoria del agente.
+- **Lo que paga**: la memoria de L3 deja de repetir rumores. Una causa
+  confirmada, o la real que escribió la persona, va primero y se presenta como
+  «una persona confirmó»; una causa marcada como incorrecta **no vuelve a
+  citarse** como precedente. La confianza de la regla «ya pasó» se queda en
+  media aunque esté confirmada: lo que coincide es la firma, no el contexto. El
+  banco no cambia (2 de 2 y 7 de 9).
+
+**La escucha de Telegram tiene tres cerrojos**: solo atiende el chat
+configurado (una pulsación de otro chat se ignora y se cuenta), solo acepta las
+cinco acciones conocidas sobre incidentes que existan, y solo pide pulsaciones y
+mensajes (`allowed_updates`). Va por long-polling (`getUpdates`) porque un
+webhook necesitaría una URL pública y el `alert-bus` vive detrás de un router.
+Antes de activarla se comprobó que el bot (`argus_avisos_bot`) no tiene webhook,
+ni actualizaciones pendientes, ni otro proceso leyéndolo.
+
+**El esquema compartido** (`argus-obs-schemas`) gana tres campos opcionales,
+`acknowledged_at`, `escalations` y `feedback`, compatibles con lo anterior.
+Igual que el atributo de convenciones de D-155, sale en la próxima publicación
+conjunta de las librerías, no ahora.
+
+**Lo que falta**: desplegar y probarlo con un aviso real, pulsando los botones.
+Eso necesita a una persona, y es la verificación que de verdad cuenta (un
+servidor falso de Telegram solo prueba que se le llama).

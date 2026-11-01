@@ -656,9 +656,13 @@ def _ya_paso_y_alguien_anoto_la_causa(exp: Expediente) -> tuple[str, Confianza] 
     """
     if not exp.historia.causas_anteriores:
         return None
+    causa = exp.historia.causas_anteriores[0]
+    # Confirmada o no, la confianza se queda en media: lo que coincide es la
+    # firma, no el contexto, y la misma firma puede tener otra causa esta vez.
+    quien = "una persona confirmo" if causa in exp.historia.causas_confirmadas else "se anoto"
     return (
         f"Ya paso: esta firma ha abierto {exp.historia.veces} incidentes y en uno "
-        f"anterior se anoto «{exp.historia.causas_anteriores[0]}». Confianza media "
+        f"anterior {quien} «{causa}». Confianza media "
         "porque la firma coincide, no el contexto.",
         "media",
     )

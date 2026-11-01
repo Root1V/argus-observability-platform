@@ -596,3 +596,17 @@ def test_la_causa_anotada_se_desenvuelve_hasta_la_original() -> None:
     assert causa_original(dos) == original
     assert causa_original(original) == original
     assert causa_original(None) is None
+
+
+def test_la_memoria_prefiere_la_causa_confirmada_por_una_persona() -> None:
+    """B-46: una causa de L3 sin confirmar puede estar mal; la que confirmo o escribio una persona, no."""
+    from diagnose.recoleccion import _causa_con_feedback
+
+    assert _causa_con_feedback({"root_cause": "el destino cayo"}) == ("el destino cayo", False)
+    assert _causa_con_feedback({"root_cause": "el destino cayo", "feedback": {"causa": "correcta"}}) == \
+        ("el destino cayo", True)
+    assert _causa_con_feedback({"root_cause": "el destino cayo", "feedback": {"causa": "incorrecta"}}) == \
+        (None, False)
+    assert _causa_con_feedback({"root_cause": "el destino cayo",
+                                "feedback": {"causa": "incorrecta", "causa_real": "certificado caducado"}}) == \
+        ("certificado caducado", True)
