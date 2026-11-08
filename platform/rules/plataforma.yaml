@@ -38,6 +38,14 @@ groups:
       - record: argus:observador_despierto
         expr: vector(1)
 
+      # Que fraccion de las ultimas 6 h estuvo despierto el observador: los
+      # latidos contados contra los que tocarian (6 h a uno cada 15 s, el
+      # intervalo de ESTE grupo; si cambia, cambia el 1440). La usan las reglas
+      # que comparan una ventana de horas contra una semana (F5-03): con medio
+      # dia de sueno dentro, la ventana corta mide media ventana.
+      - record: argus:observador_despierto:fraccion6h
+        expr: count_over_time(argus:observador_despierto[6h]) / 1440
+
       # ---------------------------------------------------------------------
       # Un solo fallo de exportacion sostenido ya es telemetria perdida: la
       # cola reintenta, pero un 401 no es reintentable y se descarta. No hay

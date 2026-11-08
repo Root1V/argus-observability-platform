@@ -34,7 +34,7 @@ abierto, `X-<nn>` para deuda técnica y cosas descubiertas sobre la marcha.
 | **F2** | Detección en tiempo real y alertas | ✅ | 10/10 |
 | **F3** | Diagnóstico L3 y memoria de incidentes | ✅ | 8/8 |
 | **F4** | Investigación agéntica L4 | 🚧 | 5/7 |
-| **F5** | Calidad, coste y deriva | 🚧 | 2/8 |
+| **F5** | Calidad, coste y deriva | 🚧 | 3/8 |
 | **F6** | Explicabilidad, postmortem y L5 | ⏳ | 0/7 |
 | **F7** | Resto del portafolio | ⏳ | 0/5 |
 
@@ -197,7 +197,7 @@ notificaciones**, y un error llega al aviso en **120 ms (p95)**.
 |---|---|---|---|
 | `F5-01` | ✅ | `evaluator`: evals online sobre trazas muestreadas | **Hecho (D-154)**: servicio `evaluator` desplegado; cuatro evaluaciones deterministas (rechazo, truncado, abandono, vacía) sobre todos los spans GenAI → `argus.evaluaciones` y `argus_eval_results_total`. `desconocido` ≠ `pasa`: Centinela no trae `finish_reasons`. La muestra (errores + P99 + 5 %) espera a las caras de F5-02 |
 | `F5-02` | ✅ | Groundedness, consistencia, formato, rechazo | **Hecho (D-156)** sobre nuestro propio juez de L3 (hasta encender Langfuse, B-45): formato con Pydantic sobre el dictamen crudo; groundedness con fragmento literal verificado por código (banco: 11/11 con su expediente, 0/11 con el equivocado); consistencia entre juicios del mismo episodio (aún sin caso real); rechazo en F5-01 |
-| `F5-03` | ⏳ | Alerta por **condición conjunta** deriva + caída de eval | Deriva sola es falsa alarma |
+| `F5-03` | ✅ | Alerta por **condición conjunta** deriva + caída de eval | **Hecho (D-161)**: `platform/rules/calidad.yaml`, dos registros (`argus:eval_caida`, `argus:deriva_entrada`) y una sola alerta, con volumen mínimo y la guarda de observador despierto. Probada con `vmalert-tool` (5 casos, `platform/scripts/probar-reglas.sh`). Depende de que vmalert esté al día: ver `B-21` |
 | `F5-04` | ⏳ | `drift-monitor` con Evidently | |
 | `F5-05` | ⏳ | NannyML: rendimiento **sin etiquetas de verdad** | En scoring la verdad llega semanas después |
 | `F5-06` | ⏳ | Agente de **FinOps**: atribución por app/funcionalidad/entorno | Las facturas suben aunque bajen los precios |
@@ -318,7 +318,7 @@ Ideas evaluadas que **aún no están comprometidas**. Añadir aquí lo que surja
 | `B-13` | ❌ | `routing` connector para separar GenAI | Partiría las trazas — D-006 |
 | `B-19` | ⏳ | **Cola durable de notificaciones** | Hoy una notificación que falla se pierde. Trae su propia pregunta —qué hacer con un aviso de hace ocho horas cuando el incidente ya se resolvió— y merece decidirse a propósito. `dispatch.send_failed` es la señal mientras tanto — D-080 |
 | `B-20` | ✅ | **El canario reconcilia en vez de recordar** | Cerrado: cada fallo confirmado se reenvía cada ciclo y el receptor expira por `last_seen_at` — D-100 |
-| `B-21` | ⏳ | **El desfase de vmalert al dormir la máquina** | **Es una decisión, no trabajo**: informar aguas arriba, o que el vigilante reinicie vmalert al detectarlo. A favor de automatizar: la detección funciona y la reparación es reiniciar un contenedor, reversible y acotado — D-091, D-101 |
+| `B-21` | ⏳ | **El desfase de vmalert al dormir la máquina** | **Es una decisión, no trabajo**: informar aguas arriba, o que el vigilante reinicie vmalert al detectarlo. A favor de automatizar: la detección funciona y la reparación es reiniciar un contenedor, reversible y acotado — D-091, D-101. **Visto otra vez el 08/11 (D-161)**: 3,9 días de atraso y 59 h con el burn-rate de SLO y las guardas inertes; F5-03 depende de esto. Con el Mac suspendiéndose como condición del piloto, la balanza va hacia automatizar el reinicio |
 | `B-22` | ⏳ | **Modo consola para verificaciones en vivo** | Verificando la reconciliación provoqué **4 notificaciones reales** de Telegram. Hoy no vuelve a pasar por suerte, no por diseño: una verificación no debería poder despertar a nadie — D-100 |
 | `B-23` | ⏳ | **Validar los nombres que van a los CANALES, no solo a `docs/`** | `B-18` cerró el hueco para `docs/**.md`, y los tres nombres inventados que Prometheus implementó se los mandamos por el canal, que vive fuera del repositorio y no se comprueba — D-067, D-081 |
 | `B-24` | ⏳ | **`test_un_canal_caido_no_impide_que_los_demas_reciban` es una carrera** | Pasa en solitario y falla en la suite completa: fija un límite de **1,0 s de reloj de pared** con un worker, y bajo carga el canal sano no llega a planificarse. La propiedad es correcta —el reintento se reprograma, no duerme—; lo que hay que cambiar es la medición, de tiempo a **orden**. Un test inestable en el camino de notificación enseña a ignorar el rojo, que es el único sitio donde eso no se puede permitir |

@@ -8620,3 +8620,59 @@ toca el sistema y la energía del Mac):
 
 Mientras tanto, los indicadores de D-159 ya apartan estos casos como desfase de
 reloj en vez de mezclarlos con el MTTD.
+
+---
+
+## D-161 · F5-03: la alerta de calidad solo salta por la condición conjunta, y depende de que vmalert esté al día
+
+**Estado**: ✅ Desplegado el 08/11 · comportamiento probado con `vmalert-tool` (5 casos) · reglas sanas en producción
+
+**La regla de oro** (PLAN §2.9): deriva sola es falsa alarma. `platform/rules/calidad.yaml`
+tiene dos registros y **una sola alerta**:
+
+- `argus:eval_caida`: la tasa de suspensos de una evaluación en las últimas 6 h
+  supera la de su semana en 10 puntos **y** el doble, con al menos 10
+  evaluaciones. `desconocido` no cuenta como evaluado (D-154).
+- `argus:deriva_entrada`: los tokens de entrada por llamada de las últimas 6 h
+  se alejan un 50 % de la media semanal, hacia arriba o hacia abajo, con al menos
+  20 llamadas. Es la deriva que se puede medir hoy sin contenido; F5-04
+  (Evidently) añadirá otras.
+- `ArgusEvalCaeConDerivaDeEntrada` (ticket, `eval_drop`): las dos en la misma
+  app, y solo si el observador estuvo despierto al menos el 80 % de las 6 h
+  (`argus:observador_despierto:fraccion6h`, nuevo en `plataforma.yaml`).
+
+**Pensada para un portátil que se suspende**: ventanas de 6 h contra 7 días
+porque el portafolio hace unas 20 llamadas de chat al día; volumen mínimo en cada
+mitad para que un hueco no parezca un cambio; y la guarda de despierto, porque
+una ventana con medio día de sueño mide media ventana.
+
+**Probado con `vmalert-tool unittest`**, la herramienta oficial y de la misma
+versión que nuestro vmalert (`platform/scripts/probar-reglas.sh`): avisa con las
+dos a la vez, y **no** avisa con solo una, con el observador dormido media
+ventana ni con menos de 10 evaluaciones. La primera versión de las pruebas iba a
+un punto cada 10 minutos, y los registros que dependen de otro registro salían
+vacíos (la consulta mira 5 minutos atrás). En producción el grupo evalúa cada
+minuto, y las pruebas ahora también.
+
+**En producción, al desplegar**, las guardas ya hacían su trabajo con datos reales:
+el groundedness del juez suspendía el 33 % en 6 h frente al 9,6 % de la semana,
+pero eran 3 evaluaciones; y la entrada del gateway de Prometheus traía 672 tokens
+por llamada frente a 252 (×2,7), pero con 19 llamadas. Ninguna de las dos avisó.
+También se vio que Prometheus ya manda el motivo real de fin (`PRM-282`): 7
+`truncado: falla` y ningún `desconocido`.
+
+**Lo que destapó, y es más grave que F5-03**: la guarda no podía pasar nunca,
+porque el latido de vmalert **no estaba en el almacén**. Los grupos que llevaban
+días en marcha sellaban sus muestras con un reloj interno atrasado **3,9 días**,
+lo que había dormido el Mac. Es B-21 (D-087) activo: durante unas 59 horas (713
+fallos seguidos del vigilante) el burn-rate de SLO y la guarda de las alertas de
+ausencia estuvieron inertes. vmalert seguía diciendo «evaluando al día», porque
+lo mide desde dentro. Se reinició vmalert (el remedio de D-087) y el latido
+volvió, uno cada 15 s. Una búsqueda no encontró ningún arreglo aguas arriba para
+la suspensión: no hay versión que lo resuelva sola.
+
+**Consecuencia para F5-03**: tras un reinicio de vmalert la fracción de despierto
+tarda 5 h en pasar del 80 %, así que la alerta queda bloqueada ese rato. Es lo
+correcto, porque no hay 6 h de datos fiables. Pero mientras B-21 no se
+automatice, cada sueño largo vuelve a dejar la alerta sin poder disparar hasta
+que alguien reinicie vmalert.
