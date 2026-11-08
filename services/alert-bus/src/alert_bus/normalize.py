@@ -287,7 +287,14 @@ def signals_from_alertmanager(payload: dict[str, Any] | list[dict[str, Any]]) ->
         annotations = alert.get("annotations", {}) or {}
         name = labels.get("alertname", "alerta")
 
-        kind = SignalKind.ANOMALY if "anomal" in name.lower() else SignalKind.BURN_RATE
+        # Por el nombre de la regla, como la anomalia: `ArgusEvalCae…` es la
+        # condicion conjunta de F5-03 (calidad.yaml), una caida de evaluacion.
+        if "anomal" in name.lower():
+            kind = SignalKind.ANOMALY
+        elif "eval" in name.lower():
+            kind = SignalKind.EVAL_DROP
+        else:
+            kind = SignalKind.BURN_RATE
 
         # La etiqueta `severity` de la regla es intencion del autor, no ruido.
         # Sin leerla, toda alerta del camino templado se resolvia por tipo de

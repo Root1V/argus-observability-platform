@@ -58,7 +58,7 @@ def proporcion(si: int, total: int) -> dict[str, Any]:
 
 # Las alertas que manda vmalert (Alertmanager): su `opened_at` es la hora de
 # RECEPCION, porque no traen hora del span. Su deteccion se mide con `startsAt`.
-TEMPLADAS = ("burn_rate", "anomaly")
+TEMPLADAS = ("burn_rate", "anomaly", "eval_drop")
 
 
 def es_prueba(d: dict[str, Any]) -> bool:

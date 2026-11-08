@@ -1,0 +1,125 @@
+# Calidad de IA: la alerta por condicion CONJUNTA (F5-03, D-161).
+#
+# La regla de oro del PLAN (§2.9, §7.4c): **deriva sola es falsa alarma**. Que la
+# entrada cambie —prompts mas largos, otro tipo de peticion— no dice que algo
+# vaya mal; que las evaluaciones empeoren SIN que la entrada cambie puede ser
+# ruido de una muestra pequena. Lo que merece despertar a alguien es las dos
+# cosas a la vez en la misma app: algo distinto esta entrando y lo que sale es
+# peor.
+#
+# Por eso aqui hay DOS registros y UNA alerta. Cada mitad se guarda —es lo que
+# leera un panel, y lo que mirara F5-04 cuando traiga Evidently—, pero solo la
+# conjuncion avisa.
+#
+# Pensado para un portatil que se suspende (D-160): las ventanas son de 6 h
+# contra 7 dias porque el portafolio hace unas 20 llamadas de chat al dia y
+# una hora casi nunca tendria muestra; cada mitad exige un volumen minimo para
+# que un hueco no parezca un cambio; y la alerta exige que el observador haya
+# estado despierto al menos el 80 % de las ultimas 6 h, porque una ventana con
+# medio dia de sueno compara media ventana contra una semana entera.
+groups:
+  - name: argus.calidad
+    interval: 1m
+    rules:
+      # --- Mitad 1: caen las evaluaciones -------------------------------------
+      # Tasa de suspensos sobre lo EVALUADO (`pasa` + `falla`). `desconocido` no
+      # entra: un span sin el atributo que la evaluacion necesita no es ni
+      # bueno ni malo, y contarlo como cualquiera de los dos moveria la tasa
+      # por un cambio de instrumentacion (D-154).
+      - record: argus:eval_volumen:6h
+        expr: |
+          sum by (argus_eval_app, argus_eval_name) (
+            increase(argus_eval_results_total{argus_eval_result=~"pasa|falla"}[6h])
+          )
+
+      - record: argus:eval_fallo:ratio6h
+        expr: |
+          sum by (argus_eval_app, argus_eval_name) (
+            increase(argus_eval_results_total{argus_eval_result="falla"}[6h])
+          )
+          / argus:eval_volumen:6h
+
+      - record: argus:eval_fallo:ratio7d
+        expr: |
+          sum by (argus_eval_app, argus_eval_name) (
+            increase(argus_eval_results_total{argus_eval_result="falla"}[7d])
+          )
+          / sum by (argus_eval_app, argus_eval_name) (
+            increase(argus_eval_results_total{argus_eval_result=~"pasa|falla"}[7d])
+          )
+
+      # Cae si suspende al menos 10 puntos MAS que su semana Y al menos el
+      # doble. Las dos condiciones a la vez: con una tasa base del 1 %, «el
+      # doble» es un 2 % y no le importa a nadie; con una del 40 %, «+10 puntos»
+      # es poco. Y con menos de 10 evaluaciones en 6 h no se concluye nada.
+      # El valor es la tasa de las ultimas 6 h, para que el aviso pueda decirla.
+      - record: argus:eval_caida
+        expr: |
+          argus:eval_fallo:ratio6h
+            > (argus:eval_fallo:ratio7d + 0.10)
+          and argus:eval_fallo:ratio6h > 2 * argus:eval_fallo:ratio7d
+          and argus:eval_volumen:6h >= 10
+
+      # --- Mitad 2: cambia la entrada -----------------------------------------
+      # Hasta F5-04 (Evidently), la deriva medible hoy sin contenido: cuantos
+      # tokens de entrada trae cada llamada, por app. Un prompt que crece o
+      # encoge a la mitad es otra entrada aunque la ruta sea la misma.
+      - record: argus:llamadas:6h
+        expr: |
+          sum by (service_namespace) (
+            increase(gen_ai_client_token_usage_count{gen_ai_token_type="input"}[6h])
+          )
+
+      - record: argus:tokens_entrada_por_llamada:6h
+        expr: |
+          sum by (service_namespace) (
+            increase(gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[6h])
+          )
+          / argus:llamadas:6h
+
+      - record: argus:tokens_entrada_por_llamada:7d
+        expr: |
+          sum by (service_namespace) (
+            increase(gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[7d])
+          )
+          / sum by (service_namespace) (
+            increase(gen_ai_client_token_usage_count{gen_ai_token_type="input"}[7d])
+          )
+
+      # Deriva si las ultimas 6 h se alejan un 50 % de la semana, hacia arriba
+      # o hacia abajo, con al menos 20 llamadas. El valor es el cociente.
+      - record: argus:deriva_entrada
+        expr: |
+          (
+            argus:tokens_entrada_por_llamada:6h / argus:tokens_entrada_por_llamada:7d > 1.5
+            or
+            argus:tokens_entrada_por_llamada:6h / argus:tokens_entrada_por_llamada:7d < (1 / 1.5)
+          )
+          and argus:llamadas:6h >= 20
+
+      # --- La conjuncion ------------------------------------------------------
+      # Las dos mitades hablan de la app con etiquetas distintas
+      # (`argus_eval_app` la evaluacion, `service_namespace` el SDK), asi que
+      # se traen las dos a `service_namespace`, que es tambien la que el
+      # alert-bus usa para enrutar.
+      - alert: ArgusEvalCaeConDerivaDeEntrada
+        expr: |
+          max by (service_namespace) (
+            label_replace(argus:eval_caida, "service_namespace", "$1", "argus_eval_app", "(.+)")
+          )
+          and on (service_namespace)
+          max by (service_namespace) (argus:deriva_entrada)
+          and on () (argus:observador_despierto:fraccion6h > 0.8)
+        for: 15m
+        labels:
+          severity: ticket
+          service_name: calidad-ia
+        annotations:
+          summary: "{{ $labels.service_namespace }}: las evaluaciones empeoran a la vez que cambia la entrada"
+          description: >-
+            En las ultimas 6 h la tasa de suspensos de al menos una evaluacion
+            supera en 10 puntos y el doble la de la semana, y los tokens de
+            entrada por llamada se alejan un 50 % de su media semanal. Una sola
+            de las dos no avisa (F5-03). Mira `argus:eval_caida` y
+            `argus:deriva_entrada` para ver cual y cuanto.
+          runbook: docs/runbooks/calidad.md

@@ -272,3 +272,17 @@ def test_la_criticidad_sigue_acotando_lo_que_pide_la_regla(registry) -> None:
 
     (incidente,) = motor.open_incidents()
     assert incidente.severity.rank <= registry.get("llm-benchmark").severity_ceiling.rank
+
+
+def test_la_alerta_conjunta_de_calidad_es_una_caida_de_evaluacion() -> None:
+    """F5-03: `ArgusEvalCae…` entra como `eval_drop`, no como `burn_rate`."""
+    from alert_bus.normalize import signals_from_alertmanager
+    from argus_schemas import SignalKind
+
+    [senal] = signals_from_alertmanager([{
+        "labels": {"alertname": "ArgusEvalCaeConDerivaDeEntrada", "service_namespace": "demo",
+                   "service_name": "calidad-ia", "severity": "ticket"},
+        "startsAt": "2026-11-08T10:00:00Z",
+    }])
+    assert senal.kind is SignalKind.EVAL_DROP
+    assert senal.attributes["starts_at"] == "2026-11-08T10:00:00Z"

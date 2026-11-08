@@ -1,0 +1,116 @@
+# Pruebas de comportamiento de platform/rules/calidad.yaml (F5-03, D-161).
+# Series en la sintaxis compacta de vmalert-tool (`a+bxN`): un contador que
+# sube igual toda la semana y cambia de ritmo en las ultimas 6 h. Se ejecuta con
+# `platform/scripts/probar-reglas.sh`.
+#
+# Un punto por minuto, el intervalo del grupo en produccion. A 10 min por punto
+# los registros que dependen de otro registro salian vacios: la consulta
+# instantanea mira 5 min atras y el punto anterior quedaba fuera.
+rule_files:
+  - /rules/calidad.yaml
+evaluation_interval: 1m
+tests:
+  # Las dos a la vez: avisa
+  - interval: 1m
+    input_series:
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="pasa"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="falla"}'
+        values: '0+0x9719 0.5+0.5x360'
+      - series: 'gen_ai_client_token_usage_count{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'gen_ai_client_token_usage_sum{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1000x9719 9722000+3000x360'
+      - series: 'argus:observador_despierto:fraccion6h'
+        values: '1x10080'
+    alert_rule_test:
+      - eval_time: 7d
+        groupname: argus.calidad
+        alertname: ArgusEvalCaeConDerivaDeEntrada
+        exp_alerts:
+          - exp_labels:
+              alertgroup: argus.calidad
+              alertname: ArgusEvalCaeConDerivaDeEntrada
+              service_namespace: demo
+              severity: ticket
+              service_name: calidad-ia
+            exp_annotations:
+              summary: "demo: las evaluaciones empeoran a la vez que cambia la entrada"
+              description: "En las ultimas 6 h la tasa de suspensos de al menos una evaluacion supera en 10 puntos y el doble la de la semana, y los tokens de entrada por llamada se alejan un 50 % de su media semanal. Una sola de las dos no avisa (F5-03). Mira `argus:eval_caida` y `argus:deriva_entrada` para ver cual y cuanto."
+              runbook: docs/runbooks/calidad.md
+
+  # Solo caen las evaluaciones: no avisa
+  - interval: 1m
+    input_series:
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="pasa"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="falla"}'
+        values: '0+0x9719 0.5+0.5x360'
+      - series: 'gen_ai_client_token_usage_count{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'gen_ai_client_token_usage_sum{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1000x9719 9720000+1000x360'
+      - series: 'argus:observador_despierto:fraccion6h'
+        values: '1x10080'
+    alert_rule_test:
+      - eval_time: 7d
+        groupname: argus.calidad
+        alertname: ArgusEvalCaeConDerivaDeEntrada
+        exp_alerts: []
+
+  # Solo cambia la entrada: no avisa (deriva sola es falsa alarma)
+  - interval: 1m
+    input_series:
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="pasa"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="falla"}'
+        values: '0+0x9719 0+0x360'
+      - series: 'gen_ai_client_token_usage_count{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'gen_ai_client_token_usage_sum{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1000x9719 9722000+3000x360'
+      - series: 'argus:observador_despierto:fraccion6h'
+        values: '1x10080'
+    alert_rule_test:
+      - eval_time: 7d
+        groupname: argus.calidad
+        alertname: ArgusEvalCaeConDerivaDeEntrada
+        exp_alerts: []
+
+  # Las dos, pero el Mac durmio media ventana: no avisa
+  - interval: 1m
+    input_series:
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="pasa"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="falla"}'
+        values: '0+0x9719 0.5+0.5x360'
+      - series: 'gen_ai_client_token_usage_count{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'gen_ai_client_token_usage_sum{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1000x9719 9722000+3000x360'
+      - series: 'argus:observador_despierto:fraccion6h'
+        values: '0.5x10080'
+    alert_rule_test:
+      - eval_time: 7d
+        groupname: argus.calidad
+        alertname: ArgusEvalCaeConDerivaDeEntrada
+        exp_alerts: []
+
+  # Las dos, pero con menos de 10 evaluaciones en 6 h: no avisa
+  - interval: 1m
+    input_series:
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="pasa"}'
+        values: '0+0.01x9719 97.2+0.01x360'
+      - series: 'argus_eval_results_total{argus_eval_app="demo",argus_eval_name="truncado",argus_eval_result="falla"}'
+        values: '0+0x9719 0.01+0.01x360'
+      - series: 'gen_ai_client_token_usage_count{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1x9719 9720+1x360'
+      - series: 'gen_ai_client_token_usage_sum{service_namespace="demo",gen_ai_token_type="input"}'
+        values: '0+1000x9719 9722000+3000x360'
+      - series: 'argus:observador_despierto:fraccion6h'
+        values: '1x10080'
+    alert_rule_test:
+      - eval_time: 7d
+        groupname: argus.calidad
+        alertname: ArgusEvalCaeConDerivaDeEntrada
+        exp_alerts: []
